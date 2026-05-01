@@ -24,6 +24,10 @@ jobs:
 
       - run: pnpm test
 
+      - name: Test Cloudflare Worker
+        run: pnpm exec vitest run --config templates/cf-worker/vitest.config.ts
+        timeout-minutes: 3
+
       - name: Build (using example env)
         run: |
           cp .env.example .env
