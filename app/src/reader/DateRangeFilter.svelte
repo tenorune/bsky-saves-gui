@@ -1,4 +1,3 @@
-<!-- app/src/reader/DateRangeFilter.svelte -->
 <script lang="ts">
   export let from: string | null = null;
   export let to: string | null = null;
@@ -13,8 +12,7 @@
   }
 </script>
 
-<fieldset class="date-range">
-  <legend>Date range</legend>
+<div class="date-range" role="group" aria-label="Date range">
   <label>
     From
     <input type="date" value={from ?? ''} on:input={fromInput} />
@@ -23,32 +21,28 @@
     To
     <input type="date" value={to ?? ''} on:input={toInput} />
   </label>
-</fieldset>
+</div>
 
 <style>
   .date-range {
-    border: 0;
-    padding: 0;
-    margin: 0;
     display: flex;
     gap: 0.75rem;
     align-items: end;
-  }
-  .date-range legend {
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    opacity: 0.7;
-    padding: 0;
-    margin-bottom: 0.25rem;
   }
   .date-range label {
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    opacity: 0.7;
   }
   input {
     font: inherit;
+    text-transform: none;
+    letter-spacing: normal;
+    opacity: 1;
     padding: 0.5rem 0.75rem;
     border: 1px solid color-mix(in oklab, CanvasText 20%, transparent);
     border-radius: 6px;

@@ -80,7 +80,11 @@
   }
   .export-menu summary {
     cursor: pointer;
-    padding: 0.25rem 0.5rem;
+    padding: 0;
+    list-style: none;
+  }
+  .export-menu summary::-webkit-details-marker {
+    display: none;
   }
   .export-menu__panel {
     position: absolute;

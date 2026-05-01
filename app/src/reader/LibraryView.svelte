@@ -39,6 +39,10 @@
 </section>
 
 <style>
+  .library-view {
+    max-width: 44rem;
+    margin: 0 auto;
+  }
   .library-view__filters {
     display: flex;
     flex-wrap: wrap;

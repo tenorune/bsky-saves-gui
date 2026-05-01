@@ -30,10 +30,10 @@
       {config.appName}
     </button>
     <nav class="app-header__nav">
+      <ExportMenu />
       <a href="#/library">Library</a>
       <a href="#/settings">Settings</a>
       <a href="#/privacy">Privacy</a>
-      <ExportMenu />
     </nav>
   </header>
 
@@ -87,8 +87,10 @@
     cursor: pointer;
     color: inherit;
   }
-  .app-header__nav a {
-    margin-left: 1rem;
+  .app-header__nav {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
   }
   .app-main {
     flex: 1;

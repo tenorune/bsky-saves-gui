@@ -129,24 +129,24 @@
       </label>
       <p class="help">Defaults to Bluesky's main PDS. Change for third-party AT Proto servers.</p>
 
-      <label>
+      <label class="checkbox">
         <input type="checkbox" bind:checked={enrich} />
-        Enrich (decode timestamps)
+        <span>Enrich (decode timestamps)</span>
       </label>
       <p class="help">On by default. Adds derived timestamps from the post metadata.</p>
 
-      <label>
+      <label class="checkbox">
         <input type="checkbox" bind:checked={saveInventory} />
-        Save inventory on this device
+        <span>Save inventory on this device</span>
       </label>
       <p class="help">
         So you can come back and read or re-sync without re-fetching everything. Stored in this
         browser's IndexedDB.
       </p>
 
-      <label>
+      <label class="checkbox">
         <input type="checkbox" bind:checked={saveCredentials} />
-        Save app password on this device (encrypted)
+        <span>Save app password on this device (encrypted)</span>
       </label>
       {#if saveCredentials}
         <label>
@@ -169,11 +169,14 @@
 </section>
 
 <style>
+  .route--sign-in {
+    max-width: 44rem;
+    margin: 0 auto;
+  }
   form {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
-    max-width: 32rem;
   }
   label {
     display: flex;
@@ -181,8 +184,11 @@
     gap: 0.25rem;
     font-weight: 500;
   }
-  label input[type='checkbox'] {
-    margin-right: 0.5rem;
+  label.checkbox {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 500;
   }
   .help {
     font-size: 0.875rem;
@@ -208,7 +214,6 @@
     border-radius: 8px;
     padding: 1rem;
     margin-bottom: 1.5rem;
-    max-width: 32rem;
   }
   .saved-creds h3 {
     margin: 0 0 0.5rem;
