@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bsky-saves-gui-helper"
+version = "0.1.0"
+description = "Loopback CORS-proxy helper for bsky-saves-gui: fetches arbitrary article URLs on behalf of the browser."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+bsky-saves-gui-helper = "bsky_saves_gui_helper.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/bsky_saves_gui_helper"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
