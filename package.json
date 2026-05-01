@@ -1,0 +1,31 @@
+{
+  "name": "bsky-saves-gui",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Web GUI for bsky-saves (working title: BlueSky Saves Exporter)",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^3.1.2",
+    "@testing-library/svelte": "^5.2.4",
+    "@tsconfig/svelte": "^5.0.4",
+    "@types/node": "^20.16.0",
+    "jsdom": "^25.0.0",
+    "prettier": "^3.3.3",
+    "prettier-plugin-svelte": "^3.2.6",
+    "svelte": "^4.2.19",
+    "svelte-check": "^4.0.4",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10",
+    "vitest": "^2.1.4"
+  },
+  "packageManager": "pnpm@9.12.3"
+}
