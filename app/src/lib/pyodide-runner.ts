@@ -93,6 +93,82 @@ import pyodide_http
 pyodide_http.patch_all()
 await micropip.install('httpx')
 await micropip.install('bsky-saves', deps=False)
+
+# pyodide-http patches urllib/urllib3/requests but NOT httpx — httpx uses
+# httpcore which tries raw sockets that don't exist in the browser. Replace
+# the httpx surface bsky-saves touches with a urllib-backed shim so its
+# requests go through the browser fetch pipe that pyodide-http installed.
+import httpx as _httpx
+import urllib.request as _ureq
+import urllib.error as _uerr
+from urllib.parse import urlencode as _urlencode
+import json as _json
+
+class _ShimResponse:
+    def __init__(self, status_code, headers, content):
+        self.status_code = status_code
+        self.headers = headers
+        self.content = content
+        self.text = content.decode('utf-8', errors='replace') if content else ''
+    def json(self):
+        return _json.loads(self.text)
+    def raise_for_status(self):
+        if not (200 <= self.status_code < 400):
+            raise _httpx.HTTPStatusError(
+                f'HTTP {self.status_code}', request=None, response=self
+            )
+
+def _shim_request(method, url, *, json=None, data=None, headers=None, params=None, **_):
+    h = dict(headers) if headers else {}
+    body = None
+    if json is not None:
+        body = _json.dumps(json).encode('utf-8')
+        h.setdefault('content-type', 'application/json')
+    elif data is not None:
+        if isinstance(data, (bytes, bytearray)):
+            body = bytes(data)
+        elif isinstance(data, str):
+            body = data.encode('utf-8')
+        else:
+            body = _urlencode(data).encode('utf-8')
+            h.setdefault('content-type', 'application/x-www-form-urlencoded')
+    if params:
+        url = url + ('&' if '?' in url else '?') + _urlencode(params)
+    req = _ureq.Request(url, data=body, headers=h, method=method)
+    try:
+        r = _ureq.urlopen(req)
+        return _ShimResponse(r.status, dict(r.headers), r.read())
+    except _uerr.HTTPError as e:
+        return _ShimResponse(e.code, dict(e.headers), e.read())
+
+_httpx.post = lambda url, **kw: _shim_request('POST', url, **kw)
+_httpx.get  = lambda url, **kw: _shim_request('GET', url, **kw)
+_httpx.put  = lambda url, **kw: _shim_request('PUT', url, **kw)
+_httpx.delete = lambda url, **kw: _shim_request('DELETE', url, **kw)
+
+class _ShimClient:
+    def __init__(self, *args, **kw):
+        self._headers = dict(kw.get('headers') or {})
+    def __enter__(self):
+        return self
+    def __exit__(self, *_):
+        return False
+    def close(self):
+        pass
+    def request(self, method, url, **kw):
+        kw['headers'] = {**self._headers, **(kw.get('headers') or {})}
+        return _shim_request(method, url, **kw)
+    def get(self, url, **kw):
+        return self.request('GET', url, **kw)
+    def post(self, url, **kw):
+        return self.request('POST', url, **kw)
+    def put(self, url, **kw):
+        return self.request('PUT', url, **kw)
+    def delete(self, url, **kw):
+        return self.request('DELETE', url, **kw)
+
+_httpx.Client = _ShimClient
+
 import os
 os.makedirs('/home/pyodide', exist_ok=True)
 os.chdir('/home/pyodide')
