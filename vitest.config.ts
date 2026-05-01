@@ -9,8 +9,8 @@ export default mergeConfig(
     test: {
       environment: 'jsdom',
       globals: true,
-      include: ['src/**/*.test.ts'],
-      setupFiles: ['src/exporters/blob-polyfill.ts'],
+      include: ['app/src/**/*.test.ts'],
+      setupFiles: ['app/src/exporters/blob-polyfill.ts'],
     },
   }),
 );
