@@ -20,6 +20,9 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Seed .env from example
+        run: cp .env.example .env
+
       - run: pnpm check
 
       - run: pnpm test
@@ -28,10 +31,7 @@ jobs:
         run: pnpm exec vitest run --config templates/cf-worker/vitest.config.ts
         timeout-minutes: 3
 
-      - name: Build (using example env)
-        run: |
-          cp .env.example .env
-          pnpm build
+      - run: pnpm build
 
       - name: Confirm CNAME is in dist
         run: |
