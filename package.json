@@ -32,6 +32,7 @@
   "packageManager": "pnpm@9.12.3",
   "dependencies": {
     "idb-keyval": "^6.2.2",
-    "jszip": "^3.10.1"
+    "jszip": "^3.10.1",
+    "marked": "^18.0.3"
   }
 }
