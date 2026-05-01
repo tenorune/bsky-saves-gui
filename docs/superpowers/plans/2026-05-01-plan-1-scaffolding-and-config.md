@@ -265,7 +265,7 @@ export default mergeConfig(
     test: {
       environment: 'jsdom',
       globals: true,
-      include: ['app/src/**/*.test.ts'],
+      include: ['src/**/*.test.ts'],
     },
   }),
 );
