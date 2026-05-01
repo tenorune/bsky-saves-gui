@@ -82,7 +82,9 @@ export class PyodideRunner {
     // install bsky-saves WITHOUT its deps and pull in only what fetch+enrich
     // actually need (httpx). Article-hydration code paths in bsky-saves will
     // raise ImportError if invoked, but the app doesn't invoke them yet.
-    await this.py.loadPackage(['micropip']);
+    // `ssl` is unvendored from Pyodide's Python stdlib; httpcore imports it
+    // unconditionally so we have to load it explicitly.
+    await this.py.loadPackage(['micropip', 'ssl']);
     this.log('Installing bsky-saves…');
     await this.py.runPythonAsync(`
 import micropip
