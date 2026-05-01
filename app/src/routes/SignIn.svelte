@@ -1,7 +1,40 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { config } from '$lib/config';
   import { navigate } from '$lib/router';
   import { signInDraft } from '$lib/sign-in-draft';
+  import { hasCredentials, loadCredentials } from '$lib/credentials-store';
+  import { DecryptError } from '$lib/crypto';
+
+  let savedPresent = false;
+  let unlockPassphrase = '';
+  let unlockError = '';
+
+  onMount(async () => {
+    savedPresent = await hasCredentials();
+  });
+
+  async function unlockSaved() {
+    unlockError = '';
+    try {
+      const creds = await loadCredentials(unlockPassphrase);
+      if (!creds) {
+        unlockError = 'No saved credentials.';
+        return;
+      }
+      handle = creds.handle;
+      appPassword = creds.appPassword;
+      pds = creds.pds;
+      // Auto-submit the form.
+      submit();
+    } catch (e) {
+      if (e instanceof DecryptError) {
+        unlockError = 'Wrong passphrase.';
+      } else {
+        unlockError = e instanceof Error ? e.message : String(e);
+      }
+    }
+  }
 
   let handle = '';
   let appPassword = '';
@@ -41,6 +74,25 @@
 
 <section class="route route--sign-in">
   <h2>Sign in to Bluesky</h2>
+
+  {#if savedPresent}
+    <section class="saved-creds" aria-label="Saved credentials">
+      <h3>Saved credentials detected</h3>
+      <p class="help">Enter your passphrase to unlock your saved app password.</p>
+      <label>
+        Passphrase
+        <input type="password" bind:value={unlockPassphrase} />
+      </label>
+      <button type="button" on:click={unlockSaved}>Unlock and sign in</button>
+      {#if unlockError}
+        <p class="error" role="alert">{unlockError}</p>
+      {/if}
+      <details>
+        <summary>Use a different account</summary>
+        <p>The form below is editable — fill it in to override your saved credentials.</p>
+      </details>
+    </section>
+  {/if}
 
   <p class="help">
     Your handle and app password are sent only to your Bluesky server.
@@ -150,5 +202,15 @@
     padding: 0.5rem 1rem;
     font: inherit;
     cursor: pointer;
+  }
+  .saved-creds {
+    border: 1px solid color-mix(in oklab, CanvasText 15%, transparent);
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+    max-width: 32rem;
+  }
+  .saved-creds h3 {
+    margin: 0 0 0.5rem;
   }
 </style>
