@@ -472,6 +472,53 @@ are built and published together to GitHub Pages.
   account; open each export format in a fresh browser profile to confirm
   standalone behavior.
 
+## README
+
+A `README.md` at the repo root, generated as part of the implementation
+plan. Audience is split: a casual user landing here from a search, a
+prospective fork-and-self-host operator, and a contributor. Sections, in
+order:
+
+1. **One-line description** using `${VITE_APP_NAME}` (working title shown
+   with a note that the final name is TBD).
+2. **What it does** — three bullets: export Bluesky saves as JSON,
+   Markdown, or self-contained HTML; runs entirely in the user's browser;
+   no server holds credentials or content.
+3. **Try it** — link to the reference deployment (`saves.lightseed.net`)
+   for users who just want to use it.
+4. **How it works** — short paragraph: static site + Pyodide running
+   `bsky-saves`; link to the design spec under `docs/superpowers/specs/`.
+5. **Privacy** — short summary, link to `docs/privacy.md`.
+6. **Self-host / fork** — quick path for someone who wants their own
+   instance: clone, copy `.env.example` to `.env`, fill in the `VITE_*`
+   values for their deployment, push to GitHub Pages with the appropriate
+   `CNAME`. Link to the Configuration section of the design spec for the
+   full table.
+7. **The helper** — what `bsky-saves-gui-helper` does, `pipx install`
+   command, when to use it (article hydration), link to its own README in
+   `helper/`.
+8. **The proxy template** — what it's for, link to `templates/cf-worker/`
+   README.
+9. **Development** — `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm build`
+   (or whatever the chosen package manager is); how to run the helper and
+   worker locally for end-to-end testing.
+10. **Repo layout** — abbreviated tree pointing to `app/`, `helper/`,
+    `templates/`, `docs/`.
+11. **License** — name and link to `LICENSE`.
+12. **Status** — that the product name is a working title and the project
+    is pre-1.0.
+
+Two supplementary READMEs ship in subdirectories:
+
+- `helper/README.md` — install, run, flags, supported endpoints, security
+  notes (loopback-only, CORS allow-list).
+- `templates/cf-worker/README.md` — deploy steps with screenshots/commands,
+  required env vars, how the app generates and shows the shared secret.
+
+All three READMEs reference parameters by their env-var names rather than
+hardcoding the reference deployment values, so a fork doesn't have to
+rewrite docs.
+
 ## Privacy policy
 
 A `docs/privacy.md` file in the repo, rendered at build time into the app's
