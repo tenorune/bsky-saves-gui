@@ -28,8 +28,9 @@ export interface ThreadEntry {
 }
 
 export interface LocalImage {
-  readonly cid: string;
   readonly path: string;
+  readonly cid?: string;
+  readonly url?: string;
 }
 
 export interface Save {
@@ -124,6 +125,73 @@ function parseSave(v: unknown): Save {
     ...(langs ? { langs } : {}),
   };
 
+  // Synthesize embed.images from bsky-saves' top-level `images` array so
+  // PostBody/PostFocus/Markdown exporter (which look for embed.images with
+  // {fullsize, thumb}) keep rendering. Original `images` and `embed` are
+  // preserved via the spread.
+  const rawImages = Array.isArray((v as { images?: unknown }).images)
+    ? ((v as { images: unknown[] }).images as Record<string, unknown>[])
+    : [];
+  const synthesizedEmbedImages = rawImages
+    .map((img) => {
+      const url = typeof img.url === 'string' ? img.url : null;
+      if (!url) return null;
+      const alt = typeof img.alt === 'string' ? img.alt : '';
+      return { fullsize: url, thumb: url, alt };
+    })
+    .filter((x): x is { fullsize: string; thumb: string; alt: string } => x !== null);
+  const originalEmbed = isObject(v.embed) ? v.embed : null;
+  const embed =
+    synthesizedEmbedImages.length > 0
+      ? { ...(originalEmbed ?? {}), images: synthesizedEmbedImages }
+      : (originalEmbed ?? undefined);
+
+  // Synthesize `article` from bsky-saves' hydrate-articles output fields.
+  let article: ArticleHydration | undefined;
+  if (typeof v.article_text === 'string') {
+    const url = originalEmbed && typeof originalEmbed.url === 'string' ? originalEmbed.url : '';
+    const title =
+      originalEmbed && typeof originalEmbed.title === 'string' ? originalEmbed.title : undefined;
+    article = { url, text: v.article_text, ...(title ? { title } : {}) };
+  } else if (isObject(v.article)) {
+    article = v.article as unknown as ArticleHydration;
+  }
+
+  // Synthesize `thread` from bsky-saves' hydrate-threads output. bsky-saves'
+  // thread_replies entries are flat ({uri, text, indexedAt, images}) — we
+  // synthesize a placeholder author per entry since the upstream shape doesn't
+  // include reply-author info inline.
+  const replies = Array.isArray((v as { thread_replies?: unknown }).thread_replies)
+    ? ((v as { thread_replies: unknown[] }).thread_replies as Record<string, unknown>[])
+    : [];
+  const thread: ThreadEntry[] | undefined =
+    replies.length > 0
+      ? replies.map((r) => ({
+          uri: typeof r.uri === 'string' ? r.uri : '',
+          author: { handle: 'reply' },
+          record: {
+            text: typeof r.text === 'string' ? r.text : '',
+            createdAt: typeof r.indexedAt === 'string' ? r.indexedAt : '',
+          },
+        }))
+      : Array.isArray(v.thread)
+        ? (v.thread as ThreadEntry[])
+        : undefined;
+
+  // local_images: bsky-saves uses {url, path}; the legacy assumption was
+  // {cid, path}. Pass through with both shapes accepted.
+  const localImagesRaw = Array.isArray((v as { local_images?: unknown }).local_images)
+    ? ((v as { local_images: unknown[] }).local_images as Record<string, unknown>[])
+    : [];
+  const localImages: LocalImage[] = [];
+  for (const img of localImagesRaw) {
+    if (typeof img.path !== 'string') continue;
+    const entry: LocalImage = { path: img.path };
+    if (typeof img.cid === 'string') (entry as { cid: string }).cid = img.cid;
+    if (typeof img.url === 'string') (entry as { url: string }).url = img.url;
+    localImages.push(entry);
+  }
+
   return {
     ...v,
     uri: requireString(v, 'uri', 'save'),
@@ -131,6 +199,10 @@ function parseSave(v: unknown): Save {
     indexedAt,
     author: parseAuthor(v.author),
     record,
+    embed,
+    ...(article ? { article } : {}),
+    ...(thread ? { thread } : {}),
+    ...(localImages.length > 0 ? { local_images: localImages } : {}),
   };
 }
 
