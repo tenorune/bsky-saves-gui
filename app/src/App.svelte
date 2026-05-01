@@ -2,9 +2,20 @@
   import { onMount } from 'svelte';
   import { config } from '$lib/config';
   import { currentRoute, startRouter, navigate } from '$lib/router';
+  import { decideEntryRoute } from '$lib/return-visit';
   import ExportMenu from './components/ExportMenu.svelte';
+  import BeaconButton from './components/BeaconButton.svelte';
 
-  onMount(() => startRouter());
+  onMount(() => {
+    const stop = startRouter();
+    // If user landed on the default `/` route and we have an inventory, jump to library.
+    if (window.location.hash === '' || window.location.hash === '#/') {
+      void decideEntryRoute().then((target) => {
+        if (target !== '/') navigate(target);
+      });
+    }
+    return stop;
+  });
 </script>
 
 <div class="app">
@@ -30,8 +41,9 @@
   </main>
 
   <footer class="app-footer">
-    <p>
-      Operator: <code>@{config.operatorHandle}</code>
+    <p>Operator: <code>@{config.operatorHandle}</code></p>
+    <p class="app-footer__row">
+      <BeaconButton />
     </p>
     <p>
       <a href={config.repoUrl} target="_blank" rel="noopener noreferrer">Source</a>

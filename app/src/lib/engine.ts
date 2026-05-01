@@ -1,6 +1,7 @@
 import { createSession as defaultCreateSession, type AtSession } from './atproto';
 import { PyodideRunner } from './pyodide-runner';
 import { saveInventory } from './inventory-store';
+import { setLastSession } from './last-session';
 
 export interface RunJobInput {
   readonly handle: string;
@@ -38,6 +39,7 @@ export async function runJob(input: RunJobInput, deps: RunJobDeps = {}): Promise
     password: input.appPassword,
   });
   log(`Signed in as @${session.handle}.`);
+  setLastSession({ pds: input.pds, accessJwt: session.accessJwt, did: session.did, handle: session.handle });
 
   const off = runner.onLog(log);
   try {
