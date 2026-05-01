@@ -1,0 +1,16 @@
+# Copy this file to wrangler.toml and fill in your values.
+# Do NOT commit wrangler.toml — it contains no secrets, but keeping it as
+# a template avoids accidental overwrite when pulling updates.
+
+name = "bsky-saves-gui-proxy"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+# Secrets are NOT stored here. Set them with:
+#   wrangler secret put SHARED_SECRET
+#   wrangler secret put ALLOWED_ORIGIN
+#
+# ALLOWED_ORIGIN  — the full origin of your deployed app
+#                   e.g. "https://saves.lightseed.net"
+# SHARED_SECRET   — a long random string; the app shows you a generated one
+#                   in Settings → Proxy setup.
