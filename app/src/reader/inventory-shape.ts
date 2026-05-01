@@ -76,9 +76,11 @@ function optionalString(obj: Record<string, unknown>, key: string): string | und
 }
 
 function parseAuthor(v: unknown): Author {
-  if (!isObject(v)) throw new ParseError('author is not an object');
+  if (!isObject(v)) {
+    return { handle: 'unknown' };
+  }
   return {
-    handle: requireString(v, 'handle', 'author'),
+    handle: typeof v.handle === 'string' ? v.handle : 'unknown',
     did: optionalString(v, 'did'),
     displayName: optionalString(v, 'displayName'),
     avatar: optionalString(v, 'avatar'),
@@ -86,11 +88,13 @@ function parseAuthor(v: unknown): Author {
 }
 
 function parseRecord(v: unknown): PostRecord {
-  if (!isObject(v)) throw new ParseError('record is not an object');
+  if (!isObject(v)) {
+    return { text: '', createdAt: '' };
+  }
   return {
     ...v,
-    text: requireString(v, 'text', 'record'),
-    createdAt: requireString(v, 'createdAt', 'record'),
+    text: typeof v.text === 'string' ? v.text : '',
+    createdAt: typeof v.createdAt === 'string' ? v.createdAt : '',
     langs: Array.isArray(v.langs)
       ? (v.langs.filter((x) => typeof x === 'string') as string[])
       : undefined,

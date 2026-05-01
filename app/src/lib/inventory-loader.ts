@@ -18,6 +18,16 @@ export async function loadFromDb(): Promise<void> {
     store.set({ status: 'empty' });
     return;
   }
+  // Debug aid while we iterate on bsky-saves' inventory shape: dump the
+  // structure of the first save to the console so an unexpected shape can be
+  // diagnosed without inspecting IndexedDB by hand.
+  if (typeof raw === 'object' && raw !== null && 'saves' in raw) {
+    const saves = (raw as { saves?: unknown }).saves;
+    if (Array.isArray(saves) && saves.length > 0) {
+      // eslint-disable-next-line no-console
+      console.debug('[inventory-loader] sample save:', saves[0]);
+    }
+  }
   try {
     const inventory = parseInventory(raw);
     store.set({ status: 'ready', inventory });
