@@ -85,8 +85,10 @@ article hydration needs an escape hatch.
 - **Helper:** Python 3.10+, stdlib `http.server` + `urllib` (no extra deps),
   packaged for `pipx`.
 - **Proxy template:** Single-file Cloudflare Worker, no build step.
-- **Analytics:** GoatCounter (hosted), opt-out toggle defaulting on, DNT/GPC
-  honored.
+- **Usage signal:** No analytics. A footer button "Tell tenorune you used
+  this" likes a pinned beacon post on `@tenorune.bsky.social` using the
+  user's existing authenticated session. Explicit, single-click, no
+  background pings.
 
 ## Components
 
@@ -103,6 +105,10 @@ article hydration needs an escape hatch.
   presence to the UI.
 - `proxy-client.ts` — sends URL fetch requests through a configured
   Cloudflare Worker URL with the shared-secret header.
+- `beacon.ts` — exposes `likeBeacon()`, which calls
+  `app.bsky.feed.like.create` against the user's PDS targeting the pinned
+  beacon post AT URI baked in at build time. Idempotent (no-op if already
+  liked). Persists "already liked" state in IndexedDB.
 
 ### `app/src/crypto/`
 
@@ -144,7 +150,7 @@ Shared between the live app and the archive build:
 - `LibraryView.svelte`, `PostFocus.svelte` — from `reader/`, mounted on
   the routes `#/library` and `#/post/<rkey>`.
 - `Settings.svelte` — clear local data, import/export inventory file,
-  configure proxy URL, toggle analytics, link to `#/privacy`.
+  configure proxy URL, link to `#/privacy`.
 - `Privacy.svelte` — renders `docs/privacy.md` at build time.
 
 ### `helper/`
@@ -194,6 +200,11 @@ Shared between the live app and the archive build:
    toggle for "Bundle as zip" vs. "Self-contained" where applicable, with
    sensible defaults (zip for large image-heavy accounts, self-contained for
    small or HTML preview).
+9. Footer carries a "Tell tenorune you used this" button. Clicking it likes
+   a pinned beacon post on `@tenorune.bsky.social` using the user's existing
+   authenticated session, with a brief inline explainer of exactly what
+   happens. After click, the button shows "Thanks 💌" and disables. State
+   is remembered in IndexedDB so the button doesn't reappear next visit.
 
 ### Return visit
 
@@ -203,8 +214,7 @@ Shared between the live app and the archive build:
    credentials via passphrase if remembered) and runs an incremental
    `bsky-saves` re-run.
 3. Settings (`#/settings`) offers: Clear local data, Export inventory file,
-   Import inventory file, Configure proxy URL, Analytics opt-out, Link to
-   privacy policy.
+   Import inventory file, Configure proxy URL, Link to privacy policy.
 
 ### Inventory portability (BYO file)
 
@@ -257,11 +267,17 @@ These are surfaced in the privacy policy and in inline help where relevant:
 - **`cdn.bsky.app`** sees image fetches when image hydration is on.
 - **GitHub Pages edge** logs request metadata (IP, path, UA) for any visit,
   per GitHub's privacy policy. Repo owners do not get access to these logs.
-- **GoatCounter** receives one pageview ping per unique daily visit
-  (cookieless, no IP storage). Honors DNT/GPC. Per-user opt-out toggle in
-  settings, default on.
 - **Article hosts** see fetches when article hydration runs (via helper or
   proxy).
+- **`@tenorune.bsky.social` (the developer)** sees a like on a pinned
+  beacon post if and only if the user explicitly clicks "Tell tenorune you
+  used this." This is an ordinary AT Protocol like, public on the user's
+  account, identical to any other Bluesky like — no special data attached.
+  The button is the only way this happens; nothing fires automatically.
+
+There is **no analytics service**. No third-party telemetry, no pageview
+counters, no error reporting endpoint. The only usage signal the developer
+ever receives is the explicit beacon-post like described above.
 
 ### Out of scope (acknowledged in privacy text)
 
@@ -392,17 +408,22 @@ into archive HTML exports. Sections:
 1. Architecture summary (no server, static files only).
 2. What stays local.
 3. What leaves the browser, why, and to whom (PDS, image CDN, helper or
-   proxy if configured, GoatCounter unless opted out, GitHub Pages edge).
+   proxy if configured, article hosts during article hydration, GitHub Pages
+   edge).
 4. GitHub Pages edge-logging disclosure with link to GitHub's policy.
-5. GoatCounter disclosure with link to their policy and opt-out instructions.
-6. How to revoke a Bluesky app password.
-7. Threats out of scope (extensions, compromised device).
-8. Contact / issue tracker for questions.
+5. The "Tell tenorune you used this" beacon — what it does (likes a single
+   pinned post on `@tenorune.bsky.social`), when it fires (only on click),
+   and that nothing else reports usage.
+6. Statement that no analytics service is used.
+7. How to revoke a Bluesky app password.
+8. Threats out of scope (extensions, compromised device).
+9. Contact / issue tracker for questions.
 
 ## Open items / deferred
 
 - Specific Pyodide version pin and SRI hash — chosen at implementation time.
-- Specific GoatCounter site code — created at deploy time.
+- AT URI of the pinned beacon post — created at deploy time and baked into
+  the app's footer button.
 - Visual styling and theming — to be developed alongside implementation;
   taste signal from `tenorune.github.io` is minimal HTML/CSS.
 - I18n is not in scope for v1.
