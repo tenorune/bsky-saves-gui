@@ -22,7 +22,6 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         input: {
           main: resolve(projectRoot, 'index.html'),
-          archive: resolve(projectRoot, 'archive-template/index.html'),
         },
       },
     },
