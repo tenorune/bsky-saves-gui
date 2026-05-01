@@ -70,11 +70,32 @@ export class PyodideRunner {
     if (this.py) return;
     this.log('Loading Pyodide…');
     this.py = await this.loader();
+    this.log('Installing native packages…');
+    // Pyodide ships its own builds of common C-extension packages. Load these
+    // before micropip so micropip doesn't try to find pure-Python wheels for
+    // them on PyPI (and fail). lxml is the immediate blocker for bsky-saves;
+    // the rest are speculative-but-cheap to preload because bsky-saves'
+    // transitive deps commonly want them.
+    await this.py.loadPackage([
+      'micropip',
+      'lxml',
+      'pillow',
+      'beautifulsoup4',
+      'cffi',
+      'pydantic',
+      'ssl',
+    ]);
     this.log('Installing bsky-saves…');
-    await this.py.loadPackage('micropip');
+    // pyodide-http patches stdlib urllib + requests + httpx to use the browser
+    // fetch API. Without it, network calls inside bsky-saves will hang.
+    // keep_going=True surfaces the full list of any missing wheels rather than
+    // bailing on the first one.
     await this.py.runPythonAsync(`
 import micropip
-await micropip.install('bsky-saves')
+await micropip.install('pyodide-http', keep_going=True)
+import pyodide_http
+pyodide_http.patch_all()
+await micropip.install('bsky-saves', keep_going=True)
 import os
 os.makedirs('/home/pyodide', exist_ok=True)
 os.chdir('/home/pyodide')
