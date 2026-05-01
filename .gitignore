@@ -7,3 +7,7 @@ dist/
 .DS_Store
 .vite/
 coverage/
+__pycache__/
+*.pyc
+*.egg-info/
+helper/dist/
