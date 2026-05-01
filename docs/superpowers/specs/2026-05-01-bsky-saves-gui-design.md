@@ -1,8 +1,13 @@
-# bsky-saves-gui — Design
+# BlueSky Saves Exporter — Design
 
 **Date:** 2026-05-01
 **Status:** Draft for review
-**Domain:** `saves.lightseed.net`
+**Repo (technical name):** `bsky-saves-gui`
+**Product name (working title):** *BlueSky Saves Exporter* — a final brand
+name has not been chosen. All user-visible name strings live in build-time
+configuration so the rename is a single env-var change.
+**Default deployment:** `saves.lightseed.net` (operated by `tenorune`),
+but the app is deploy-agnostic — see Configuration.
 **Upstream:** [`bsky-saves`](https://github.com/tenorune/bsky-saves) ([PyPI](https://pypi.org/project/bsky-saves/))
 **Reference consumer:** [`tenorune.github.io`](https://github.com/tenorune/tenorune.github.io)
 
@@ -23,10 +28,71 @@ inventory (threads, articles, images). `enrich` is on by default.
    reimplementation of its logic.
 4. The app must be web-based (no install required for the default path).
 
+## Configuration (deploy-agnostic)
+
+No deployer-specific value (operator name, Bluesky handle, custom domain,
+beacon-post URI, app name, helper port) is hard-coded in source. Everything
+that varies between deployments lives in env-driven build-time configuration.
+The reference deployment uses one set of values; a fork or rehost can change
+all of them by editing env files.
+
+### App build (Vite `import.meta.env`)
+
+| Variable | Purpose | Reference value |
+|---|---|---|
+| `VITE_APP_NAME` | User-visible product name in titles, headings, exports | `BlueSky Saves Exporter` |
+| `VITE_APP_DOMAIN` | Canonical hostname; used in CORS allow-lists, archive footer link, `CNAME` | `saves.lightseed.net` |
+| `VITE_OPERATOR_HANDLE` | Bluesky handle of the deployer for the beacon button label and privacy text | `tenorune.lightseed.net` |
+| `VITE_BEACON_AT_URI` | AT URI of the pinned beacon post the "tell …" button likes | (created at deploy time) |
+| `VITE_DEFAULT_PDS` | PDS endpoint pre-filled into sign-in | `https://bsky.social` |
+| `VITE_HELPER_ORIGIN` | Loopback origin the helper-detector probes | `http://127.0.0.1:7878` |
+| `VITE_REPO_URL` | Issue tracker link in footer / privacy policy | (the repo) |
+| `VITE_PYODIDE_VERSION` | Pinned Pyodide release | (chosen at impl time) |
+
+A `.env.example` ships in the repo with the reference values. The deploy
+workflow reads from a real `.env` (or repo secrets) and bakes the values into
+the static build. None of these are runtime secrets — they're public once
+deployed; the env mechanism exists for separation of code and deployment, not
+for confidentiality.
+
+### Helper (`bsky-saves-gui-helper` working name)
+
+Configurable via CLI flags and env vars:
+
+| Flag / env | Purpose | Default |
+|---|---|---|
+| `--port` / `HELPER_PORT` | Loopback port to bind | `7878` |
+| `--allow-origin` / `HELPER_ALLOW_ORIGIN` (repeatable) | CORS allow-list | the reference app's `VITE_APP_DOMAIN` plus `http://localhost:5173` |
+| `--allow-host` / `HELPER_ALLOW_HOST` | Optional outbound allow-list (defaults to none = allow all article hosts) | (none) |
+
+A user who self-hosts the app at a different domain points the helper at
+their domain via `--allow-origin`.
+
+### Worker template
+
+The Cloudflare Worker reads from `wrangler` env vars at deploy time:
+
+| Var | Purpose |
+|---|---|
+| `ALLOWED_ORIGIN` | The origin allowed to call the proxy (e.g., the deployer's `VITE_APP_DOMAIN`) |
+| `SHARED_SECRET` | Required `X-Proxy-Secret` value |
+
+The app generates a fresh `SHARED_SECRET` for the user during proxy setup
+and shows the values to paste into the Worker's environment.
+
+### Naming caveat
+
+The strings `BlueSky Saves Exporter`, `bsky-saves-gui`, and
+`bsky-saves-gui-helper` are working titles. The repo and Python package
+identifiers can be renamed alongside the product when the final name is
+chosen; nothing in the design depends on the current strings.
+
 ## Architecture
 
-A static web app deployed to GitHub Pages from this repo, custom domain
-`saves.lightseed.net`. The app runs the existing `bsky-saves` Python package
+A static web app deployed to GitHub Pages from this repo. The reference
+deployment lives at `saves.lightseed.net`; any fork can deploy to its own
+domain by changing `VITE_APP_DOMAIN` and the `CNAME` file. The app runs the
+existing `bsky-saves` Python package
 in the browser via [Pyodide](https://pyodide.org). There is no backend, by
 design — that is what makes requirements 1 and 2 structurally true rather
 than policy-enforced.
@@ -45,9 +111,10 @@ Three deliverables ship from this repo:
    the result as a single `.html` or a `.zip`. This is what "HTML output"
    means: a self-contained, navigable mini-app the user can open offline.
 3. **`bsky-saves-gui-helper` (local CORS helper).** Separate small Python
-   package, `pipx install`-able, runs `127.0.0.1:7878`. Single job: accept a
-   URL, fetch it, return bytes. Origin-locked to `https://saves.lightseed.net`
-   (and `http://localhost:5173` for dev).
+   package, `pipx install`-able, runs on `127.0.0.1:${HELPER_PORT}` (default
+   `7878`). Single job: accept a URL, fetch it, return bytes. Origin-locked
+   via `--allow-origin` flags (the reference app's `VITE_APP_DOMAIN` and
+   `http://localhost:5173` for dev by default).
 
 Plus a **proxy template** (`templates/cf-worker/`, single `worker.js`) the
 user deploys to their own Cloudflare Workers account in two minutes for
@@ -63,8 +130,8 @@ order:
    power users. Browser → user's loopback → article site.
 2. **User-deployed Cloudflare Worker** — URL configured in settings. Worker
    runs on the user's own account; the developer never sees traffic. Hardened
-   with a shared secret and an `Origin` allow-list locked to
-   `https://saves.lightseed.net`.
+   with a shared secret and an `Origin` allow-list locked to the deployer's
+   `VITE_APP_DOMAIN`.
 3. **Skip with notice** — articles toggle disabled, the rest of the export
    completes normally.
 
@@ -85,10 +152,10 @@ article hydration needs an escape hatch.
 - **Helper:** Python 3.10+, stdlib `http.server` + `urllib` (no extra deps),
   packaged for `pipx`.
 - **Proxy template:** Single-file Cloudflare Worker, no build step.
-- **Usage signal:** No analytics. A footer button "Tell tenorune you used
-  this" likes a pinned beacon post on `@tenorune.bsky.social` using the
-  user's existing authenticated session. Explicit, single-click, no
-  background pings.
+- **Usage signal:** No analytics. A footer button labeled "Tell
+  @${VITE_OPERATOR_HANDLE} you used this" likes the pinned beacon post at
+  `${VITE_BEACON_AT_URI}` using the user's existing authenticated session.
+  Explicit, single-click, no background pings.
 
 ## Components
 
@@ -106,9 +173,10 @@ article hydration needs an escape hatch.
 - `proxy-client.ts` — sends URL fetch requests through a configured
   Cloudflare Worker URL with the shared-secret header.
 - `beacon.ts` — exposes `likeBeacon()`, which calls
-  `app.bsky.feed.like.create` against the user's PDS targeting the pinned
-  beacon post AT URI baked in at build time. Idempotent (no-op if already
-  liked). Persists "already liked" state in IndexedDB.
+  `app.bsky.feed.like.create` against the user's PDS targeting
+  `import.meta.env.VITE_BEACON_AT_URI`. Idempotent (no-op if already liked).
+  Persists "already liked" state in IndexedDB. If `VITE_BEACON_AT_URI` is
+  unset (deployer hasn't created a beacon post), the footer button is hidden.
 
 ### `app/src/crypto/`
 
@@ -160,8 +228,9 @@ Shared between the live app and the archive build:
 - `serve.py` — `http.server`-based loopback server on port 7878 (configurable
   via `--port`). Single endpoint: `POST /fetch` with JSON body
   `{"url": "..."}`, returns the upstream response body and status. CORS
-  preflight allowed only for `https://saves.lightseed.net` and
-  `http://localhost:5173`. `GET /health` returns `{"ok": true, "version": ...}`.
+  preflight allowed only for origins listed via `--allow-origin` (defaults to
+  the reference app's `VITE_APP_DOMAIN` and `http://localhost:5173`).
+  `GET /health` returns `{"ok": true, "version": ...}`.
 - `pyproject.toml` — `[project.scripts] bsky-saves-gui-helper = "...:main"`.
 - Distributed via PyPI as its own release cadence.
 
@@ -200,11 +269,12 @@ Shared between the live app and the archive build:
    toggle for "Bundle as zip" vs. "Self-contained" where applicable, with
    sensible defaults (zip for large image-heavy accounts, self-contained for
    small or HTML preview).
-9. Footer carries a "Tell tenorune you used this" button. Clicking it likes
-   a pinned beacon post on `@tenorune.bsky.social` using the user's existing
-   authenticated session, with a brief inline explainer of exactly what
-   happens. After click, the button shows "Thanks 💌" and disables. State
-   is remembered in IndexedDB so the button doesn't reappear next visit.
+9. Footer carries a "Tell @${VITE_OPERATOR_HANDLE} you used this" button.
+   Clicking it likes the pinned beacon post at `${VITE_BEACON_AT_URI}` using
+   the user's existing authenticated session, with a brief inline explainer
+   of exactly what happens. After click, the button shows "Thanks 💌" and
+   disables. State is remembered in IndexedDB so the button doesn't reappear
+   next visit.
 
 ### Return visit
 
@@ -247,8 +317,9 @@ than the ones listed above.
 
 ### Guarantees
 
-- **No server we operate exists.** `saves.lightseed.net` is static files on
-  GitHub Pages. There is no API endpoint we control to receive user data.
+- **No server the deployer operates exists.** The deployed app (the
+  reference instance is `saves.lightseed.net`) is static files on GitHub
+  Pages. There is no API endpoint the deployer controls to receive user data.
 - **Credentials never leave the device** except as one HTTPS request to the
   user's chosen PDS. Optional encrypted persistence is local IndexedDB only,
   encrypted with a key derived from a user-chosen passphrase.
@@ -269,11 +340,12 @@ These are surfaced in the privacy policy and in inline help where relevant:
   per GitHub's privacy policy. Repo owners do not get access to these logs.
 - **Article hosts** see fetches when article hydration runs (via helper or
   proxy).
-- **`@tenorune.bsky.social` (the developer)** sees a like on a pinned
-  beacon post if and only if the user explicitly clicks "Tell tenorune you
-  used this." This is an ordinary AT Protocol like, public on the user's
-  account, identical to any other Bluesky like — no special data attached.
-  The button is the only way this happens; nothing fires automatically.
+- **The configured operator account `@${VITE_OPERATOR_HANDLE}`** sees a
+  like on the pinned beacon post if and only if the user explicitly clicks
+  the "Tell @${VITE_OPERATOR_HANDLE} you used this" button. This is an
+  ordinary AT Protocol like, public on the user's account, identical to any
+  other Bluesky like — no special data attached. The button is the only way
+  this happens; nothing fires automatically.
 
 There is **no analytics service**. No third-party telemetry, no pageview
 counters, no error reporting endpoint. The only usage signal the developer
@@ -378,7 +450,8 @@ bsky-saves-gui/
 ├── .github/workflows/
 │   ├── deploy-app.yml            # build app + archive-template, publish to gh-pages with CNAME
 │   └── publish-helper.yml        # tag-driven PyPI release for the helper
-├── CNAME                         # `saves.lightseed.net`
+├── CNAME                         # generated from $VITE_APP_DOMAIN (reference: saves.lightseed.net)
+├── .env.example                  # reference values for all VITE_* config
 └── README.md
 ```
 
@@ -411,9 +484,9 @@ into archive HTML exports. Sections:
    proxy if configured, article hosts during article hydration, GitHub Pages
    edge).
 4. GitHub Pages edge-logging disclosure with link to GitHub's policy.
-5. The "Tell tenorune you used this" beacon — what it does (likes a single
-   pinned post on `@tenorune.bsky.social`), when it fires (only on click),
-   and that nothing else reports usage.
+5. The beacon button — what it does (likes the single pinned post at
+   `${VITE_BEACON_AT_URI}` on `@${VITE_OPERATOR_HANDLE}`), when it fires
+   (only on click), and that nothing else reports usage.
 6. Statement that no analytics service is used.
 7. How to revoke a Bluesky app password.
 8. Threats out of scope (extensions, compromised device).
@@ -422,8 +495,11 @@ into archive HTML exports. Sections:
 ## Open items / deferred
 
 - Specific Pyodide version pin and SRI hash — chosen at implementation time.
-- AT URI of the pinned beacon post — created at deploy time and baked into
-  the app's footer button.
+- AT URI of the pinned beacon post — created at deploy time, populated into
+  `VITE_BEACON_AT_URI`. The reference deployment will create one on
+  `@tenorune.lightseed.net`.
+- Final product name — to replace the working title `BlueSky Saves Exporter`.
+  Lives entirely in `VITE_APP_NAME`; the rename is a single config change.
 - Visual styling and theming — to be developed alongside implementation;
   taste signal from `tenorune.github.io` is minimal HTML/CSS.
 - I18n is not in scope for v1.
