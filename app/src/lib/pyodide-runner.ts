@@ -72,10 +72,13 @@ export class PyodideRunner {
     this.py = await this.loader();
     this.log('Installing native packages…');
     // bsky-saves' top-level deps are httpx and trafilatura (both pure Python).
-    // trafilatura transitively needs lxml (C extension) and dateparser →
-    // regex (C extension). Pyodide ships pre-built wheels for both; load them
-    // here so micropip doesn't try to install them from PyPI and fail.
-    await this.py.loadPackage(['micropip', 'lxml', 'regex']);
+    // trafilatura transitively needs:
+    //   - lxml (C extension)
+    //   - charset-normalizer (mypyc-compiled, no pure-Python wheel)
+    //   - dateparser → regex (C extension)
+    // Pyodide ships pre-built wheels for all three; load them here so micropip
+    // doesn't try to install them from PyPI and fail.
+    await this.py.loadPackage(['micropip', 'lxml', 'regex', 'charset-normalizer']);
     this.log('Installing bsky-saves…');
     // pyodide-http patches stdlib urllib + requests + httpx to use the browser
     // fetch API. Without it, network calls inside bsky-saves will hang.
