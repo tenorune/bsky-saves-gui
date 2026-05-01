@@ -71,20 +71,11 @@ export class PyodideRunner {
     this.log('Loading Pyodide…');
     this.py = await this.loader();
     this.log('Installing native packages…');
-    // Pyodide ships its own builds of common C-extension packages. Load these
-    // before micropip so micropip doesn't try to find pure-Python wheels for
-    // them on PyPI (and fail). lxml is the immediate blocker for bsky-saves;
-    // the rest are speculative-but-cheap to preload because bsky-saves'
-    // transitive deps commonly want them.
-    await this.py.loadPackage([
-      'micropip',
-      'lxml',
-      'pillow',
-      'beautifulsoup4',
-      'cffi',
-      'pydantic',
-      'ssl',
-    ]);
+    // bsky-saves' top-level deps are httpx and trafilatura (both pure Python).
+    // trafilatura transitively needs lxml (C extension) and dateparser →
+    // regex (C extension). Pyodide ships pre-built wheels for both; load them
+    // here so micropip doesn't try to install them from PyPI and fail.
+    await this.py.loadPackage(['micropip', 'lxml', 'regex']);
     this.log('Installing bsky-saves…');
     // pyodide-http patches stdlib urllib + requests + httpx to use the browser
     // fetch API. Without it, network calls inside bsky-saves will hang.
