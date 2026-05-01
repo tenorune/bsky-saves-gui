@@ -1,5 +1,5 @@
 import { defineConfig, loadEnv } from 'vite';
-import { svelte } from '@sveltejs/vite-plugin-svelte';
+import { svelte, vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 import { fileURLToPath, URL } from 'node:url';
 import { cnamePlugin } from './tools/vite-plugin-cname';
 
@@ -23,6 +23,6 @@ export default defineConfig(({ mode }) => {
         $routes: fileURLToPath(new URL('./app/src/routes', import.meta.url)),
       },
     },
-    plugins: [svelte(), cnamePlugin({ domain })],
+    plugins: [svelte({ preprocess: vitePreprocess() }), cnamePlugin({ domain })],
   };
 });
