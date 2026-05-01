@@ -5,6 +5,7 @@
   import { decideEntryRoute } from '$lib/return-visit';
   import ExportMenu from './components/ExportMenu.svelte';
   import BeaconButton from './components/BeaconButton.svelte';
+  import { BUILD_TIME } from '$lib/build-info';
 
   onMount(() => {
     const stop = startRouter();
@@ -49,6 +50,9 @@
       <a href={config.repoUrl} target="_blank" rel="noopener noreferrer">Source</a>
       ·
       <a href="#/privacy">Privacy</a>
+    </p>
+    <p class="app-footer__build" title="Build timestamp">
+      <code>build {BUILD_TIME}</code>
     </p>
   </footer>
 </div>
@@ -98,5 +102,9 @@
   }
   .app-footer p {
     margin: 0.25rem 0;
+  }
+  .app-footer__build {
+    font-size: 0.75rem;
+    opacity: 0.6;
   }
 </style>
