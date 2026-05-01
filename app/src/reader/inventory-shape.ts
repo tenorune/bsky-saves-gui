@@ -1,5 +1,5 @@
 export interface Author {
-  readonly did: string;
+  readonly did?: string;
   readonly handle: string;
   readonly displayName?: string;
   readonly avatar?: string;
@@ -21,7 +21,7 @@ export interface ArticleHydration {
 
 export interface ThreadEntry {
   readonly uri: string;
-  readonly cid: string;
+  readonly cid?: string;
   readonly author: Author;
   readonly record: PostRecord;
   readonly [extra: string]: unknown;
@@ -34,10 +34,10 @@ export interface LocalImage {
 
 export interface Save {
   readonly uri: string;
-  readonly cid: string;
+  readonly cid?: string;
   readonly author: Author;
   readonly record: PostRecord;
-  readonly indexedAt: string;
+  readonly indexedAt?: string;
   readonly embed?: unknown;
   readonly enriched_created_at?: string;
   readonly article?: ArticleHydration;
@@ -70,13 +70,18 @@ function requireString(obj: Record<string, unknown>, key: string, ctx: string): 
   return v;
 }
 
+function optionalString(obj: Record<string, unknown>, key: string): string | undefined {
+  const v = obj[key];
+  return typeof v === 'string' ? v : undefined;
+}
+
 function parseAuthor(v: unknown): Author {
   if (!isObject(v)) throw new ParseError('author is not an object');
   return {
-    did: requireString(v, 'did', 'author'),
     handle: requireString(v, 'handle', 'author'),
-    displayName: typeof v.displayName === 'string' ? v.displayName : undefined,
-    avatar: typeof v.avatar === 'string' ? v.avatar : undefined,
+    did: optionalString(v, 'did'),
+    displayName: optionalString(v, 'displayName'),
+    avatar: optionalString(v, 'avatar'),
   };
 }
 
@@ -86,7 +91,9 @@ function parseRecord(v: unknown): PostRecord {
     ...v,
     text: requireString(v, 'text', 'record'),
     createdAt: requireString(v, 'createdAt', 'record'),
-    langs: Array.isArray(v.langs) ? (v.langs.filter((x) => typeof x === 'string') as string[]) : undefined,
+    langs: Array.isArray(v.langs)
+      ? (v.langs.filter((x) => typeof x === 'string') as string[])
+      : undefined,
   };
 }
 
@@ -95,8 +102,8 @@ function parseSave(v: unknown): Save {
   return {
     ...v,
     uri: requireString(v, 'uri', 'save'),
-    cid: requireString(v, 'cid', 'save'),
-    indexedAt: requireString(v, 'indexedAt', 'save'),
+    cid: optionalString(v, 'cid'),
+    indexedAt: optionalString(v, 'indexedAt'),
     author: parseAuthor(v.author),
     record: parseRecord(v.record),
   };
