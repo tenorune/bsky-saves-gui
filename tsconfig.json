@@ -11,7 +11,11 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "allowJs": false,
-    "types": ["vite/client", "node"]
+    "types": ["vite/client", "node"],
+    "paths": {
+      "$lib/*": ["./app/src/lib/*"],
+      "$routes/*": ["./app/src/routes/*"]
+    }
   },
   "include": ["app/src/**/*.ts", "app/src/**/*.svelte", "app/src/env.d.ts"],
   "references": [{ "path": "./tsconfig.node.json" }]
