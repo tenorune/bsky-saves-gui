@@ -58,4 +58,15 @@ describe('router', () => {
       stop();
     }
   });
+
+  it('routes #/run to the run route', async () => {
+    window.location.hash = '#/run';
+    const { currentRoute, startRouter } = await import('./router');
+    const stop = startRouter();
+    try {
+      expect(get(currentRoute).name).toBe('run');
+    } finally {
+      stop();
+    }
+  });
 });

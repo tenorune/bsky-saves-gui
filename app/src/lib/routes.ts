@@ -1,6 +1,7 @@
 import type { ComponentType } from 'svelte';
 import SignIn from '$routes/SignIn.svelte';
 import Library from '$routes/Library.svelte';
+import Run from '$routes/Run.svelte';
 import Post from '$routes/Post.svelte';
 import Settings from '$routes/Settings.svelte';
 import Privacy from '$routes/Privacy.svelte';
@@ -16,6 +17,7 @@ export interface RouteDef {
 export const routes: readonly RouteDef[] = [
   { name: 'sign-in', pattern: /^\/$/, paramNames: [], component: SignIn },
   { name: 'library', pattern: /^\/library$/, paramNames: [], component: Library },
+  { name: 'run', pattern: /^\/run$/, paramNames: [], component: Run },
   { name: 'post', pattern: /^\/post\/([^/]+)$/, paramNames: ['rkey'], component: Post },
   { name: 'settings', pattern: /^\/settings$/, paramNames: [], component: Settings },
   { name: 'privacy', pattern: /^\/privacy$/, paramNames: [], component: Privacy },
