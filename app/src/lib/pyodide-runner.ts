@@ -71,25 +71,26 @@ export class PyodideRunner {
     this.log('Loading Pyodide…');
     this.py = await this.loader();
     this.log('Installing native packages…');
-    // bsky-saves' top-level deps are httpx and trafilatura (both pure Python).
-    // trafilatura transitively needs:
-    //   - lxml (C extension)
-    //   - charset-normalizer (mypyc-compiled, no pure-Python wheel)
-    //   - dateparser → regex (C extension)
-    // Pyodide ships pre-built wheels for all three; load them here so micropip
-    // doesn't try to install them from PyPI and fail.
-    await this.py.loadPackage(['micropip', 'lxml', 'regex', 'charset-normalizer']);
+    // bsky-saves' top-level deps are httpx (pure Python) and trafilatura.
+    // trafilatura's transitive tree (htmldate, dateparser, charset-normalizer,
+    // lxml, regex, ...) is full of C/mypyc-compiled wheels that Pyodide's
+    // micropip can only resolve via its own pre-built packages — and even
+    // with lxml/regex/charset-normalizer preloaded, dateparser still fails
+    // to resolve cleanly. trafilatura is only used for article hydration,
+    // which this app routes through a local helper or Cloudflare Worker
+    // anyway (browser CORS makes direct article fetches impossible). So we
+    // install bsky-saves WITHOUT its deps and pull in only what fetch+enrich
+    // actually need (httpx). Article-hydration code paths in bsky-saves will
+    // raise ImportError if invoked, but the app doesn't invoke them yet.
+    await this.py.loadPackage(['micropip']);
     this.log('Installing bsky-saves…');
-    // pyodide-http patches stdlib urllib + requests + httpx to use the browser
-    // fetch API. Without it, network calls inside bsky-saves will hang.
-    // keep_going=True surfaces the full list of any missing wheels rather than
-    // bailing on the first one.
     await this.py.runPythonAsync(`
 import micropip
-await micropip.install('pyodide-http', keep_going=True)
+await micropip.install('pyodide-http')
 import pyodide_http
 pyodide_http.patch_all()
-await micropip.install('bsky-saves', keep_going=True)
+await micropip.install('httpx')
+await micropip.install('bsky-saves', deps=False)
 import os
 os.makedirs('/home/pyodide', exist_ok=True)
 os.chdir('/home/pyodide')
