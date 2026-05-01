@@ -82,34 +82,55 @@ function parseAuthor(v: unknown): Author {
   return {
     handle: typeof v.handle === 'string' ? v.handle : 'unknown',
     did: optionalString(v, 'did'),
-    displayName: optionalString(v, 'displayName'),
+    // Accept both camelCase (PostView) and snake_case (bsky-saves) shapes.
+    displayName: optionalString(v, 'displayName') ?? optionalString(v, 'display_name'),
     avatar: optionalString(v, 'avatar'),
-  };
-}
-
-function parseRecord(v: unknown): PostRecord {
-  if (!isObject(v)) {
-    return { text: '', createdAt: '' };
-  }
-  return {
-    ...v,
-    text: typeof v.text === 'string' ? v.text : '',
-    createdAt: typeof v.createdAt === 'string' ? v.createdAt : '',
-    langs: Array.isArray(v.langs)
-      ? (v.langs.filter((x) => typeof x === 'string') as string[])
-      : undefined,
   };
 }
 
 function parseSave(v: unknown): Save {
   if (!isObject(v)) throw new ParseError('save is not an object');
+
+  // bsky-saves stores save records flat with snake_case keys (post_text,
+  // post_created_at, saved_at, author.display_name). Earlier code assumed the
+  // nested PostView shape (record: { text, createdAt }, indexedAt, ...).
+  // Normalize both into the internal { record, indexedAt } interface while
+  // preserving the original keys via the spread so JSON export round-trips.
+  const recordObj = isObject(v.record) ? v.record : null;
+  const text =
+    typeof v.post_text === 'string'
+      ? v.post_text
+      : recordObj && typeof recordObj.text === 'string'
+        ? recordObj.text
+        : '';
+  const createdAt =
+    typeof v.post_created_at === 'string'
+      ? v.post_created_at
+      : recordObj && typeof recordObj.createdAt === 'string'
+        ? recordObj.createdAt
+        : '';
+  const indexedAt =
+    optionalString(v, 'saved_at') ?? optionalString(v, 'indexedAt');
+
+  const langsRaw = recordObj && Array.isArray(recordObj.langs) ? recordObj.langs : null;
+  const langs = langsRaw
+    ? (langsRaw.filter((x) => typeof x === 'string') as string[])
+    : undefined;
+
+  const record: PostRecord = {
+    ...(recordObj ?? {}),
+    text,
+    createdAt,
+    ...(langs ? { langs } : {}),
+  };
+
   return {
     ...v,
     uri: requireString(v, 'uri', 'save'),
     cid: optionalString(v, 'cid'),
-    indexedAt: optionalString(v, 'indexedAt'),
+    indexedAt,
     author: parseAuthor(v.author),
-    record: parseRecord(v.record),
+    record,
   };
 }
 
