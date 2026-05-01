@@ -1,0 +1,18 @@
+{
+  "extends": "@tsconfig/svelte/tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "allowJs": false,
+    "types": ["vite/client", "node"]
+  },
+  "include": ["app/src/**/*.ts", "app/src/**/*.svelte", "app/src/env.d.ts"],
+  "references": [{ "path": "./tsconfig.node.json" }]
+}
