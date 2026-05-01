@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { config } from '$lib/config';
   import { currentRoute, startRouter, navigate } from '$lib/router';
+  import ExportMenu from './components/ExportMenu.svelte';
 
   onMount(() => startRouter());
 </script>
@@ -20,6 +21,7 @@
       <a href="#/library">Library</a>
       <a href="#/settings">Settings</a>
       <a href="#/privacy">Privacy</a>
+      <ExportMenu />
     </nav>
   </header>
 
