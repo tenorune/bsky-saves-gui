@@ -82,18 +82,18 @@
   <h2>Sign in to Bluesky</h2>
 
   {#if savedPresent}
-    <section class="saved-creds" aria-label="Saved credentials">
+    <section class="card saved-creds" aria-label="Saved credentials">
       <h3>Saved credentials detected</h3>
       <p class="help">Enter your passphrase to unlock your saved app password.</p>
-      <label>
+      <label class="card__field">
         Passphrase
         <input type="password" bind:value={unlockPassphrase} />
       </label>
-      <button type="button" on:click={unlockSaved}>Unlock and sign in</button>
+      <button type="button" class="card__action" on:click={unlockSaved}>Unlock and sign in</button>
       {#if unlockError}
         <p class="error" role="alert">{unlockError}</p>
       {/if}
-      <details>
+      <details class="card__details">
         <summary>Use a different account</summary>
         <p>The form below is editable — fill it in to override your saved credentials.</p>
       </details>
@@ -139,11 +139,11 @@
       on Bluesky.
     </p>
 
-    <details>
+    <details class="advanced-toggle">
       <summary>Advanced</summary>
 
-      <div class="advanced">
-        <label>
+      <div class="card advanced">
+        <label class="card__field">
           PDS
           <input type="url" bind:value={pds} />
         </label>
@@ -169,7 +169,7 @@
           <span>Save app password on this device (encrypted)</span>
         </label>
         {#if saveCredentials}
-          <label>
+          <label class="card__field">
             Passphrase
             <input type="password" bind:value={passphrase} minlength="8" />
           </label>
@@ -199,17 +199,43 @@
     line-height: 1.5;
     margin: 0 0 1.5rem;
   }
-  .intro-help {
+  .help {
+    font-size: 0.875rem;
+    opacity: 0.8;
+    margin: 0;
+  }
+  .help.intro-help {
     margin-bottom: 2rem;
   }
-  .advanced {
+  .card {
+    border: 1px solid color-mix(in oklab, CanvasText 15%, transparent);
+    border-radius: 8px;
+    padding: 1.25rem 1rem;
     display: flex;
     flex-direction: column;
     gap: 1rem;
-    padding-top: 0.75rem;
   }
-  .advanced .help {
-    margin-bottom: 0.5rem;
+  .card h3 {
+    margin: 0;
+  }
+  .card__field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin-top: 0.5rem;
+  }
+  .card__action {
+    align-self: flex-start;
+    margin-top: 0.5rem;
+    padding: 0.5rem 1rem;
+    font: inherit;
+    cursor: pointer;
+  }
+  .card__details {
+    margin-top: 0.5rem;
+  }
+  .advanced-toggle {
+    margin: 0.25rem 0;
   }
   form {
     display: flex;
@@ -228,11 +254,6 @@
     gap: 0.5rem;
     font-weight: 500;
   }
-  .help {
-    font-size: 0.875rem;
-    opacity: 0.8;
-    margin: 0;
-  }
   .error {
     color: color-mix(in oklab, red 70%, CanvasText);
     font-weight: 500;
@@ -248,12 +269,6 @@
     cursor: pointer;
   }
   .saved-creds {
-    border: 1px solid color-mix(in oklab, CanvasText 15%, transparent);
-    border-radius: 8px;
-    padding: 1rem;
     margin-bottom: 1.5rem;
-  }
-  .saved-creds h3 {
-    margin: 0 0 0.5rem;
   }
 </style>
