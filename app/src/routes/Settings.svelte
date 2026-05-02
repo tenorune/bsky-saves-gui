@@ -145,24 +145,7 @@
     margin: 0 auto;
   }
   .route__header {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.5rem;
     margin-bottom: 1.5rem;
-  }
-  .route__back {
-    background: none;
-    border: 0;
-    font: inherit;
-    color: inherit;
-    cursor: pointer;
-    padding: 0;
-    margin: 0;
-    opacity: 0.85;
-  }
-  .route__back:hover {
-    opacity: 1;
   }
   .route__title {
     margin: 0;
