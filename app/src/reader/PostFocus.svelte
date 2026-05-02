@@ -16,12 +16,11 @@
 
 <article class="post-focus">
   <header class="post-focus__header">
-    <h2>{formatAuthor(save.author)}</h2>
-    <p class="post-focus__handle">
-      {formatHandle(save.author.handle)}
-      <span class="post-focus__sep">·</span>
-      <time datetime={save.record.createdAt}>{formatDateTime(save.record.createdAt)}</time>
-    </p>
+    <span class="post-focus__author">{formatAuthor(save.author)}</span>
+    <span class="post-focus__handle">{formatHandle(save.author.handle)}</span>
+    <time class="post-focus__time" datetime={save.record.createdAt}>
+      {formatDateTime(save.record.createdAt)}
+    </time>
   </header>
 
   <PostBody {save} />
@@ -50,33 +49,49 @@
 </article>
 
 <style>
+  /*
+   * Bordered "card" container that matches PostCard exactly so a focused post
+   * looks like a feed item, just with extra content (link to original, thread)
+   * appended.
+   */
   .post-focus {
+    border: 1px solid color-mix(in oklab, CanvasText 12%, transparent);
+    border-radius: 8px;
+    padding: 1rem;
     max-width: 44rem;
     margin: 0 auto;
   }
-  .post-focus__header h2 {
-    margin: 0 0 0.25rem;
+  .post-focus__header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: baseline;
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+  }
+  .post-focus__author {
+    font-weight: 600;
   }
   .post-focus__handle {
-    margin: 0;
-    opacity: 0.75;
-    font-size: 0.95em;
+    opacity: 0.7;
   }
-  .post-focus__sep {
-    margin: 0 0.4em;
+  .post-focus__time {
+    margin-left: auto;
+    opacity: 0.7;
+    font-variant-numeric: tabular-nums;
   }
   .post-focus__link {
     margin-top: 1rem;
     font-size: 0.9em;
   }
   .post-focus__thread {
-    margin-top: 2rem;
+    margin-top: 1.5rem;
     border-top: 1px solid color-mix(in oklab, CanvasText 12%, transparent);
     padding-top: 1rem;
   }
   .post-focus__thread h3 {
     margin: 0 0 0.5rem;
-    font-size: 1rem;
+    font-size: 0.875rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     opacity: 0.7;
