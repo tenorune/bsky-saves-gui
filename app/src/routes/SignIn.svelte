@@ -7,8 +7,11 @@
   import { DecryptError } from '$lib/crypto';
 
   let savedPresent = false;
+  let useDifferentAccount = false;
   let unlockPassphrase = '';
   let unlockError = '';
+
+  $: showForm = !savedPresent || useDifferentAccount;
 
   onMount(async () => {
     savedPresent = await hasCredentials();
@@ -79,9 +82,11 @@
     app password, and saved data never leave this device.
   </p>
 
-  <h2>Sign in to Bluesky</h2>
+  {#if showForm}
+    <h2>Sign in to Bluesky</h2>
+  {/if}
 
-  {#if savedPresent}
+  {#if savedPresent && !useDifferentAccount}
     <section class="card saved-creds" aria-label="Saved credentials">
       <h3>Saved credentials detected</h3>
       <p class="help">Enter your passphrase to unlock your saved app password.</p>
@@ -93,19 +98,21 @@
       {#if unlockError}
         <p class="error" role="alert">{unlockError}</p>
       {/if}
-      <details class="card__details">
-        <summary>Use a different account</summary>
-        <p>The form below is editable — fill it in to override your saved credentials.</p>
-      </details>
+      <button
+        type="button"
+        class="card__link"
+        on:click={() => (useDifferentAccount = true)}
+      >Use a different account</button>
     </section>
   {/if}
 
-  <p class="help intro-help">
-    Your handle and app password are sent only to your Bluesky server.
-    Nothing is uploaded to <code>{config.appDomain}</code>; the page is static.
-  </p>
+  {#if showForm}
+    <p class="help intro-help">
+      Your handle and app password are sent only to your Bluesky server.
+      Nothing is uploaded to <code>{config.appDomain}</code>; the page is static.
+    </p>
 
-  <form on:submit|preventDefault={submit}>
+    <form on:submit|preventDefault={submit}>
     <label>
       Handle
       <input
@@ -187,6 +194,7 @@
 
     <button type="submit">Sign in</button>
   </form>
+  {/if}
 </section>
 
 <style>
@@ -231,8 +239,19 @@
     font: inherit;
     cursor: pointer;
   }
-  .card__details {
-    margin-top: 0.5rem;
+  .card__link {
+    align-self: flex-start;
+    background: none;
+    border: 0;
+    padding: 0;
+    color: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+    font: inherit;
+    opacity: 0.85;
+  }
+  .card__link:hover {
+    opacity: 1;
   }
   .advanced-toggle {
     margin: 0.25rem 0;
