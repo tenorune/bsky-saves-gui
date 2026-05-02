@@ -98,6 +98,14 @@ class _LineWriter:
         self._buf = ''
         if line:
             self._fn(line)
+    def isatty(self):
+        return False
+    def writable(self):
+        return True
+    def readable(self):
+        return False
+    def fileno(self):
+        raise OSError('LineWriter has no fileno')
 sys.stdout = _LineWriter(_log_emit)
 sys.stderr = _LineWriter(_log_emit)
 `);

@@ -61,8 +61,18 @@
             "from Pyodide's HTTP shim. Sign in with Bluesky's main PDS " +
             '(https://bsky.social) for now — a future build will move Pyodide ' +
             'into a Web Worker, which will fix this for third-party PDSs.';
+        } else if (raw) {
+          errorMessage = raw;
         } else {
-          errorMessage = raw || 'Unknown error. Check browser console for details.';
+          // e.message was empty (common for PythonError after the traceback
+          // streamed out via our stderr capture). Pull the last meaningful
+          // line of the streamed log — typically the exception summary like
+          // "AttributeError: '_LineWriter' object has no attribute 'isatty'".
+          const lastError = [...logLines]
+            .reverse()
+            .find((l) => /\b(Error|Exception):\s/.test(l));
+          errorMessage =
+            lastError ?? 'Unknown error. Check browser console for details.';
         }
         // Also surface the full error to the browser console so it's never lost.
         // eslint-disable-next-line no-console
