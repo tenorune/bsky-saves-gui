@@ -18,7 +18,12 @@ function injectInventory(html: string, inventory: Inventory): string {
   if (!INVENTORY_RE.test(html)) {
     throw new Error('Archive shell missing inventory script tag');
   }
-  return html.replace(INVENTORY_RE, `$1\n${json}\n$2`);
+  // Use the function form of replace so `$` characters in the JSON (very
+  // common in post text) aren't misinterpreted as $1/$&/$$ backreferences and
+  // truncate the inlined data.
+  return html.replace(INVENTORY_RE, (_match, openTag, closeTag) =>
+    `${openTag}\n${json}\n${closeTag}`,
+  );
 }
 
 async function fetchText(url: string): Promise<string> {

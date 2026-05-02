@@ -61,6 +61,34 @@ describe('htmlExporter', () => {
     expect(text).not.toContain('"saves":[]');
   });
 
+  it('preserves $-tokens in post text without backreference corruption', async () => {
+    const trickyInv: Inventory = {
+      saves: [
+        {
+          uri: 'at://x/y/1',
+          cid: 'c',
+          author: { did: 'd', handle: 'h.example' },
+          record: {
+            // $1, $&, $$ would all be expanded by String.replace's replacement
+            // string if we used the literal-string form by mistake.
+            text: 'price is $1 and also $& and $$ and $`backtick` and $\'apostrophe\'',
+            createdAt: '2026-04-01T00:00:00Z',
+          },
+          indexedAt: '2026-04-01T00:00:00Z',
+        },
+      ],
+    };
+    const { exportHtml } = await import('./html-exporter');
+    const result = await exportHtml(trickyInv, { mode: 'self-contained' });
+    const text = await result.blob.text();
+    // Pull out the inlined inventory JSON and round-trip through JSON.parse to
+    // confirm it survived intact.
+    const m = /<script type="application\/json" id="inventory">([\s\S]*?)<\/script>/.exec(text);
+    expect(m).not.toBeNull();
+    const parsed = JSON.parse(m![1].trim());
+    expect(parsed.saves[0].record.text).toBe(trickyInv.saves[0].record.text);
+  });
+
   it('throws if the shell is missing the inventory script tag', async () => {
     vi.stubGlobal(
       'fetch',
