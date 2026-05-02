@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Save } from './inventory-shape';
+  import QuotedPost from './QuotedPost.svelte';
 
   export let save: Save;
 
@@ -11,6 +12,7 @@
     const e = save.embed as { images?: ImageEmbedView[] } | undefined;
     return Array.isArray(e?.images) ? (e!.images as ImageEmbedView[]) : [];
   })();
+  $: quotedPost = (save as unknown as { quoted_post?: unknown }).quoted_post ?? null;
 </script>
 
 <div class="post-body">
@@ -30,6 +32,10 @@
         <img src={img.fullsize ?? img.thumb} alt={img.alt ?? ''} loading="lazy" />
       {/each}
     </div>
+  {/if}
+
+  {#if quotedPost}
+    <QuotedPost quote={quotedPost} />
   {/if}
 
   {#if save.article}
