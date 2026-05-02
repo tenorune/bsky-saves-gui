@@ -15,6 +15,7 @@
   let proxySecret = '';
   let status = '';
   let error = '';
+  let importInputEl: HTMLInputElement | undefined;
 
   onMount(async () => {
     const cfg = await loadProxyConfig();
@@ -105,10 +106,14 @@
     <p class="help">Move your saved data between devices or browsers.</p>
     <div class="settings-row">
       <button type="button" on:click={exportInventory}>Export inventory file</button>
-      <label class="file-input">
-        Import inventory file
-        <input type="file" accept=".json,application/json" on:change={importInventory} />
-      </label>
+      <button type="button" on:click={() => importInputEl?.click()}>Import inventory file</button>
+      <input
+        bind:this={importInputEl}
+        type="file"
+        accept=".json,application/json"
+        on:change={importInventory}
+        hidden
+      />
     </div>
   </section>
 
@@ -185,8 +190,7 @@
     gap: 0.5rem;
     flex-wrap: wrap;
   }
-  .settings-row button,
-  .file-input {
+  .settings-row button {
     font: inherit;
     line-height: 1.25;
     padding: 0.5rem 0.75rem;
@@ -195,12 +199,6 @@
     border-radius: 6px;
     background: Canvas;
     color: CanvasText;
-    display: inline-flex;
-    align-items: center;
-    box-sizing: border-box;
-  }
-  .file-input input {
-    display: none;
   }
   .danger {
     background: color-mix(in oklab, red 10%, Canvas);

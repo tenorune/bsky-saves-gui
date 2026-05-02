@@ -4,7 +4,6 @@
   import { inventoryState, loadFromDb } from '$lib/inventory-loader';
   import { navigate } from '$lib/router';
   import { slideFromRight } from '$lib/slide-transition';
-  import { signInDraft } from '$lib/sign-in-draft';
   import LibraryView from '../reader/LibraryView.svelte';
   import { rkeyOf } from '../reader/inventory-shape';
   import type { Save } from '../reader/inventory-shape';
@@ -20,14 +19,7 @@
   }
 
   function sync(): void {
-    // Same-session refresh: if the sign-in draft is still in memory, re-run
-    // the Run page directly. After a reload the draft is gone, so route to
-    // the sign-in screen — saved credentials will offer to unlock there.
-    if (get(signInDraft)) {
-      navigate('/run');
-    } else {
-      navigate('/');
-    }
+    navigate('/sync');
   }
 </script>
 

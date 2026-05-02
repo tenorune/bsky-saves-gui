@@ -6,6 +6,7 @@
   import ExportMenu from './components/ExportMenu.svelte';
   // import BeaconButton from './components/BeaconButton.svelte';
   import { BUILD_TIME } from '$lib/build-info';
+  import { lastSession } from '$lib/last-session';
 
   onMount(() => {
     const stop = startRouter();
@@ -30,6 +31,11 @@
       {config.appName}
     </button>
     <nav class="app-header__nav">
+      {#if $lastSession}
+        <span class="app-header__handle" title="Active session">
+          @{$lastSession.handle}
+        </span>
+      {/if}
       <ExportMenu />
       <a href="#/library">Library</a>
       <a href="#/settings">Settings</a>
@@ -90,6 +96,11 @@
     display: flex;
     align-items: center;
     gap: 1rem;
+  }
+  .app-header__handle {
+    opacity: 0.7;
+    font-size: 0.875rem;
+    font-variant: small-caps;
   }
   .app-main {
     flex: 1;
