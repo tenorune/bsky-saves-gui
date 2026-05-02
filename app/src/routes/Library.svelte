@@ -21,7 +21,6 @@
 
 <section class="route route--library" use:slideFromRight>
   <header class="route__header">
-    <button type="button" class="route__back" on:click={() => navigate('/')}>← Sign in</button>
     <h2 class="route__title">Library</h2>
   </header>
 

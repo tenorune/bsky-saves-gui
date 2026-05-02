@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { get } from 'svelte/store';
-  import { navigate } from '$lib/router';
   import { inventoryState, loadFromDb } from '$lib/inventory-loader';
   import { saveInventory, clearInventory } from '$lib/inventory-store';
   import { clearCredentials } from '$lib/credentials-store';
@@ -89,7 +88,6 @@
 
 <section class="route route--settings">
   <header class="route__header">
-    <button type="button" class="route__back" on:click={() => navigate('/library')}>← Library</button>
     <h2 class="route__title">Settings</h2>
   </header>
 
@@ -205,12 +203,16 @@
   .settings-row button,
   .file-input {
     font: inherit;
+    line-height: 1.25;
     padding: 0.5rem 0.75rem;
     cursor: pointer;
     border: 1px solid color-mix(in oklab, CanvasText 20%, transparent);
     border-radius: 6px;
     background: Canvas;
     color: CanvasText;
+    display: inline-flex;
+    align-items: center;
+    box-sizing: border-box;
   }
   .file-input input {
     display: none;

@@ -4,7 +4,7 @@
   import { currentRoute, startRouter, navigate } from '$lib/router';
   import { decideEntryRoute } from '$lib/return-visit';
   import ExportMenu from './components/ExportMenu.svelte';
-  import BeaconButton from './components/BeaconButton.svelte';
+  // import BeaconButton from './components/BeaconButton.svelte';
   import { BUILD_TIME } from '$lib/build-info';
 
   onMount(() => {
@@ -42,9 +42,9 @@
 
   <footer class="app-footer">
     <p>Operator: <code>@{config.operatorHandle}</code></p>
-    <p class="app-footer__row">
+    <!-- <p class="app-footer__row">
       <BeaconButton />
-    </p>
+    </p> -->
     <p>
       <a href={config.repoUrl} target="_blank" rel="noopener noreferrer">Source</a>
       ·
