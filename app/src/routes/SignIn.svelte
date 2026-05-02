@@ -112,6 +112,7 @@
         type="text"
         autocomplete="username"
         placeholder="alice.bsky.social"
+        maxlength="253"
         bind:value={handle}
         required
       />
@@ -119,7 +120,14 @@
 
     <label>
       App password
-      <input type="password" autocomplete="current-password" bind:value={appPassword} required />
+      <input
+        type="password"
+        autocomplete="current-password"
+        maxlength="19"
+        placeholder="xxxx-xxxx-xxxx-xxxx"
+        bind:value={appPassword}
+        required
+      />
     </label>
     <p class="help">
       Use a Bluesky <strong>app password</strong>, not your main password — see
@@ -139,7 +147,7 @@
           PDS
           <input type="url" bind:value={pds} />
         </label>
-        <p class="help">Defaults to Bluesky's main PDS. Change for third-party AT Proto servers.</p>
+        <p class="help">Defaults to Bluesky's PDS. Change for third-party AT Proto servers.</p>
 
         <label class="checkbox">
           <input type="checkbox" bind:checked={enrich} />
@@ -192,7 +200,7 @@
     margin: 0 0 1.5rem;
   }
   .intro-help {
-    margin-bottom: 1.25rem;
+    margin-bottom: 2rem;
   }
   .advanced {
     display: flex;

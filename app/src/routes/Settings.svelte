@@ -149,6 +149,10 @@
 </section>
 
 <style>
+  .route--settings {
+    max-width: 44rem;
+    margin: 0 auto;
+  }
   .route__header {
     display: flex;
     align-items: center;

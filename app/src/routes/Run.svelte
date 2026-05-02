@@ -64,15 +64,11 @@
 <section class="route route--run">
   <h2>Running</h2>
 
-  <p class="status status--{status}">
-    {#if status === 'running'}
-      Working…
-    {:else if status === 'done'}
-      Done.
-    {:else if status === 'error'}
-      Error.
-    {/if}
-  </p>
+  {#if status === 'done'}
+    <p class="status status--done">Done.</p>
+  {:else if status === 'error'}
+    <p class="status status--error">Error.</p>
+  {/if}
 
   <pre class="log" aria-live="polite">{logLines.join('\n')}</pre>
 
@@ -82,6 +78,10 @@
 </section>
 
 <style>
+  .route--run {
+    max-width: 44rem;
+    margin: 0 auto;
+  }
   .log {
     background: color-mix(in oklab, CanvasText 5%, Canvas);
     padding: 1rem;
