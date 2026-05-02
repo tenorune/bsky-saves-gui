@@ -6,6 +6,7 @@
   import { runJob } from '$lib/engine';
   import { saveCredentials } from '$lib/credentials-store';
   import { loadInventory } from '$lib/inventory-store';
+  import { loadFromDb } from '$lib/inventory-loader';
   import { InvalidCredentialsError, PdsError } from '$lib/atproto';
 
   let logLines: string[] = [];
@@ -44,6 +45,9 @@
         appendLog('Credentials saved (encrypted).');
       }
       status = 'done';
+      // Refresh the in-memory inventory store so Library / Post focus pick up
+      // the just-written saves and any newly hydrated fields without a reload.
+      await loadFromDb();
       appendLog('Done. Opening library…');
       navigate('/library');
     } catch (e) {
