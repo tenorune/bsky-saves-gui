@@ -22,9 +22,9 @@
 </script>
 
 <section class="route route--post" use:slideFromRight>
+  <button type="button" class="route__back" on:click={() => navigate('/library')}>← Library</button>
   <header class="route__header">
-    <button type="button" class="route__back" on:click={() => navigate('/library')}>← Library</button>
-    <h2>Post</h2>
+    <h2 class="route__title">Post</h2>
   </header>
 
   {#if $inventoryState.status === 'loading'}
@@ -40,18 +40,44 @@
 </section>
 
 <style>
+  .route--post {
+    position: relative;
+    max-width: 44rem;
+    margin: 0 auto;
+  }
   .route__header {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
     margin-bottom: 1.5rem;
   }
+  .route__title {
+    margin: 0;
+  }
   .route__back {
+    position: absolute;
+    right: 100%;
+    top: 0;
+    margin-right: 1rem;
+    white-space: nowrap;
     background: none;
     border: 0;
     font: inherit;
     color: inherit;
     cursor: pointer;
     padding: 0.25rem 0.5rem;
+    opacity: 0.85;
+  }
+  .route__back:hover {
+    opacity: 1;
+  }
+  /*
+   * On viewports too narrow for the left margin to hold the back button,
+   * fall back to stacking it above the title (matches the previous layout).
+   */
+  @media (max-width: 60rem) {
+    .route__back {
+      position: static;
+      display: block;
+      margin: 0 0 0.5rem 0;
+      padding: 0;
+    }
   }
 </style>
