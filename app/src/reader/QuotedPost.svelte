@@ -6,6 +6,11 @@
   // missing entirely. Render defensively from `unknown`.
   export let quote: unknown;
 
+  interface ImageRef {
+    readonly url: string;
+    readonly alt: string;
+  }
+
   function pickString(obj: unknown, ...keys: string[]): string | null {
     if (obj === null || typeof obj !== 'object') return null;
     const o = obj as Record<string, unknown>;
@@ -14,6 +19,49 @@
       if (typeof v === 'string' && v.length > 0) return v;
     }
     return null;
+  }
+
+  function pickImages(obj: unknown): ImageRef[] {
+    if (obj === null || typeof obj !== 'object') return [];
+    const o = obj as Record<string, unknown>;
+    const out: ImageRef[] = [];
+
+    // bsky-saves' top-level shape: images: [{url, alt, kind}].
+    if (Array.isArray(o.images)) {
+      for (const item of o.images as unknown[]) {
+        const url = pickString(item, 'url', 'fullsize', 'thumb');
+        if (!url) continue;
+        const alt = pickString(item, 'alt') ?? '';
+        out.push({ url, alt });
+      }
+      if (out.length > 0) return out;
+    }
+
+    // PostView embed shape: embed.images: [{fullsize, thumb, alt}].
+    const embed = o.embed;
+    if (embed && typeof embed === 'object') {
+      const eImgs = (embed as Record<string, unknown>).images;
+      if (Array.isArray(eImgs)) {
+        for (const item of eImgs as unknown[]) {
+          const url = pickString(item, 'fullsize', 'thumb', 'url');
+          if (!url) continue;
+          const alt = pickString(item, 'alt') ?? '';
+          out.push({ url, alt });
+        }
+      }
+    }
+
+    // Hydrated local images: local_images: [{path, url}].
+    const local = o.local_images;
+    if (out.length === 0 && Array.isArray(local)) {
+      for (const item of local as unknown[]) {
+        const url = pickString(item, 'path', 'url');
+        if (!url) continue;
+        out.push({ url, alt: '' });
+      }
+    }
+
+    return out;
   }
 
   $: text = pickString(quote, 'text', 'post_text') ?? '';
@@ -25,9 +73,10 @@
     'handle',
   );
   $: dateOnly = createdAt.slice(0, 10);
+  $: images = pickImages(quote);
 </script>
 
-{#if text || handle}
+{#if text || handle || images.length > 0}
   <blockquote class="quoted-post">
     <header class="quoted-post__header">
       {#if handle}<span class="quoted-post__handle">@{handle}</span>{/if}
@@ -35,6 +84,13 @@
     </header>
     {#if text}
       <p class="quoted-post__text">{text}</p>
+    {/if}
+    {#if images.length > 0}
+      <div class="quoted-post__images">
+        {#each images as img}
+          <img src={img.url} alt={img.alt} loading="lazy" />
+        {/each}
+      </div>
     {/if}
   </blockquote>
 {/if}
@@ -70,4 +126,16 @@
     white-space: pre-wrap;
     word-wrap: break-word;
   }
+  .quoted-post__images {
+    margin-top: 0.5rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.4rem;
+  }
+  .quoted-post__images img {
+    width: 100%;
+    border-radius: 4px;
+    object-fit: cover;
+  }
 </style>
+
