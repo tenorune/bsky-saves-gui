@@ -51,11 +51,10 @@
         errorMessage = `PDS error (${e.status}). Try again or check the PDS URL.`;
       } else {
         const raw = e instanceof Error ? e.message : String(e);
-        // Detect the sync-XMLHttpRequest network failure that some PDSs
-        // (notably eurosky.social) trigger when bsky-saves' httpx call is
-        // routed through pyodide-http's blocking XHR. The browser is
-        // restricting cross-origin sync XHR; only a Web Worker move fixes it.
-        if (/XMLHttpRequest|Failed to execute 'send'|Failed to load/i.test(raw)) {
+        // The Python traceback is captured by our stdout/stderr stream so it
+        // shows up in `logLines` rather than in `e.message`. Look in both.
+        const haystack = `${logLines.join('\n')}\n${raw}`;
+        if (/XMLHttpRequest|Failed to execute 'send'|Failed to load/i.test(haystack)) {
           errorMessage =
             'Network error inside the in-browser Python runtime. ' +
             'This usually means the PDS is rejecting the synchronous request ' +
@@ -63,8 +62,11 @@
             '(https://bsky.social) for now — a future build will move Pyodide ' +
             'into a Web Worker, which will fix this for third-party PDSs.';
         } else {
-          errorMessage = raw;
+          errorMessage = raw || 'Unknown error. Check browser console for details.';
         }
+        // Also surface the full error to the browser console so it's never lost.
+        // eslint-disable-next-line no-console
+        console.error('Run failed:', e);
       }
       appendLog(`Failed: ${errorMessage}`);
     }
