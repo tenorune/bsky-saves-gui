@@ -64,4 +64,12 @@
     opacity: 0.7;
     font-variant-numeric: tabular-nums;
   }
+  /*
+   * In the Library feed (compact card), keep quoted-post images visually
+   * subordinate at half the available width. PostFocus doesn't override this,
+   * so quoted images render full width there.
+   */
+  .post-card :global(.quoted-post__images) {
+    max-width: 50%;
+  }
 </style>

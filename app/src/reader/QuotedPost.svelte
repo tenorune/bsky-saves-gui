@@ -128,9 +128,8 @@
   }
   .quoted-post__images {
     margin-top: 0.5rem;
-    max-width: 50%;
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
     gap: 0.4rem;
   }
   .quoted-post__images img {
