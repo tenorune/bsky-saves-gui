@@ -5,6 +5,7 @@
   import { navigate } from '$lib/router';
   import { runJob } from '$lib/engine';
   import { saveCredentials } from '$lib/credentials-store';
+  import { loadInventory } from '$lib/inventory-store';
   import { InvalidCredentialsError, PdsError } from '$lib/atproto';
 
   let logLines: string[] = [];
@@ -22,7 +23,8 @@
       return;
     }
     status = 'running';
-    appendLog('Starting…');
+    const existing = await loadInventory();
+    appendLog(existing ? 'Syncing…' : 'Starting…');
     try {
       await runJob(
         {

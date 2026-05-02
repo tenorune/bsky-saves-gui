@@ -4,6 +4,7 @@
   import { inventoryState, loadFromDb } from '$lib/inventory-loader';
   import { navigate } from '$lib/router';
   import { slideFromRight } from '$lib/slide-transition';
+  import { signInDraft } from '$lib/sign-in-draft';
   import LibraryView from '../reader/LibraryView.svelte';
   import { rkeyOf } from '../reader/inventory-shape';
   import type { Save } from '../reader/inventory-shape';
@@ -17,11 +18,25 @@
   function open(save: Save): void {
     navigate(`/post/${rkeyOf(save.uri)}`);
   }
+
+  function sync(): void {
+    // Same-session refresh: if the sign-in draft is still in memory, re-run
+    // the Run page directly. After a reload the draft is gone, so route to
+    // the sign-in screen — saved credentials will offer to unlock there.
+    if (get(signInDraft)) {
+      navigate('/run');
+    } else {
+      navigate('/');
+    }
+  }
 </script>
 
 <section class="route route--library" use:slideFromRight>
   <header class="route__header">
     <h2 class="route__title">Library</h2>
+    <button type="button" class="route__sync" on:click={sync} title="Re-fetch saves">
+      Sync
+    </button>
   </header>
 
   {#if $inventoryState.status === 'loading'}
@@ -44,10 +59,27 @@
     margin: 0 auto;
   }
   .route__header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
     margin-bottom: 1.5rem;
   }
   .route__title {
     margin: 0;
+  }
+  .route__sync {
+    font: inherit;
+    padding: 0.35rem 0.75rem;
+    border: 1px solid color-mix(in oklab, CanvasText 25%, transparent);
+    border-radius: 6px;
+    background: color-mix(in oklab, CanvasText 6%, Canvas);
+    color: inherit;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .route__sync:hover {
+    background: color-mix(in oklab, CanvasText 12%, Canvas);
   }
   .error {
     color: color-mix(in oklab, red 70%, CanvasText);
