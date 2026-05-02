@@ -70,6 +70,34 @@ export class PyodideRunner {
     if (this.py) return;
     this.log('Loading Pyodide…');
     this.py = await this.loader();
+
+    // Stream Python stdout/stderr line-by-line into the run log so users see
+    // bsky-saves' progress prints (e.g. "fetched 100/600 saves…") rather than
+    // staring at a frozen UI.
+    this.py.globals.set('_log_emit', (line: string) => this.log(line));
+    await this.py.runPythonAsync(`
+import sys
+class _LineWriter:
+    def __init__(self, fn):
+        self._fn = fn
+        self._buf = ''
+    def write(self, s):
+        self._buf += s
+        while '\\n' in self._buf:
+            line, self._buf = self._buf.split('\\n', 1)
+            line = line.rstrip()
+            if line:
+                self._fn(line)
+        return len(s)
+    def flush(self):
+        line = self._buf.rstrip()
+        self._buf = ''
+        if line:
+            self._fn(line)
+sys.stdout = _LineWriter(_log_emit)
+sys.stderr = _LineWriter(_log_emit)
+`);
+
     this.log('Installing native packages…');
     // bsky-saves' top-level deps are httpx (pure Python) and trafilatura.
     // trafilatura's transitive tree (htmldate, dateparser, charset-normalizer,
