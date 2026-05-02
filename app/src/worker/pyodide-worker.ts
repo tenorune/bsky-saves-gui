@@ -5,11 +5,19 @@
 // and without the cross-origin sync-XHR restrictions browsers apply on the
 // main thread.
 
+interface PreauthSession {
+  readonly accessJwt: string;
+  readonly refreshJwt: string;
+  readonly did: string;
+  readonly handle: string;
+}
+
 interface FetchInput {
   readonly handle: string;
   readonly appPassword: string;
   readonly pds: string;
   readonly enrich: boolean;
+  readonly preauthSession?: PreauthSession;
 }
 
 interface InitMessage {
@@ -197,6 +205,28 @@ os.chdir('/home/pyodide')
 
 async function runFetch(input: FetchInput): Promise<unknown> {
   if (!pyodide) throw new Error('Worker not initialised');
+
+  // If the main thread already authenticated, monkey-patch
+  // bsky_saves.auth.create_session to return that session and skip the second
+  // POST. Some PDSs (eurosky.social) hang the worker's sync XHR createSession
+  // even though browser fetch to the same endpoint succeeds; reusing the
+  // pre-fetched JWT avoids that hang entirely.
+  if (input.preauthSession) {
+    const sessionJson = JSON.stringify(input.preauthSession);
+    await pyodide.runPythonAsync(`
+import bsky_saves.auth as _bsky_auth
+import bsky_saves.fetch as _bsky_fetch
+import json as _json
+_preauth = _json.loads(${JSON.stringify(sessionJson)})
+def _patched_create_session(pds_base, handle, app_password):
+    return _preauth
+# Patch both the source module and the local binding in fetch.py (which did
+# \`from .auth import create_session\`, capturing the original by reference).
+_bsky_auth.create_session = _patched_create_session
+_bsky_fetch.create_session = _patched_create_session
+print('reusing pre-authenticated session from main thread')
+`);
+  }
 
   log('Fetching saves…');
   await pyodide.runPythonAsync(`

@@ -12,7 +12,14 @@ export interface RunJobInput {
 
 interface RunnerLike {
   initialise(): Promise<void>;
-  runFetch(input: RunJobInput): Promise<unknown>;
+  runFetch(input: RunJobInput & {
+    preauthSession?: {
+      accessJwt: string;
+      refreshJwt: string;
+      did: string;
+      handle: string;
+    };
+  }): Promise<unknown>;
   onLog(listener: (msg: string) => void): () => void;
 }
 
@@ -44,7 +51,15 @@ export async function runJob(input: RunJobInput, deps: RunJobDeps = {}): Promise
   const off = runner.onLog(log);
   try {
     await runner.initialise();
-    const inventory = await runner.runFetch(input);
+    const inventory = await runner.runFetch({
+      ...input,
+      preauthSession: {
+        accessJwt: session.accessJwt,
+        refreshJwt: session.refreshJwt,
+        did: session.did,
+        handle: session.handle,
+      },
+    });
     await saveInventory(inventory);
     log('Inventory saved.');
     return { session, inventory };

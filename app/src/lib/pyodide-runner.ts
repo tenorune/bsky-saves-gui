@@ -16,6 +16,19 @@ export interface FetchInput {
   readonly appPassword: string;
   readonly pds: string;
   readonly enrich: boolean;
+  /**
+   * Optional pre-authenticated session from the JS-side AT Proto login.
+   * If provided, the worker monkey-patches bsky_saves.auth.create_session to
+   * return this dict instead of POSTing to the PDS again. This avoids a known
+   * issue where some PDSs (e.g. eurosky.social) hang the worker's sync XHR
+   * createSession even though browser fetch to the same endpoint succeeds.
+   */
+  readonly preauthSession?: {
+    readonly accessJwt: string;
+    readonly refreshJwt: string;
+    readonly did: string;
+    readonly handle: string;
+  };
 }
 
 type LogListener = (message: string) => void;

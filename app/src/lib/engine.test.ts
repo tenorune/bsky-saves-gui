@@ -42,6 +42,12 @@ describe('runJob', () => {
       appPassword: 'pw',
       pds: 'https://bsky.social',
       enrich: true,
+      preauthSession: {
+        accessJwt: session.accessJwt,
+        refreshJwt: session.refreshJwt,
+        did: session.did,
+        handle: session.handle,
+      },
     });
     expect(result.session).toEqual(session);
     expect(result.inventory).toEqual(inventory);
