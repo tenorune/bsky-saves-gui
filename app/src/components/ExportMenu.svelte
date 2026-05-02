@@ -80,8 +80,19 @@
   }
   .export-menu summary {
     cursor: pointer;
-    padding: 0;
     list-style: none;
+    padding: 0.35rem 0.75rem;
+    border: 1px solid color-mix(in oklab, CanvasText 25%, transparent);
+    border-radius: 6px;
+    background: color-mix(in oklab, CanvasText 6%, Canvas);
+    font-weight: 600;
+    user-select: none;
+  }
+  .export-menu summary:hover {
+    background: color-mix(in oklab, CanvasText 12%, Canvas);
+  }
+  .export-menu[open] summary {
+    background: color-mix(in oklab, CanvasText 12%, Canvas);
   }
   .export-menu summary::-webkit-details-marker {
     display: none;

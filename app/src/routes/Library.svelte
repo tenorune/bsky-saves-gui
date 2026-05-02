@@ -22,7 +22,7 @@
 <section class="route route--library" use:slideFromRight>
   <header class="route__header">
     <button type="button" class="route__back" on:click={() => navigate('/')}>← Sign in</button>
-    <h2>Library</h2>
+    <h2 class="route__title">Library</h2>
   </header>
 
   {#if $inventoryState.status === 'loading'}
@@ -40,10 +40,15 @@
 </section>
 
 <style>
+  .route--library {
+    max-width: 44rem;
+    margin: 0 auto;
+  }
   .route__header {
     display: flex;
-    align-items: center;
-    gap: 1rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
     margin-bottom: 1.5rem;
   }
   .route__back {
@@ -52,7 +57,15 @@
     font: inherit;
     color: inherit;
     cursor: pointer;
-    padding: 0.25rem 0.5rem;
+    padding: 0;
+    margin: 0;
+    opacity: 0.85;
+  }
+  .route__back:hover {
+    opacity: 1;
+  }
+  .route__title {
+    margin: 0;
   }
   .error {
     color: color-mix(in oklab, red 70%, CanvasText);

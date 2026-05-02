@@ -80,6 +80,7 @@
     {config.appName} exports your Bluesky saved posts as JSON, Markdown, or a
     self-contained HTML archive. Everything runs in your browser — your handle,
     app password, and saved data never leave this device.
+    <a href="#/privacy" class="intro__more">Read more &rsaquo;</a>
   </p>
 
   {#if showForm}
@@ -160,14 +161,14 @@
           <input type="checkbox" bind:checked={enrich} />
           <span>Enrich (decode timestamps)</span>
         </label>
-        <p class="help">On by default. Adds derived timestamps from the post metadata.</p>
+        <p class="help">Adds derived timestamps from the post metadata.</p>
 
         <label class="checkbox">
           <input type="checkbox" bind:checked={saveInventory} />
           <span>Save inventory on this device</span>
         </label>
         <p class="help">
-          So you can come back and read or re-sync without re-fetching everything. Stored in this
+          Come back and read or re-sync without re-fetching everything. Stored in this
           browser's IndexedDB.
         </p>
 
@@ -207,6 +208,10 @@
     line-height: 1.5;
     margin: 0 0 1.5rem;
   }
+  .intro__more {
+    margin-left: 0.25rem;
+    white-space: nowrap;
+  }
   .help {
     font-size: 0.875rem;
     opacity: 0.8;
@@ -230,7 +235,7 @@
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
-    margin-top: 0.5rem;
+    margin-top: 0.25rem;
   }
   .card__action {
     align-self: flex-start;

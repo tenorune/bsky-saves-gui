@@ -33,7 +33,6 @@
       <ExportMenu />
       <a href="#/library">Library</a>
       <a href="#/settings">Settings</a>
-      <a href="#/privacy">Privacy</a>
     </nav>
   </header>
 

@@ -89,8 +89,8 @@
 
 <section class="route route--settings">
   <header class="route__header">
-    <button type="button" on:click={() => navigate('/library')}>← Back</button>
-    <h2>Settings</h2>
+    <button type="button" class="route__back" on:click={() => navigate('/library')}>← Library</button>
+    <h2 class="route__title">Settings</h2>
   </header>
 
   {#if status}
@@ -139,13 +139,6 @@
     </p>
     <button type="button" class="danger" on:click={clearAll}>Clear all local data</button>
   </section>
-
-  <section class="settings-section">
-    <h3>Privacy</h3>
-    <p>
-      <a href="#/privacy">Read the privacy policy</a>.
-    </p>
-  </section>
 </section>
 
 <style>
@@ -155,17 +148,26 @@
   }
   .route__header {
     display: flex;
-    align-items: center;
-    gap: 1rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
     margin-bottom: 1.5rem;
   }
-  .route__header button {
+  .route__back {
     background: none;
     border: 0;
     font: inherit;
     color: inherit;
     cursor: pointer;
-    padding: 0.25rem 0.5rem;
+    padding: 0;
+    margin: 0;
+    opacity: 0.85;
+  }
+  .route__back:hover {
+    opacity: 1;
+  }
+  .route__title {
+    margin: 0;
   }
   .settings-section {
     border-top: 1px solid color-mix(in oklab, CanvasText 12%, transparent);
