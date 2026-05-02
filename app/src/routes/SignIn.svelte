@@ -73,6 +73,12 @@
 </script>
 
 <section class="route route--sign-in">
+  <p class="intro">
+    {config.appName} exports your Bluesky saved posts as JSON, Markdown, or a
+    self-contained HTML archive. Everything runs in your browser — your handle,
+    app password, and saved data never leave this device.
+  </p>
+
   <h2>Sign in to Bluesky</h2>
 
   {#if savedPresent}
@@ -94,7 +100,7 @@
     </section>
   {/if}
 
-  <p class="help">
+  <p class="help intro-help">
     Your handle and app password are sent only to your Bluesky server.
     Nothing is uploaded to <code>{config.appDomain}</code>; the page is static.
   </p>
@@ -116,48 +122,55 @@
       <input type="password" autocomplete="current-password" bind:value={appPassword} required />
     </label>
     <p class="help">
-      Use a Bluesky <strong>app password</strong>, not your main password — see Settings → App
-      Passwords on the Bluesky web app.
+      Use a Bluesky <strong>app password</strong>, not your main password — see
+      <a
+        href="https://bsky.app/settings/app-passwords"
+        target="_blank"
+        rel="noopener noreferrer"
+      >Settings → Privacy and Security → App Passwords</a>
+      on Bluesky.
     </p>
 
     <details>
       <summary>Advanced</summary>
 
-      <label>
-        PDS
-        <input type="url" bind:value={pds} />
-      </label>
-      <p class="help">Defaults to Bluesky's main PDS. Change for third-party AT Proto servers.</p>
-
-      <label class="checkbox">
-        <input type="checkbox" bind:checked={enrich} />
-        <span>Enrich (decode timestamps)</span>
-      </label>
-      <p class="help">On by default. Adds derived timestamps from the post metadata.</p>
-
-      <label class="checkbox">
-        <input type="checkbox" bind:checked={saveInventory} />
-        <span>Save inventory on this device</span>
-      </label>
-      <p class="help">
-        So you can come back and read or re-sync without re-fetching everything. Stored in this
-        browser's IndexedDB.
-      </p>
-
-      <label class="checkbox">
-        <input type="checkbox" bind:checked={saveCredentials} />
-        <span>Save app password on this device (encrypted)</span>
-      </label>
-      {#if saveCredentials}
+      <div class="advanced">
         <label>
-          Passphrase
-          <input type="password" bind:value={passphrase} minlength="8" />
+          PDS
+          <input type="url" bind:value={pds} />
+        </label>
+        <p class="help">Defaults to Bluesky's main PDS. Change for third-party AT Proto servers.</p>
+
+        <label class="checkbox">
+          <input type="checkbox" bind:checked={enrich} />
+          <span>Enrich (decode timestamps)</span>
+        </label>
+        <p class="help">On by default. Adds derived timestamps from the post metadata.</p>
+
+        <label class="checkbox">
+          <input type="checkbox" bind:checked={saveInventory} />
+          <span>Save inventory on this device</span>
         </label>
         <p class="help">
-          Encrypts your app password with this passphrase. Only this browser, on this device, can
-          read it. Forget the passphrase = re-enter the app password.
+          So you can come back and read or re-sync without re-fetching everything. Stored in this
+          browser's IndexedDB.
         </p>
-      {/if}
+
+        <label class="checkbox">
+          <input type="checkbox" bind:checked={saveCredentials} />
+          <span>Save app password on this device (encrypted)</span>
+        </label>
+        {#if saveCredentials}
+          <label>
+            Passphrase
+            <input type="password" bind:value={passphrase} minlength="8" />
+          </label>
+          <p class="help">
+            Encrypts your app password with this passphrase. Only this browser, on this device, can
+            read it. Forget the passphrase = re-enter the app password.
+          </p>
+        {/if}
+      </div>
     </details>
 
     {#if error}
@@ -172,6 +185,23 @@
   .route--sign-in {
     max-width: 44rem;
     margin: 0 auto;
+  }
+  .intro {
+    font-size: 1rem;
+    line-height: 1.5;
+    margin: 0 0 1.5rem;
+  }
+  .intro-help {
+    margin-bottom: 1.25rem;
+  }
+  .advanced {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding-top: 0.75rem;
+  }
+  .advanced .help {
+    margin-bottom: 0.5rem;
   }
   form {
     display: flex;
