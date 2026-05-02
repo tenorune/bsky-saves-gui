@@ -27,6 +27,7 @@ describe('runJob', () => {
         appPassword: 'pw',
         pds: 'https://bsky.social',
         enrich: true,
+        threads: false,
       },
       { createSession, runner: fakeRunner, onLog },
     );
@@ -42,6 +43,7 @@ describe('runJob', () => {
       appPassword: 'pw',
       pds: 'https://bsky.social',
       enrich: true,
+      threads: false,
       preauthSession: {
         accessJwt: session.accessJwt,
         refreshJwt: session.refreshJwt,
@@ -63,7 +65,7 @@ describe('runJob', () => {
     const { runJob } = await import('./engine');
     await expect(
       runJob(
-        { handle: 'a', appPassword: 'b', pds: 'https://x', enrich: false },
+        { handle: 'a', appPassword: 'b', pds: 'https://x', enrich: false, threads: false },
         {
           createSession,
           runner: { initialise, runFetch, onLog: () => () => {} },

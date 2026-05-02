@@ -17,6 +17,7 @@ interface FetchInput {
   readonly appPassword: string;
   readonly pds: string;
   readonly enrich: boolean;
+  readonly threads: boolean;
   readonly preauthSession?: PreauthSession;
 }
 
@@ -262,6 +263,16 @@ _bsky_fetch.fetch_to_inventory(
 from pathlib import Path
 import bsky_saves.enrich as _bsky_enrich
 _bsky_enrich.enrich_inventory(Path('${INVENTORY_PATH}'))
+`);
+  }
+
+  if (input.threads) {
+    log('Hydrating threads…');
+    await pyodide.runPythonAsync(`
+from pathlib import Path
+import bsky_saves.threads as _bsky_threads
+hydrated, skipped = _bsky_threads.hydrate_threads(Path('${INVENTORY_PATH}'))
+print(f'bsky-saves: thread hydration done — {hydrated} hydrated, {skipped} skipped')
 `);
   }
 

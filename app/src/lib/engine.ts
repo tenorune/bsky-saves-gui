@@ -9,6 +9,7 @@ export interface RunJobInput {
   readonly appPassword: string;
   readonly pds: string;
   readonly enrich: boolean;
+  readonly threads: boolean;
 }
 
 interface RunnerLike {
@@ -23,6 +24,8 @@ interface RunnerLike {
   }): Promise<unknown>;
   onLog(listener: (msg: string) => void): () => void;
 }
+
+
 
 export interface RunJobDeps {
   readonly createSession?: typeof defaultCreateSession;

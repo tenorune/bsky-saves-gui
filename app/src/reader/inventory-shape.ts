@@ -158,20 +158,26 @@ function parseSave(v: unknown): Save {
   }
 
   // Synthesize `thread` from bsky-saves' hydrate-threads output. bsky-saves'
-  // thread_replies entries are flat ({uri, text, indexedAt, images}) — we
-  // synthesize a placeholder author per entry since the upstream shape doesn't
-  // include reply-author info inline.
+  // thread_replies entries are flat ({uri, text, indexedAt, images}). The
+  // hydrator only collects SAME-AUTHOR replies (self-thread), so each entry's
+  // author is the parent save's author — synthesize from there.
   const replies = Array.isArray((v as { thread_replies?: unknown }).thread_replies)
     ? ((v as { thread_replies: unknown[] }).thread_replies as Record<string, unknown>[])
     : [];
+  const parentAuthor = parseAuthor(v.author);
   const thread: ThreadEntry[] | undefined =
     replies.length > 0
       ? replies.map((r) => ({
           uri: typeof r.uri === 'string' ? r.uri : '',
-          author: { handle: 'reply' },
+          author: parentAuthor,
           record: {
             text: typeof r.text === 'string' ? r.text : '',
-            createdAt: typeof r.indexedAt === 'string' ? r.indexedAt : '',
+            createdAt:
+              typeof r.created_at === 'string'
+                ? r.created_at
+                : typeof r.indexedAt === 'string'
+                  ? r.indexedAt
+                  : '',
           },
         }))
       : Array.isArray(v.thread)

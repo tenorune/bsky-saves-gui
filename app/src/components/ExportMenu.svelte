@@ -40,12 +40,25 @@
     });
   }
 
+  function detectHydration(inv: import('../reader/inventory-shape').Inventory) {
+    const saves = inv.saves;
+    const has = (predicate: (s: (typeof saves)[number]) => boolean) => saves.some(predicate);
+    return {
+      enrich: has((s) => typeof s.enriched_created_at === 'string'),
+      threads: has(
+        (s) => Array.isArray((s as unknown as { thread_replies?: unknown }).thread_replies),
+      ),
+      articles: has((s) => typeof (s as unknown as { article_text?: unknown }).article_text === 'string'),
+      images: has((s) => Array.isArray(s.local_images) && s.local_images.length > 0),
+    };
+  }
+
   function handleMarkdown() {
     return withInventory(async (inv) => {
       const account = await resolveAccount();
       const r = await exportMarkdown(inv, {
         account,
-        hydratedFlags: { enrich: true, threads: false, articles: false, images: false },
+        hydratedFlags: detectHydration(inv),
       });
       downloadFile(r.blob, r.filename);
     });

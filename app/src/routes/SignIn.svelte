@@ -46,6 +46,7 @@
   let saveCredentials = false;
   let passphrase = '';
   let enrich = true;
+  let threads = false;
   let error = '';
 
   function submit() {
@@ -67,6 +68,7 @@
       appPassword,
       pds,
       enrich,
+      threads,
       saveInventory,
       saveCredentials,
       passphrase,
@@ -162,6 +164,15 @@
           <span>Enrich (decode timestamps)</span>
         </label>
         <p class="help">Adds derived timestamps from the post metadata.</p>
+
+        <label class="checkbox">
+          <input type="checkbox" bind:checked={threads} />
+          <span>Hydrate threads</span>
+        </label>
+        <p class="help">
+          Fetch self-thread replies (replies the original poster wrote to their own post)
+          and store them with each save. Adds extra requests to the public Bluesky AppView.
+        </p>
 
         <label class="checkbox">
           <input type="checkbox" bind:checked={saveInventory} />

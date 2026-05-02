@@ -30,6 +30,7 @@
           appPassword: draft.appPassword,
           pds: draft.pds,
           enrich: draft.enrich,
+          threads: draft.threads,
         },
         { onLog: appendLog },
       );

@@ -79,6 +79,7 @@ describe('PyodideRunner', () => {
       appPassword: 'pw',
       pds: 'https://bsky.social',
       enrich: true,
+      threads: false,
     });
 
     expect(fake.posted[0]).toMatchObject({ type: 'init' });
@@ -108,6 +109,7 @@ describe('PyodideRunner', () => {
       appPassword: 'b',
       pds: 'https://x',
       enrich: false,
+      threads: false,
     });
 
     expect(events).toContain('Loading Pyodide…');

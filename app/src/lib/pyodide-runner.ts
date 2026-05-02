@@ -16,6 +16,7 @@ export interface FetchInput {
   readonly appPassword: string;
   readonly pds: string;
   readonly enrich: boolean;
+  readonly threads: boolean;
   /**
    * Optional pre-authenticated session from the JS-side AT Proto login.
    * If provided, the worker monkey-patches bsky_saves.auth.create_session to

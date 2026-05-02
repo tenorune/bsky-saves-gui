@@ -31,14 +31,14 @@
 
   {#if thread.length > 0}
     <section class="post-focus__thread">
-      <h3>Thread</h3>
+      <h3>Thread (same author)</h3>
       <ol>
         {#each thread as entry (entry.uri)}
           <li>
             <header>
-              <strong>{formatAuthor(entry.author)}</strong>
-              <span class="post-focus__handle">{formatHandle(entry.author.handle)}</span>
-              <time datetime={entry.record.createdAt}>{formatDateTime(entry.record.createdAt)}</time>
+              {#if entry.record.createdAt}
+                <time datetime={entry.record.createdAt}>{formatDateTime(entry.record.createdAt)}</time>
+              {/if}
             </header>
             <p class="post-focus__thread-text">{entry.record.text}</p>
           </li>
