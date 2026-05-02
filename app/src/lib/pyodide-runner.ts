@@ -118,7 +118,21 @@ export class PyodideRunner {
   }
 
   private handleError(event: ErrorEvent): void {
-    const err = new Error(event.message || 'Worker error');
+    // ErrorEvent fields are commonly empty when the failure is at the worker
+    // load/parse stage rather than at runtime. Surface every detail we have
+    // and route the raw event to the browser console for inspection.
+    // eslint-disable-next-line no-console
+    console.error('[pyodide-runner] worker error event:', event);
+    const parts = [
+      event.message,
+      event.filename ? `at ${event.filename}` : '',
+      event.lineno ? `line ${event.lineno}:${event.colno}` : '',
+    ].filter(Boolean);
+    const err = new Error(
+      parts.length > 0
+        ? `Worker error: ${parts.join(' ')}`
+        : 'Worker failed to start (see browser console for details)',
+    );
     this.pending?.reject(err);
     this.pending = null;
   }
