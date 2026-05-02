@@ -1,6 +1,8 @@
 <script lang="ts">
   import { get } from 'svelte/store';
   import { inventoryState } from '$lib/inventory-loader';
+  import { lastSession } from '$lib/last-session';
+  import { loadAccount } from '$lib/account-store';
   import { exportJson } from '../exporters/json-exporter';
   import { exportMarkdown } from '../exporters/markdown-exporter';
   import { exportHtml } from '../exporters/html-exporter';
@@ -9,6 +11,10 @@
   let busy = false;
   let error = '';
   let htmlMode: 'zip' | 'self-contained' = 'self-contained';
+
+  async function resolveAccount(): Promise<string> {
+    return get(lastSession)?.handle ?? (await loadAccount()) ?? 'unknown';
+  }
 
   async function withInventory(fn: (inv: import('../reader/inventory-shape').Inventory) => Promise<void>) {
     error = '';
@@ -36,8 +42,9 @@
 
   function handleMarkdown() {
     return withInventory(async (inv) => {
+      const account = await resolveAccount();
       const r = await exportMarkdown(inv, {
-        account: 'unknown',
+        account,
         hydratedFlags: { enrich: true, threads: false, articles: false, images: false },
       });
       downloadFile(r.blob, r.filename);

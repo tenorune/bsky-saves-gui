@@ -55,27 +55,40 @@ function renderSave(save: Save): string {
   return lines.join('\n');
 }
 
+function formatExportTime(date: Date): string {
+  return date.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  });
+}
+
+function hydratedSummary(flags: HydratedFlags): string {
+  const on = (Object.keys(flags) as (keyof HydratedFlags)[]).filter((k) => flags[k]);
+  return on.length > 0 ? on.join(', ') : 'none';
+}
+
 export async function exportMarkdown(
   inventory: Inventory,
   options: MarkdownExportOptions,
 ): Promise<ExportResult> {
   const sorted = sortByCreatedDesc(inventory.saves);
-  const frontmatter = [
-    '---',
-    `exported_at: ${new Date().toISOString()}`,
-    `account: ${options.account}`,
-    `count: ${sorted.length}`,
-    'hydrated:',
-    `  enrich: ${options.hydratedFlags.enrich}`,
-    `  threads: ${options.hydratedFlags.threads}`,
-    `  articles: ${options.hydratedFlags.articles}`,
-    `  images: ${options.hydratedFlags.images}`,
-    '---',
+  // Plain Markdown bullet list — renders as normal-sized lines in any viewer
+  // and avoids YAML-frontmatter quirks (some renderers style `---` blocks as
+  // headlines rather than metadata).
+  const header = [
+    `- **Exported:** ${formatExportTime(new Date())}`,
+    `- **Account:** @${options.account}`,
+    `- **Count:** ${sorted.length}`,
+    `- **Hydrated:** ${hydratedSummary(options.hydratedFlags)}`,
     '',
   ].join('\n');
 
   const body = sorted.map(renderSave).join('\n');
-  const text = frontmatter + body;
+  const text = header + body;
 
   return {
     blob: new Blob([text], { type: 'text/markdown' }),

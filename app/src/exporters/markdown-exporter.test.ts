@@ -21,7 +21,7 @@ const sample: Inventory = {
 };
 
 describe('markdownExporter', () => {
-  it('emits a flat reverse-chronological document with frontmatter', async () => {
+  it('emits a flat reverse-chronological document with a plain-text metadata header', async () => {
     const { exportMarkdown } = await import('./markdown-exporter');
     const result = await exportMarkdown(sample, {
       account: 'me.bsky.social',
@@ -29,21 +29,35 @@ describe('markdownExporter', () => {
     });
     const md = await result.blob.text();
     expect(result.filename).toBe('saves.md');
-    // Frontmatter
-    expect(md).toMatch(/^---\n/);
-    expect(md).toContain('account: me.bsky.social');
-    expect(md).toContain('count: 2');
-    expect(md).toContain('enrich: true');
+    // Plain bullet-list metadata, NOT YAML frontmatter.
+    expect(md).not.toMatch(/^---\n/);
+    expect(md).toMatch(/^- \*\*Exported:\*\*/);
+    expect(md).toContain('- **Account:** @me.bsky.social');
+    expect(md).toContain('- **Count:** 2');
+    expect(md).toContain('- **Hydrated:** enrich');
     // Reverse-chronological order: bob (2026-05) before alice (2026-04)
     const bobIdx = md.indexOf('bob.example');
     const aliceIdx = md.indexOf('alice.bsky.social');
     expect(bobIdx).toBeGreaterThan(0);
     expect(aliceIdx).toBeGreaterThan(bobIdx);
-    // Each save has a heading with date and handle
     expect(md).toContain('## 2026-05-01 · @bob.example');
     expect(md).toContain('## 2026-04-01 · @alice.bsky.social');
-    // Original-post link
     expect(md).toContain('https://bsky.app/profile/');
+  });
+
+  it('summarises hydrated flags compactly', async () => {
+    const { exportMarkdown } = await import('./markdown-exporter');
+    const noneResult = await exportMarkdown(sample, {
+      account: 'a',
+      hydratedFlags: { enrich: false, threads: false, articles: false, images: false },
+    });
+    expect(await noneResult.blob.text()).toContain('- **Hydrated:** none');
+
+    const manyResult = await exportMarkdown(sample, {
+      account: 'a',
+      hydratedFlags: { enrich: true, threads: true, articles: false, images: true },
+    });
+    expect(await manyResult.blob.text()).toContain('- **Hydrated:** enrich, threads, images');
   });
 
   it('inlines hydrated article text under a Linked article subhead', async () => {

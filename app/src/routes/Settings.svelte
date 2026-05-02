@@ -4,6 +4,7 @@
   import { inventoryState, loadFromDb } from '$lib/inventory-loader';
   import { saveInventory, clearInventory } from '$lib/inventory-store';
   import { clearCredentials } from '$lib/credentials-store';
+  import { clearAccount } from '$lib/account-store';
   import { clearBeaconSent } from '$lib/beacon';
   import { loadProxyConfig, saveProxyConfig, clearProxyConfig } from '$lib/proxy-config';
   import { exportJson } from '../exporters/json-exporter';
@@ -61,6 +62,7 @@
       clearCredentials(),
       clearProxyConfig(),
       clearBeaconSent(),
+      clearAccount(),
     ]);
     await loadFromDb();
     proxyUrl = '';

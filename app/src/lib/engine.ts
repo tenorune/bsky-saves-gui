@@ -1,6 +1,7 @@
 import { createSession as defaultCreateSession, type AtSession } from './atproto';
 import { PyodideRunner } from './pyodide-runner';
 import { saveInventory } from './inventory-store';
+import { saveAccount } from './account-store';
 import { setLastSession } from './last-session';
 
 export interface RunJobInput {
@@ -61,6 +62,7 @@ export async function runJob(input: RunJobInput, deps: RunJobDeps = {}): Promise
       },
     });
     await saveInventory(inventory);
+    await saveAccount(session.handle);
     log('Inventory saved.');
     return { session, inventory };
   } finally {
