@@ -39,8 +39,8 @@
       {/if}
       {#if $inventoryState.status === 'ready'}
         <ExportMenu />
+        <a href="#/library">Library</a>
       {/if}
-      <a href="#/library">Library</a>
       <a href="#/settings">Settings</a>
     </nav>
   </header>
