@@ -86,4 +86,40 @@ describe('markdownExporter', () => {
     expect(md).toContain('### Linked article: A great post');
     expect(md).toContain('Body of the linked article.');
   });
+
+  it('keeps multi-paragraph thread replies inside one blockquote', async () => {
+    const { exportMarkdown } = await import('./markdown-exporter');
+    const inv: Inventory = {
+      saves: [
+        {
+          uri: 'at://x/y/3l',
+          cid: 'c',
+          author: { did: 'd', handle: 'a.example' },
+          record: { text: 'parent', createdAt: '2026-04-01T00:00:00Z' },
+          indexedAt: '2026-04-01T00:00:00Z',
+          thread: [
+            {
+              uri: 'at://x/y/r1',
+              author: { did: 'd', handle: 'a.example' },
+              record: { text: 'para 1\n\npara 2\n\npara 3', createdAt: '2026-04-01T00:00:01Z' },
+            },
+            {
+              uri: 'at://x/y/r2',
+              author: { did: 'd', handle: 'a.example' },
+              record: { text: 'next reply', createdAt: '2026-04-01T00:00:02Z' },
+            },
+          ],
+        },
+      ],
+    };
+    const result = await exportMarkdown(inv, {
+      account: 'me',
+      hydratedFlags: { enrich: false, threads: true, articles: false, images: false },
+    });
+    const md = await result.blob.text();
+    // Every line of the multi-paragraph reply, including blanks between
+    // paragraphs, must carry a `>` so it stays in one blockquote.
+    expect(md).toContain('> @a.example: para 1\n>\n> para 2\n>\n> para 3');
+    expect(md).toContain('> @a.example: next reply');
+  });
 });
