@@ -25,7 +25,7 @@
     }
     status = 'running';
     const existing = await loadInventory();
-    appendLog(existing ? 'Syncing…' : 'Starting…');
+    appendLog(existing ? 'Refreshing…' : 'Starting…');
     try {
       await runJob(
         {

@@ -9,7 +9,7 @@
   let enrich = true;
   let threads = false;
   let handle = '';
-  let canSync = false;
+  let canRefresh = false;
 
   onMount(() => {
     const draft = get(signInDraft);
@@ -18,15 +18,15 @@
       enrich = draft.enrich;
       threads = draft.threads;
       handle = draft.handle;
-      canSync = true;
+      canRefresh = true;
     } else if (session) {
       handle = session.handle;
-      canSync = false;
+      canRefresh = false;
     }
   });
 
-  function syncNow() {
-    if (!canSync) {
+  function refreshNow() {
+    if (!canRefresh) {
       navigate('/');
       return;
     }
@@ -43,12 +43,12 @@
   }
 </script>
 
-<section class="route route--sync" use:slideFromRight>
+<section class="route route--refresh" use:slideFromRight>
   <header class="route__header">
-    <h2 class="route__title">Sync</h2>
+    <h2 class="route__title">Refresh</h2>
   </header>
 
-  {#if canSync}
+  {#if canRefresh}
     <p class="status">
       Signed in as <code>@{handle}</code>
     </p>
@@ -67,7 +67,7 @@
       </label>
 
       <div class="actions">
-        <button type="button" class="primary" on:click={syncNow}>Sync now</button>
+        <button type="button" class="primary" on:click={refreshNow}>Refresh now</button>
         <button type="button" on:click={cancel}>Cancel</button>
       </div>
     </div>
@@ -80,14 +80,14 @@
       <p class="status">No active session.</p>
     {/if}
     <div class="actions">
-      <button type="button" class="primary" on:click={reSignIn}>Sign in to sync</button>
+      <button type="button" class="primary" on:click={reSignIn}>Sign in to refresh</button>
       <button type="button" on:click={cancel}>Back to library</button>
     </div>
   {/if}
 </section>
 
 <style>
-  .route--sync {
+  .route--refresh {
     max-width: 44rem;
     margin: 0 auto;
   }

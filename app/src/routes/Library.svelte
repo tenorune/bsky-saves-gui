@@ -18,16 +18,16 @@
     navigate(`/post/${rkeyOf(save.uri)}`);
   }
 
-  function sync(): void {
-    navigate('/sync');
+  function refresh(): void {
+    navigate('/refresh');
   }
 </script>
 
 <section class="route route--library" use:slideFromRight>
   <header class="route__header">
     <h2 class="route__title">Library</h2>
-    <button type="button" class="route__sync" on:click={sync} title="Re-fetch saves">
-      Sync
+    <button type="button" class="route__refresh" on:click={refresh} title="Re-fetch saves">
+      Refresh
     </button>
   </header>
 
@@ -60,7 +60,7 @@
   .route__title {
     margin: 0;
   }
-  .route__sync {
+  .route__refresh {
     font: inherit;
     padding: 0.35rem 0.75rem;
     border: 1px solid color-mix(in oklab, CanvasText 25%, transparent);
@@ -70,7 +70,7 @@
     cursor: pointer;
     font-weight: 600;
   }
-  .route__sync:hover {
+  .route__refresh:hover {
     background: color-mix(in oklab, CanvasText 12%, Canvas);
   }
   .error {
