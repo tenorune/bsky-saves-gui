@@ -3,7 +3,6 @@
   import { get } from 'svelte/store';
   import { inventoryState, loadFromDb } from '$lib/inventory-loader';
   import { saveInventory, clearInventory } from '$lib/inventory-store';
-  import { clearImageBlobs } from '$lib/image-store';
   import { clearCredentials } from '$lib/credentials-store';
   import { clearAccount } from '$lib/account-store';
   import { clearLastSession } from '$lib/last-session';
@@ -62,7 +61,6 @@
     }
     await Promise.all([
       clearInventory(),
-      clearImageBlobs(),
       clearCredentials(),
       clearProxyConfig(),
       clearBeaconSent(),

@@ -1,5 +1,4 @@
 <script lang="ts">
-  import HydratedImage from '../components/HydratedImage.svelte';
   // bsky-saves stores quoted posts at the top-level `quoted_post` field with a
   // shape that's similar-but-not-identical to the parent save: text fields
   // appear as `text` (not `post_text`) and timestamps as `created_at` (not
@@ -89,7 +88,7 @@
     {#if images.length > 0}
       <div class="quoted-post__images">
         {#each images as img}
-          <HydratedImage src={img.url} alt={img.alt} />
+          <img src={img.url} alt={img.alt} loading="lazy" />
         {/each}
       </div>
     {/if}
@@ -133,7 +132,7 @@
     grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
     gap: 0.4rem;
   }
-  .quoted-post__images :global(img) {
+  .quoted-post__images img {
     width: 100%;
     border-radius: 4px;
     object-fit: cover;

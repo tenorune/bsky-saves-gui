@@ -7,7 +7,6 @@ export interface SignInDraft {
   fetch: boolean;
   enrich: boolean;
   threads: boolean;
-  images: boolean;
   saveInventory: boolean;
   saveCredentials: boolean;
   passphrase: string;

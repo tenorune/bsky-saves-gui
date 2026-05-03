@@ -88,11 +88,7 @@
 
   function handleHtml() {
     return withInventory(async (inv) => {
-      // If any image bytes are stored locally, ship them inside a zip
-      // alongside index.html. Otherwise the inlined HTML is enough on its own.
-      const hydrated = detectHydration(inv);
-      const mode = hydrated.images ? 'zip' : 'self-contained';
-      const r = await exportHtml(inv, { mode });
+      const r = await exportHtml(inv);
       downloadFile(r.blob, r.filename);
     });
   }

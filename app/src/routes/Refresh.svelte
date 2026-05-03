@@ -9,11 +9,10 @@
   let fetchNew = true;
   let enrich = false;
   let threads = false;
-  let images = false;
   let handle = '';
   let canRefresh = false;
 
-  $: canUpdate = canRefresh && (fetchNew || enrich || threads || images);
+  $: canUpdate = canRefresh && (fetchNew || enrich || threads);
 
   onMount(() => {
     const draft = get(signInDraft);
@@ -38,7 +37,7 @@
     // credentials.
     signInDraft.update((d) =>
       d
-        ? { ...d, fetch: fetchNew, enrich, threads, images }
+        ? { ...d, fetch: fetchNew, enrich, threads }
         : {
             handle,
             appPassword: '',
@@ -46,7 +45,6 @@
             fetch: fetchNew,
             enrich,
             threads,
-            images,
             saveInventory: false,
             saveCredentials: false,
             passphrase: '',
@@ -92,11 +90,6 @@
       <label class="checkbox">
         <input type="checkbox" bind:checked={threads} />
         <span>Save same-author thread replies for posts that don't have them</span>
-      </label>
-
-      <label class="checkbox">
-        <input type="checkbox" bind:checked={images} />
-        <span>Save images on this device for posts that don't have them</span>
       </label>
 
       <div class="actions">

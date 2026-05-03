@@ -18,7 +18,6 @@ export interface FetchInput {
   readonly fetch: boolean;
   readonly enrich: boolean;
   readonly threads: boolean;
-  readonly images: boolean;
   /**
    * Existing inventory to seed the worker FS with when `fetch` is false, so
    * enrich / hydrate_threads can run against a previously-saved library.
@@ -51,12 +50,6 @@ interface LogMessage {
 interface FetchResultMessage {
   readonly type: 'fetch-result';
   readonly inventory: unknown;
-  readonly imageBlobs: ReadonlyArray<{ url: string; bytes: Uint8Array }>;
-}
-
-export interface FetchOutcome {
-  readonly inventory: unknown;
-  readonly imageBlobs: ReadonlyArray<{ url: string; bytes: Uint8Array }>;
 }
 interface ErrorMessage {
   readonly type: 'error';
@@ -118,7 +111,7 @@ export class PyodideRunner {
       return;
     }
     if (msg.type === 'fetch-result') {
-      this.pending?.resolve({ inventory: msg.inventory, imageBlobs: msg.imageBlobs });
+      this.pending?.resolve(msg.inventory);
       this.pending = null;
       return;
     }
@@ -166,14 +159,11 @@ export class PyodideRunner {
     });
   }
 
-  async runFetch(input: FetchInput): Promise<FetchOutcome> {
+  async runFetch(input: FetchInput): Promise<unknown> {
     if (!this.worker) throw new Error('Runner not initialised');
     const worker = this.worker;
-    return new Promise<FetchOutcome>((resolve, reject) => {
-      this.pending = {
-        resolve: (v) => resolve(v as FetchOutcome),
-        reject,
-      };
+    return new Promise<unknown>((resolve, reject) => {
+      this.pending = { resolve, reject };
       worker.postMessage({ type: 'fetch', input });
     });
   }

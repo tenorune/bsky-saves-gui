@@ -38,17 +38,9 @@ describe('htmlExporter', () => {
     );
   });
 
-  it('returns a zip containing the self-contained HTML in zip mode', async () => {
-    const { exportHtml } = await import('./html-exporter');
-    const result = await exportHtml(inv, { mode: 'zip' });
-    expect(result.filename).toBe('saves-archive.zip');
-    expect(result.blob.type).toMatch(/zip/);
-    expect(result.blob.size).toBeGreaterThan(0);
-  });
-
   it('returns a single self-contained HTML with inventory injected', async () => {
     const { exportHtml } = await import('./html-exporter');
-    const result = await exportHtml(inv, { mode: 'self-contained' });
+    const result = await exportHtml(inv);
     expect(result.filename).toBe('saves-archive.html');
     expect(result.blob.type).toBe('text/html');
     const text = await result.blob.text();
@@ -79,7 +71,7 @@ describe('htmlExporter', () => {
       ],
     };
     const { exportHtml } = await import('./html-exporter');
-    const result = await exportHtml(trickyInv, { mode: 'self-contained' });
+    const result = await exportHtml(trickyInv);
     const text = await result.blob.text();
     // Pull out the inlined inventory JSON and round-trip through JSON.parse to
     // confirm it survived intact.
@@ -95,6 +87,6 @@ describe('htmlExporter', () => {
       vi.fn(async () => new Response('<html><body></body></html>')),
     );
     const { exportHtml } = await import('./html-exporter');
-    await expect(exportHtml(inv, { mode: 'self-contained' })).rejects.toThrow(/inventory script tag/);
+    await expect(exportHtml(inv)).rejects.toThrow(/inventory script tag/);
   });
 });

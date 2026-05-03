@@ -13,7 +13,7 @@ describe('runJob', () => {
 
     const createSession = vi.fn().mockResolvedValue(session);
     const initialise = vi.fn().mockResolvedValue(undefined);
-    const runFetch = vi.fn().mockResolvedValue({ inventory, imageBlobs: [] });
+    const runFetch = vi.fn().mockResolvedValue(inventory);
     const onLog = vi.fn();
 
     const fakeRunner = { initialise, runFetch, onLog: () => () => {} };
@@ -29,7 +29,7 @@ describe('runJob', () => {
         pds: 'https://bsky.social',
         fetch: true,
         enrich: true,
-        threads: false, images: false,
+        threads: false,
       },
       { createSession, runner: fakeRunner, onLog },
     );
@@ -47,7 +47,7 @@ describe('runJob', () => {
       fetch: true,
       enrich: true,
       threads: false,
-      images: false,
+
       existingInventory: undefined,
       preauthSession: {
         accessJwt: session.accessJwt,
@@ -67,7 +67,7 @@ describe('runJob', () => {
 
     const createSession = vi.fn();
     const initialise = vi.fn().mockResolvedValue(undefined);
-    const runFetch = vi.fn().mockResolvedValue({ inventory, imageBlobs: [] });
+    const runFetch = vi.fn().mockResolvedValue(inventory);
 
     const { runJob } = await import('./engine');
     const result = await runJob(
@@ -77,7 +77,7 @@ describe('runJob', () => {
         pds: 'https://bsky.social',
         fetch: true,
         enrich: false,
-        threads: true, images: false,
+        threads: true,
       },
       { createSession, runner: { initialise, runFetch, onLog: () => () => {} } },
     );
@@ -90,7 +90,7 @@ describe('runJob', () => {
       fetch: true,
       enrich: false,
       threads: true,
-      images: false,
+
       existingInventory: undefined,
       preauthSession: {
         accessJwt: session.accessJwt,
@@ -119,7 +119,7 @@ describe('runJob', () => {
           pds: 'https://x',
           fetch: true,
           enrich: false,
-          threads: false, images: false,
+          threads: false,
         },
         {
           createSession,
