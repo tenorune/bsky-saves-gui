@@ -15,8 +15,14 @@ export interface FetchInput {
   readonly handle: string;
   readonly appPassword: string;
   readonly pds: string;
+  readonly fetch: boolean;
   readonly enrich: boolean;
   readonly threads: boolean;
+  /**
+   * Existing inventory to seed the worker FS with when `fetch` is false, so
+   * enrich / hydrate_threads can run against a previously-saved library.
+   */
+  readonly existingInventory?: unknown;
   /**
    * Optional pre-authenticated session from the JS-side AT Proto login.
    * If provided, the worker monkey-patches bsky_saves.auth.create_session to

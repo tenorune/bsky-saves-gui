@@ -78,6 +78,7 @@ describe('PyodideRunner', () => {
       handle: 'alice.bsky.social',
       appPassword: 'pw',
       pds: 'https://bsky.social',
+      fetch: true,
       enrich: true,
       threads: false,
     });
@@ -108,6 +109,7 @@ describe('PyodideRunner', () => {
       handle: 'a',
       appPassword: 'b',
       pds: 'https://x',
+      fetch: true,
       enrich: false,
       threads: false,
     });

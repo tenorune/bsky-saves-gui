@@ -6,17 +6,18 @@
   import { lastSession } from '$lib/last-session';
   import { slideFromRight } from '$lib/slide-transition';
 
-  let enrich = true;
+  let fetchNew = true;
+  let enrich = false;
   let threads = false;
   let handle = '';
   let canRefresh = false;
+
+  $: canUpdate = canRefresh && (fetchNew || enrich || threads);
 
   onMount(() => {
     const draft = get(signInDraft);
     const session = get(lastSession);
     if (draft) {
-      enrich = draft.enrich;
-      threads = draft.threads;
       handle = draft.handle;
       canRefresh = true;
     } else if (session) {
@@ -25,22 +26,23 @@
     }
   });
 
-  function refreshNow() {
-    if (!canRefresh) {
-      navigate('/');
+  function updateNow() {
+    if (!canUpdate) {
+      if (!canRefresh) navigate('/');
       return;
     }
     // Persist the toggle choices so Run.svelte reads the right ones. If we're
-    // refreshing from a session-only state (no draft), create a minimal draft
+    // updating from a session-only state (no draft), create a minimal draft
     // carrying just the toggles — Run.svelte falls back to the session for
     // credentials.
     signInDraft.update((d) =>
       d
-        ? { ...d, enrich, threads }
+        ? { ...d, fetch: fetchNew, enrich, threads }
         : {
             handle,
             appPassword: '',
             pds: '',
+            fetch: fetchNew,
             enrich,
             threads,
             saveInventory: false,
@@ -62,7 +64,7 @@
 
 <section class="route route--refresh" use:slideFromRight>
   <header class="route__header">
-    <h2 class="route__title">Refresh</h2>
+    <h2 class="route__title">Update your library</h2>
   </header>
 
   {#if canRefresh}
@@ -72,22 +74,26 @@
 
     <div class="card">
       <p class="help">
-        Pull in any posts you've saved since the last fetch. Existing posts
-        stay; only new ones get added.
+        Each step only runs on posts that need it. Re-running is safe.
       </p>
 
       <label class="checkbox">
+        <input type="checkbox" bind:checked={fetchNew} />
+        <span>Pull in any newly saved posts</span>
+      </label>
+
+      <label class="checkbox">
         <input type="checkbox" bind:checked={enrich} />
-        <span>Add precise dates</span>
+        <span>Add precise dates to posts that don't have them</span>
       </label>
 
       <label class="checkbox">
         <input type="checkbox" bind:checked={threads} />
-        <span>Include same-author replies</span>
+        <span>Save same-author thread replies for posts that don't have them</span>
       </label>
 
       <div class="actions">
-        <button type="button" class="primary" on:click={refreshNow}>Refresh now</button>
+        <button type="button" class="primary" on:click={updateNow} disabled={!canUpdate}>Update now</button>
         <button type="button" on:click={cancel}>Cancel</button>
       </div>
     </div>
@@ -101,7 +107,7 @@
       <p class="status">You're not signed in.</p>
     {/if}
     <div class="actions">
-      <button type="button" class="primary" on:click={reSignIn}>Sign in to refresh</button>
+      <button type="button" class="primary" on:click={reSignIn}>Sign in to update</button>
       <button type="button" on:click={cancel}>Back to library</button>
     </div>
   {/if}
@@ -165,5 +171,9 @@
   .actions .primary {
     font-weight: 600;
     background: color-mix(in oklab, CanvasText 8%, Canvas);
+  }
+  .actions button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 </style>

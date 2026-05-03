@@ -16,8 +16,10 @@ interface FetchInput {
   readonly handle: string;
   readonly appPassword: string;
   readonly pds: string;
+  readonly fetch: boolean;
   readonly enrich: boolean;
   readonly threads: boolean;
+  readonly existingInventory?: unknown;
   readonly preauthSession?: PreauthSession;
 }
 
@@ -237,7 +239,6 @@ print('reusing pre-authenticated session from main thread')
 `);
   }
 
-  log('Fetching saves…');
   await pyodide.runPythonAsync(`
 import os
 os.environ['BSKY_HANDLE'] = ${JSON.stringify(input.handle)}
@@ -245,7 +246,9 @@ os.environ['BSKY_APP_PASSWORD'] = ${JSON.stringify(input.appPassword)}
 os.environ['BSKY_PDS'] = ${JSON.stringify(input.pds)}
 `);
 
-  await pyodide.runPythonAsync(`
+  if (input.fetch) {
+    log('Fetching saves…');
+    await pyodide.runPythonAsync(`
 from pathlib import Path
 import bsky_saves.fetch as _bsky_fetch
 import os
@@ -256,6 +259,17 @@ _bsky_fetch.fetch_to_inventory(
     pds_base=os.environ['BSKY_PDS'],
 )
 `);
+  } else {
+    if (!input.existingInventory) {
+      throw new Error('No existing inventory to update.');
+    }
+    log('Loading existing library…');
+    const invJson = JSON.stringify(input.existingInventory);
+    await pyodide.runPythonAsync(`
+with open('${INVENTORY_PATH}', 'w') as _f:
+    _f.write(${JSON.stringify(invJson)})
+`);
+  }
 
   if (input.enrich) {
     log('Enriching…');

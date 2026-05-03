@@ -67,6 +67,7 @@
       handle,
       appPassword,
       pds,
+      fetch: true,
       enrich,
       threads,
       saveInventory,

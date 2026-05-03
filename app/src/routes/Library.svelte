@@ -26,8 +26,8 @@
 <section class="route route--library" use:slideFromRight>
   <header class="route__header">
     <h2 class="route__title">Library</h2>
-    <button type="button" class="route__refresh" on:click={refresh} title="Re-fetch saves">
-      Refresh
+    <button type="button" class="route__refresh" on:click={refresh} title="Update library">
+      Update
     </button>
   </header>
 

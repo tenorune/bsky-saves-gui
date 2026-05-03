@@ -4,6 +4,7 @@ export interface SignInDraft {
   handle: string;
   appPassword: string;
   pds: string;
+  fetch: boolean;
   enrich: boolean;
   threads: boolean;
   saveInventory: boolean;

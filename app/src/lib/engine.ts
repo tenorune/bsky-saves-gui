@@ -1,11 +1,12 @@
 import { createSession as defaultCreateSession, type AtSession } from './atproto';
 import { PyodideRunner } from './pyodide-runner';
-import { saveInventory } from './inventory-store';
+import { loadInventory, saveInventory } from './inventory-store';
 import { saveAccount } from './account-store';
 import { setLastSession } from './last-session';
 
 export interface RunJobOptionsCommon {
   readonly pds: string;
+  readonly fetch: boolean;
   readonly enrich: boolean;
   readonly threads: boolean;
 }
@@ -25,8 +26,10 @@ interface RunnerFetchInput {
   readonly handle: string;
   readonly appPassword: string;
   readonly pds: string;
+  readonly fetch: boolean;
   readonly enrich: boolean;
   readonly threads: boolean;
+  readonly existingInventory?: unknown;
   readonly preauthSession?: {
     readonly accessJwt: string;
     readonly refreshJwt: string;
@@ -56,6 +59,20 @@ export async function runJob(input: RunJobInput, deps: RunJobDeps = {}): Promise
   const createSession = deps.createSession ?? defaultCreateSession;
   const runner = deps.runner ?? new PyodideRunner();
   const log = deps.onLog ?? (() => {});
+
+  if (!input.fetch && !input.enrich && !input.threads) {
+    throw new Error('Pick at least one step to run.');
+  }
+
+  let existingInventory: unknown;
+  if (!input.fetch) {
+    existingInventory = await loadInventory();
+    if (!existingInventory) {
+      throw new Error(
+        'No saved library yet. Turn on "Pull in any newly saved posts" the first time.',
+      );
+    }
+  }
 
   let session: AtSession;
   let appPassword: string;
@@ -90,8 +107,10 @@ export async function runJob(input: RunJobInput, deps: RunJobDeps = {}): Promise
       handle: session.handle,
       appPassword,
       pds: input.pds,
+      fetch: input.fetch,
       enrich: input.enrich,
       threads: input.threads,
+      existingInventory,
       preauthSession: {
         accessJwt: session.accessJwt,
         refreshJwt: session.refreshJwt,

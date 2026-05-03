@@ -30,6 +30,7 @@
         handle: draft.handle,
         appPassword: draft.appPassword,
         pds: draft.pds,
+        fetch: draft.fetch,
         enrich: draft.enrich,
         threads: draft.threads,
       };
@@ -44,6 +45,7 @@
           handle: session.handle,
         },
         pds: session.pds,
+        fetch: draft?.fetch ?? true,
         enrich: draft?.enrich ?? true,
         threads: draft?.threads ?? false,
       };
