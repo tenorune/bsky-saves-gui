@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { get } from 'svelte/store';
   import { inventoryState } from '$lib/inventory-loader';
   import { lastSession } from '$lib/last-session';
@@ -11,6 +12,28 @@
   let busy = false;
   let error = '';
   let htmlMode: 'zip' | 'self-contained' = 'self-contained';
+  let menuEl: HTMLDetailsElement | undefined;
+
+  function handleOutsideClick(e: MouseEvent) {
+    if (menuEl?.open && !menuEl.contains(e.target as Node)) {
+      menuEl.open = false;
+    }
+  }
+
+  function handleEscape(e: KeyboardEvent) {
+    if (e.key === 'Escape' && menuEl?.open) {
+      menuEl.open = false;
+    }
+  }
+
+  onMount(() => {
+    document.addEventListener('click', handleOutsideClick);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('click', handleOutsideClick);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  });
 
   async function resolveAccount(): Promise<string> {
     return get(lastSession)?.handle ?? (await loadAccount()) ?? 'unknown';
@@ -72,7 +95,7 @@
   }
 </script>
 
-<details class="export-menu">
+<details bind:this={menuEl} class="export-menu">
   <summary>Export</summary>
   <div class="export-menu__panel">
     <button type="button" disabled={busy} on:click={handleJson}>JSON</button>

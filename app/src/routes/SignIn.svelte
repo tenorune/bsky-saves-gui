@@ -91,8 +91,8 @@
 
   {#if savedPresent && !useDifferentAccount}
     <section class="card saved-creds" aria-label="Saved credentials">
-      <h3>Saved credentials detected</h3>
-      <p class="help">Enter your passphrase to unlock your saved app password.</p>
+      <h3>Welcome back</h3>
+      <p class="help">Type your passphrase to unlock your saved app password.</p>
       <label class="card__field">
         Passphrase
         <input type="password" bind:value={unlockPassphrase} />
@@ -111,8 +111,8 @@
 
   {#if showForm}
     <p class="help intro-help">
-      Your handle and app password are sent only to your Bluesky server.
-      Nothing is uploaded to <code>{config.appDomain}</code>; the page is static.
+      Your handle and password go straight to Bluesky. Nothing else gets sent
+      anywhere.
     </p>
 
     <form on:submit|preventDefault={submit}>
@@ -140,13 +140,14 @@
       />
     </label>
     <p class="help">
-      Use a Bluesky <strong>app password</strong>, not your main password — see
+      Don't use your real Bluesky password. Make an
       <a
         href="https://bsky.app/settings/app-passwords"
         target="_blank"
         rel="noopener noreferrer"
-      >Settings → Privacy and Security → App Passwords</a>
-      on Bluesky.
+      >app password</a>
+      in Bluesky's settings — it's a temporary password just for tools like
+      this one, and you can revoke it anytime.
     </p>
 
     <details class="advanced-toggle">
@@ -154,38 +155,41 @@
 
       <div class="card advanced">
         <label class="card__field">
-          PDS
+          Server address
           <input type="url" bind:value={pds} />
         </label>
-        <p class="help">Defaults to Bluesky's PDS. Change for third-party AT Proto servers.</p>
+        <p class="help">
+          Where your Bluesky account lives. The default works for most people;
+          only change this if you know your account is on a different server.
+        </p>
 
         <label class="checkbox">
           <input type="checkbox" bind:checked={enrich} />
-          <span>Enrich (decode timestamps)</span>
+          <span>Add precise dates</span>
         </label>
-        <p class="help">Adds derived timestamps from the post metadata.</p>
+        <p class="help">Show the exact time each post was made.</p>
 
         <label class="checkbox">
           <input type="checkbox" bind:checked={threads} />
-          <span>Hydrate threads</span>
+          <span>Include same-author replies</span>
         </label>
         <p class="help">
-          Fetch self-thread replies (replies the original poster wrote to their own post)
-          and store them with each save. Adds extra requests to the public Bluesky AppView.
+          When a saved post is part of a longer thread by the same person, also
+          save the rest of the thread.
         </p>
 
         <label class="checkbox">
           <input type="checkbox" bind:checked={saveInventory} />
-          <span>Save inventory on this device</span>
+          <span>Keep my saves in this browser</span>
         </label>
         <p class="help">
-          Come back and read or re-sync without re-fetching everything. Stored in this
-          browser's IndexedDB.
+          Come back later to read or refresh without downloading everything
+          again.
         </p>
 
         <label class="checkbox">
           <input type="checkbox" bind:checked={saveCredentials} />
-          <span>Save app password on this device (encrypted)</span>
+          <span>Remember my app password on this device</span>
         </label>
         {#if saveCredentials}
           <label class="card__field">
@@ -193,8 +197,9 @@
             <input type="password" bind:value={passphrase} minlength="8" />
           </label>
           <p class="help">
-            Encrypts your app password with this passphrase. Only this browser, on this device, can
-            read it. Forget the passphrase = re-enter the app password.
+            Your app password gets locked with this passphrase and stored only
+            in this browser. If you forget the passphrase, you'll just need to
+            type your app password again next time.
           </p>
         {/if}
       </div>

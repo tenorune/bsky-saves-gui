@@ -71,16 +71,19 @@
     </p>
 
     <div class="card">
-      <p class="help">Choose what to fetch and re-hydrate. <code>bsky-saves</code> is idempotent: existing saves are kept, only new ones are pulled.</p>
+      <p class="help">
+        Pull in any posts you've saved since the last fetch. Existing posts
+        stay; only new ones get added.
+      </p>
 
       <label class="checkbox">
         <input type="checkbox" bind:checked={enrich} />
-        <span>Enrich (decode timestamps)</span>
+        <span>Add precise dates</span>
       </label>
 
       <label class="checkbox">
         <input type="checkbox" bind:checked={threads} />
-        <span>Hydrate threads (self-thread replies from the public AppView)</span>
+        <span>Include same-author replies</span>
       </label>
 
       <div class="actions">
@@ -91,10 +94,11 @@
   {:else}
     {#if handle}
       <p class="status">
-        Last signed in as <code>@{handle}</code>, but the session was cleared by a page reload.
+        You were signed in as <code>@{handle}</code>, but reloading the page
+        ended that session.
       </p>
     {:else}
-      <p class="status">No active session.</p>
+      <p class="status">You're not signed in.</p>
     {/if}
     <div class="actions">
       <button type="button" class="primary" on:click={reSignIn}>Sign in to refresh</button>

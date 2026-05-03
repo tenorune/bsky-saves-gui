@@ -15,7 +15,7 @@ This is a static web app. There is no server the operator runs that receives you
 
 ## What leaves your browser
 
-- **Your Bluesky PDS** receives your authentication and AT Protocol requests when you sign in and run a fetch. This is unavoidable — it is how Bluesky works.
+- **Your Bluesky PDS** receives your authentication and AT Protocol requests when you sign in and run a fetch.
 - **`cdn.bsky.app`** receives image fetches if you turn on image hydration.
 - **Article hosts** receive fetches for any URLs in your saves if you turn on article hydration. Article hydration runs through either a local helper you install, or a Cloudflare Worker proxy you deploy. Either way, the operator never sees the traffic.
 <!--
