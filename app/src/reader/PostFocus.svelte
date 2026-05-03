@@ -40,7 +40,16 @@
                 <time datetime={entry.record.createdAt}>{formatDateTime(entry.record.createdAt)}</time>
               {/if}
             </header>
-            <p class="post-focus__thread-text">{entry.record.text}</p>
+            {#if entry.record.text}
+              <p class="post-focus__thread-text">{entry.record.text}</p>
+            {/if}
+            {#if entry.images && entry.images.length > 0}
+              <div class="post-focus__thread-images">
+                {#each entry.images as img}
+                  <img src={img.url} alt={img.alt ?? ''} loading="lazy" />
+                {/each}
+              </div>
+            {/if}
           </li>
         {/each}
       </ol>
@@ -120,5 +129,16 @@
   .post-focus__thread-text {
     margin: 0.25rem 0 0;
     white-space: pre-wrap;
+  }
+  .post-focus__thread-images {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+  }
+  .post-focus__thread-images img {
+    width: 100%;
+    border-radius: 6px;
+    object-fit: cover;
   }
 </style>

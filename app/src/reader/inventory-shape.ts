@@ -19,11 +19,17 @@ export interface ArticleHydration {
   readonly text: string;
 }
 
+export interface ThreadImage {
+  readonly url: string;
+  readonly alt?: string;
+}
+
 export interface ThreadEntry {
   readonly uri: string;
   readonly cid?: string;
   readonly author: Author;
   readonly record: PostRecord;
+  readonly images?: readonly ThreadImage[];
   readonly [extra: string]: unknown;
 }
 
@@ -167,19 +173,33 @@ function parseSave(v: unknown): Save {
   const parentAuthor = parseAuthor(v.author);
   const thread: ThreadEntry[] | undefined =
     replies.length > 0
-      ? replies.map((r) => ({
-          uri: typeof r.uri === 'string' ? r.uri : '',
-          author: parentAuthor,
-          record: {
-            text: typeof r.text === 'string' ? r.text : '',
-            createdAt:
-              typeof r.created_at === 'string'
-                ? r.created_at
-                : typeof r.indexedAt === 'string'
-                  ? r.indexedAt
-                  : '',
-          },
-        }))
+      ? replies.map((r) => {
+          const rawImgs = Array.isArray((r as { images?: unknown }).images)
+            ? ((r as { images: unknown[] }).images as Record<string, unknown>[])
+            : [];
+          const imgs: ThreadImage[] = [];
+          for (const img of rawImgs) {
+            if (typeof img.url !== 'string') continue;
+            imgs.push({
+              url: img.url,
+              alt: typeof img.alt === 'string' ? img.alt : '',
+            });
+          }
+          return {
+            uri: typeof r.uri === 'string' ? r.uri : '',
+            author: parentAuthor,
+            record: {
+              text: typeof r.text === 'string' ? r.text : '',
+              createdAt:
+                typeof r.created_at === 'string'
+                  ? r.created_at
+                  : typeof r.indexedAt === 'string'
+                    ? r.indexedAt
+                    : '',
+            },
+            ...(imgs.length > 0 ? { images: imgs } : {}),
+          };
+        })
       : Array.isArray(v.thread)
         ? (v.thread as ThreadEntry[])
         : undefined;
