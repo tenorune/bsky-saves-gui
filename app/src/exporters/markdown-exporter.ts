@@ -48,7 +48,14 @@ function renderSave(save: Save): string {
   if (save.thread && save.thread.length > 0) {
     lines.push('', '### Thread', '');
     for (const entry of save.thread) {
-      lines.push(`> @${entry.author.handle}: ${entry.record.text}`);
+      if (entry.record.text) {
+        lines.push(`> @${entry.author.handle}: ${entry.record.text}`);
+      }
+      if (entry.images) {
+        for (const img of entry.images) {
+          lines.push(`> ![${img.alt ?? ''}](${img.url})`);
+        }
+      }
     }
   }
   lines.push('');
