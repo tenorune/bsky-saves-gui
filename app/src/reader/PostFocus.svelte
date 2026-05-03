@@ -31,7 +31,7 @@
 
   {#if thread.length > 0}
     <section class="post-focus__thread">
-      <h3>Thread (same author)</h3>
+      <h3>Thread</h3>
       <ol>
         {#each thread as entry (entry.uri)}
           <li>
