@@ -11,7 +11,6 @@
 
   let busy = false;
   let error = '';
-  let htmlMode: 'zip' | 'self-contained' = 'self-contained';
   let menuEl: HTMLDetailsElement | undefined;
 
   function handleOutsideClick(e: MouseEvent) {
@@ -89,7 +88,11 @@
 
   function handleHtml() {
     return withInventory(async (inv) => {
-      const r = await exportHtml(inv, { mode: htmlMode });
+      // If any image bytes are stored locally, ship them inside a zip
+      // alongside index.html. Otherwise the inlined HTML is enough on its own.
+      const hydrated = detectHydration(inv);
+      const mode = hydrated.images ? 'zip' : 'self-contained';
+      const r = await exportHtml(inv, { mode });
       downloadFile(r.blob, r.filename);
     });
   }
@@ -100,17 +103,7 @@
   <div class="export-menu__panel">
     <button type="button" disabled={busy} on:click={handleJson}>JSON</button>
     <button type="button" disabled={busy} on:click={handleMarkdown}>Markdown</button>
-    <div class="export-menu__html">
-      <button type="button" disabled={busy} on:click={handleHtml}>HTML</button>
-      <label>
-        <input type="radio" bind:group={htmlMode} value="self-contained" />
-        Self-contained
-      </label>
-      <label>
-        <input type="radio" bind:group={htmlMode} value="zip" />
-        Bundle as zip
-      </label>
-    </div>
+    <button type="button" disabled={busy} on:click={handleHtml}>HTML</button>
     {#if error}
       <p class="export-menu__error" role="alert">{error}</p>
     {/if}
@@ -159,19 +152,6 @@
     font: inherit;
     padding: 0.4rem 0.6rem;
     cursor: pointer;
-  }
-  .export-menu__html {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    border-top: 1px solid color-mix(in oklab, CanvasText 12%, transparent);
-    padding-top: 0.5rem;
-  }
-  .export-menu__html label {
-    font-size: 0.875rem;
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
   }
   .export-menu__error {
     margin: 0;

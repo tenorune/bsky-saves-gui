@@ -47,6 +47,7 @@
   let passphrase = '';
   let enrich = true;
   let threads = false;
+  let saveImages = false;
   let error = '';
 
   function submit() {
@@ -70,6 +71,7 @@
       fetch: true,
       enrich,
       threads,
+      images: saveImages,
       saveInventory,
       saveCredentials,
       passphrase,
@@ -177,6 +179,15 @@
         <p class="help">
           When a saved post is part of a longer thread by the same person, also
           save the rest of the thread.
+        </p>
+
+        <label class="checkbox">
+          <input type="checkbox" bind:checked={saveImages} />
+          <span>Save images on this device</span>
+        </label>
+        <p class="help">
+          Download a copy of every image so they keep showing up later, even
+          offline or if Bluesky removes the post.
         </p>
 
         <label class="checkbox">

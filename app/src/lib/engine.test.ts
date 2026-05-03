@@ -29,7 +29,7 @@ describe('runJob', () => {
         pds: 'https://bsky.social',
         fetch: true,
         enrich: true,
-        threads: false,
+        threads: false, images: false,
       },
       { createSession, runner: fakeRunner, onLog },
     );
@@ -76,7 +76,7 @@ describe('runJob', () => {
         pds: 'https://bsky.social',
         fetch: true,
         enrich: false,
-        threads: true,
+        threads: true, images: false,
       },
       { createSession, runner: { initialise, runFetch, onLog: () => () => {} } },
     );
@@ -117,7 +117,7 @@ describe('runJob', () => {
           pds: 'https://x',
           fetch: true,
           enrich: false,
-          threads: false,
+          threads: false, images: false,
         },
         {
           createSession,

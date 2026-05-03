@@ -33,6 +33,7 @@
         fetch: draft.fetch,
         enrich: draft.enrich,
         threads: draft.threads,
+        images: draft.images,
       };
     } else if (session) {
       // Refresh from a session that survived a reload via sessionStorage.
@@ -48,6 +49,7 @@
         fetch: draft?.fetch ?? true,
         enrich: draft?.enrich ?? true,
         threads: draft?.threads ?? false,
+        images: draft?.images ?? false,
       };
     } else {
       navigate('/');
