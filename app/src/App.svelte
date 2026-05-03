@@ -7,6 +7,7 @@
   // import BeaconButton from './components/BeaconButton.svelte';
   import { BUILD_TIME } from '$lib/build-info';
   import { lastSession } from '$lib/last-session';
+  import { inventoryState } from '$lib/inventory-loader';
 
   onMount(() => {
     const stop = startRouter();
@@ -36,7 +37,9 @@
           @{$lastSession.handle}
         </span>
       {/if}
-      <ExportMenu />
+      {#if $inventoryState.status === 'ready'}
+        <ExportMenu />
+      {/if}
       <a href="#/library">Library</a>
       <a href="#/settings">Settings</a>
     </nav>

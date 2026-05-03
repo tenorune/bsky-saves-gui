@@ -109,7 +109,9 @@
     <h3>Inventory</h3>
     <p class="help">Move your saved data between devices or browsers.</p>
     <div class="settings-row">
-      <button type="button" on:click={exportInventory}>Export inventory file</button>
+      {#if $inventoryState.status === 'ready'}
+        <button type="button" on:click={exportInventory}>Export inventory file</button>
+      {/if}
       <button type="button" on:click={() => importInputEl?.click()}>Import inventory file</button>
       <input
         bind:this={importInputEl}
