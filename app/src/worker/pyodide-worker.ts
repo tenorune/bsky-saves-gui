@@ -19,6 +19,7 @@ interface FetchInput {
   readonly fetch: boolean;
   readonly enrich: boolean;
   readonly threads: boolean;
+  readonly images: boolean;
   readonly existingInventory?: unknown;
   readonly preauthSession?: PreauthSession;
 }
@@ -43,6 +44,7 @@ interface LogMessage {
 interface FetchResultMessage {
   readonly type: 'fetch-result';
   readonly inventory: unknown;
+  readonly imageBlobs: ReadonlyArray<{ url: string; bytes: Uint8Array }>;
 }
 interface ErrorMessage {
   readonly type: 'error';
@@ -55,7 +57,9 @@ interface PyodideLike {
   runPythonAsync(code: string): Promise<unknown>;
   loadPackage(names: string | string[]): Promise<void>;
   FS: {
-    readFile(path: string, opts?: { encoding?: string }): string;
+    readFile(path: string): Uint8Array;
+    readFile(path: string, opts: { encoding: 'utf8' }): string;
+    readdir(path: string): string[];
   };
   globals: { set(name: string, value: unknown): void };
 }
@@ -67,6 +71,7 @@ const post = (msg: Outbound) => ctx.postMessage(msg);
 const log = (line: string) => post({ type: 'log', line });
 
 const INVENTORY_PATH = '/home/pyodide/saves_inventory.json';
+const IMAGES_DIR = '/home/pyodide/images';
 
 async function initialise(version: string): Promise<void> {
   if (pyodide) return;
@@ -214,7 +219,9 @@ os.chdir('/home/pyodide')
 `);
 }
 
-async function runFetch(input: FetchInput): Promise<unknown> {
+async function runFetch(
+  input: FetchInput,
+): Promise<{ inventory: unknown; imageBlobs: Array<{ url: string; bytes: Uint8Array }> }> {
   if (!pyodide) throw new Error('Worker not initialised');
 
   // If the main thread already authenticated, monkey-patch
@@ -290,10 +297,54 @@ print(f'bsky-saves: thread hydration done — {hydrated} hydrated, {skipped} ski
 `);
   }
 
+  if (input.images) {
+    log('Hydrating images…');
+    await pyodide.runPythonAsync(`
+from pathlib import Path
+import bsky_saves.images as _bsky_images
+_bsky_images.hydrate_images(Path('${INVENTORY_PATH}'), Path('${IMAGES_DIR}'))
+`);
+  }
+
   log('Reading inventory…');
   const raw = pyodide.FS.readFile(INVENTORY_PATH, { encoding: 'utf8' });
+  const inventory = JSON.parse(raw);
+
+  // Read every hydrated image's bytes off the worker FS so the main thread
+  // can stash them in the image-store. local_images was populated by
+  // bsky_saves.images.hydrate_images and maps url → flat filename.
+  const imageBlobs: Array<{ url: string; bytes: Uint8Array }> = [];
+  if (input.images) {
+    const seen = new Set<string>();
+    const collect = (entry: unknown): void => {
+      if (!entry || typeof entry !== 'object') return;
+      const e = entry as Record<string, unknown>;
+      const local = e.local_images;
+      if (Array.isArray(local)) {
+        for (const li of local as Array<Record<string, unknown>>) {
+          const url = typeof li.url === 'string' ? li.url : null;
+          const path = typeof li.path === 'string' ? li.path : null;
+          if (!url || !path || seen.has(url)) continue;
+          seen.add(url);
+          try {
+            const bytes = pyodide!.FS.readFile(`${IMAGES_DIR}/${path}`);
+            imageBlobs.push({ url, bytes });
+          } catch (e) {
+            log(`could not read ${path}: ${e instanceof Error ? e.message : String(e)}`);
+          }
+        }
+      }
+      // Recurse into quoted_post which may carry its own local_images.
+      collect(e.quoted_post);
+    };
+    if (inventory && Array.isArray((inventory as { saves?: unknown[] }).saves)) {
+      for (const save of (inventory as { saves: unknown[] }).saves) collect(save);
+    }
+    log(`Read ${imageBlobs.length} image${imageBlobs.length === 1 ? '' : 's'} from FS.`);
+  }
+
   log('Done.');
-  return JSON.parse(raw);
+  return { inventory, imageBlobs };
 }
 
 ctx.addEventListener('message', async (event: MessageEvent<Inbound>) => {
@@ -303,8 +354,8 @@ ctx.addEventListener('message', async (event: MessageEvent<Inbound>) => {
       await initialise(msg.pyodideVersion);
       post({ type: 'init-ready' });
     } else if (msg.type === 'fetch') {
-      const inventory = await runFetch(msg.input);
-      post({ type: 'fetch-result', inventory });
+      const { inventory, imageBlobs } = await runFetch(msg.input);
+      post({ type: 'fetch-result', inventory, imageBlobs });
     }
   } catch (err) {
     post({

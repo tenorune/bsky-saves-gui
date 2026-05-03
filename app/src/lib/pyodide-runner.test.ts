@@ -42,6 +42,7 @@ class FakeWorker implements WorkerLike {
       this.dispatch({
         type: 'fetch-result',
         inventory: { saves: [{ uri: 'at://x/y/1' }] },
+        imageBlobs: [],
       });
     }
   }
@@ -74,13 +75,14 @@ describe('PyodideRunner', () => {
     const runner = new PyodideRunner({ workerFactory: () => fake });
 
     await runner.initialise();
-    const inventory = await runner.runFetch({
+    const outcome = await runner.runFetch({
       handle: 'alice.bsky.social',
       appPassword: 'pw',
       pds: 'https://bsky.social',
       fetch: true,
       enrich: true,
       threads: false,
+      images: false,
     });
 
     expect(fake.posted[0]).toMatchObject({ type: 'init' });
@@ -93,7 +95,8 @@ describe('PyodideRunner', () => {
         enrich: true,
       },
     });
-    expect(inventory).toEqual({ saves: [{ uri: 'at://x/y/1' }] });
+    expect(outcome.inventory).toEqual({ saves: [{ uri: 'at://x/y/1' }] });
+    expect(outcome.imageBlobs).toEqual([]);
   });
 
   it('emits log events received from the worker', async () => {
@@ -112,6 +115,7 @@ describe('PyodideRunner', () => {
       fetch: true,
       enrich: false,
       threads: false,
+      images: false,
     });
 
     expect(events).toContain('Loading Pyodide…');

@@ -1,9 +1,9 @@
 import { createSession as defaultCreateSession, type AtSession } from './atproto';
-import { PyodideRunner } from './pyodide-runner';
+import { PyodideRunner, type FetchOutcome } from './pyodide-runner';
 import { loadInventory, saveInventory } from './inventory-store';
 import { saveAccount } from './account-store';
 import { setLastSession } from './last-session';
-import { hydrateImages } from './image-hydrator';
+import { saveImageBlob } from './image-store';
 
 export interface RunJobOptionsCommon {
   readonly pds: string;
@@ -31,6 +31,7 @@ interface RunnerFetchInput {
   readonly fetch: boolean;
   readonly enrich: boolean;
   readonly threads: boolean;
+  readonly images: boolean;
   readonly existingInventory?: unknown;
   readonly preauthSession?: {
     readonly accessJwt: string;
@@ -42,7 +43,7 @@ interface RunnerFetchInput {
 
 interface RunnerLike {
   initialise(): Promise<void>;
-  runFetch(input: RunnerFetchInput): Promise<unknown>;
+  runFetch(input: RunnerFetchInput): Promise<FetchOutcome>;
   onLog(listener: (msg: string) => void): () => void;
 }
 
@@ -76,77 +77,70 @@ export async function runJob(input: RunJobInput, deps: RunJobDeps = {}): Promise
     }
   }
 
-  // Image-only updates skip Pyodide entirely — images come from cdn.bsky.app
-  // via plain JS fetch and don't need an AT-Proto session.
-  const needsRunner = input.fetch || input.enrich || input.threads;
+  let session: AtSession;
+  let appPassword: string;
 
-  let session: AtSession | null = null;
-  let appPassword = '';
-
-  if (needsRunner) {
-    if (input.mode === 'password') {
-      log('Signing in…');
-      session = await createSession({
-        pds: input.pds,
-        identifier: input.handle,
-        password: input.appPassword,
-      });
-      appPassword = input.appPassword;
-      log(`Signed in as @${session.handle}.`);
-    } else {
-      session = input.session;
-      log(`Reusing session for @${session.handle}.`);
-    }
-
-    setLastSession({
+  if (input.mode === 'password') {
+    log('Signing in…');
+    session = await createSession({
       pds: input.pds,
-      accessJwt: session.accessJwt,
-      refreshJwt: session.refreshJwt,
-      did: session.did,
-      handle: session.handle,
+      identifier: input.handle,
+      password: input.appPassword,
     });
-  } else if (input.mode === 'session') {
+    appPassword = input.appPassword;
+    log(`Signed in as @${session.handle}.`);
+  } else {
     session = input.session;
+    appPassword = '';
+    log(`Reusing session for @${session.handle}.`);
   }
 
-  let inventory: unknown = existingInventory;
-  if (needsRunner) {
-    const off = runner.onLog(log);
-    try {
-      await runner.initialise();
-      inventory = await runner.runFetch({
-        handle: session!.handle,
-        appPassword,
-        pds: input.pds,
-        fetch: input.fetch,
-        enrich: input.enrich,
-        threads: input.threads,
-        existingInventory,
-        preauthSession: {
-          accessJwt: session!.accessJwt,
-          refreshJwt: session!.refreshJwt,
-          did: session!.did,
-          handle: session!.handle,
-        },
-      });
-    } finally {
-      off();
-    }
+  setLastSession({
+    pds: input.pds,
+    accessJwt: session.accessJwt,
+    refreshJwt: session.refreshJwt,
+    did: session.did,
+    handle: session.handle,
+  });
+
+  const off = runner.onLog(log);
+  let inventory: unknown;
+  let imageBlobs: ReadonlyArray<{ url: string; bytes: Uint8Array }> = [];
+  try {
+    await runner.initialise();
+    const outcome = await runner.runFetch({
+      handle: session.handle,
+      appPassword,
+      pds: input.pds,
+      fetch: input.fetch,
+      enrich: input.enrich,
+      threads: input.threads,
+      images: input.images,
+      existingInventory,
+      preauthSession: {
+        accessJwt: session.accessJwt,
+        refreshJwt: session.refreshJwt,
+        did: session.did,
+        handle: session.handle,
+      },
+    });
+    inventory = outcome.inventory;
+    imageBlobs = outcome.imageBlobs;
+  } finally {
+    off();
   }
 
-  if (input.images) {
-    const { inventory: hydrated } = await hydrateImages(inventory, { onLog: log });
-    inventory = hydrated;
+  // Persist any image bytes the worker handed back. Empty when input.images
+  // is false or when the hydration step was unable to fetch any (e.g. CORS).
+  for (const { url, bytes } of imageBlobs) {
+    // Slice into a fresh ArrayBuffer to satisfy Blob's BlobPart type, which
+    // doesn't accept Uint8Array<SharedArrayBuffer>.
+    const buf = bytes.slice().buffer;
+    await saveImageBlob(url, new Blob([buf], { type: 'image/jpeg' }));
   }
 
   await saveInventory(inventory);
-  if (session) await saveAccount(session.handle);
+  await saveAccount(session.handle);
   log('Inventory saved.');
-  // Synthesize a minimal session for callers that expect one (e.g., refresh
-  // flow). When images-only and no prior session existed, fall through with a
-  // stub — Run.svelte ignores it on success.
-  return {
-    session: session ?? { accessJwt: '', refreshJwt: '', did: '', handle: '' },
-    inventory,
-  };
+  return { session, inventory };
 }

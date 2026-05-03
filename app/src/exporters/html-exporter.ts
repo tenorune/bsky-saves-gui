@@ -1,6 +1,5 @@
 import type { Inventory } from '../reader/inventory-shape';
 import { buildZip, type ZipEntry } from './zip';
-import { extractImageUrls } from '../lib/image-hydrator';
 import { loadImageBlob } from '../lib/image-store';
 
 export interface HtmlExportOptions {
@@ -32,26 +31,35 @@ async function fetchText(url: string): Promise<string> {
   return res.text();
 }
 
-function extOf(mime: string): string {
-  if (mime.includes('png')) return 'png';
-  if (mime.includes('jpeg') || mime.includes('jpg')) return 'jpg';
-  if (mime.includes('webp')) return 'webp';
-  if (mime.includes('gif')) return 'gif';
-  if (mime.includes('avif')) return 'avif';
-  return 'bin';
-}
-
-async function urlToLocalName(url: string, blob: Blob): Promise<string> {
-  const buf = new TextEncoder().encode(url);
-  const digest = await crypto.subtle.digest('SHA-256', buf);
-  const hex = [...new Uint8Array(digest).slice(0, 8)]
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-  return `images/${hex}.${extOf(blob.type)}`;
-}
-
 function escapeForRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+interface LocalImageRef {
+  url: string;
+  path: string;
+}
+
+function collectLocalImages(inventory: unknown): LocalImageRef[] {
+  const out = new Map<string, string>();
+  const visit = (entry: unknown): void => {
+    if (!entry || typeof entry !== 'object') return;
+    const e = entry as Record<string, unknown>;
+    const local = e.local_images;
+    if (Array.isArray(local)) {
+      for (const li of local as Array<Record<string, unknown>>) {
+        const url = typeof li.url === 'string' ? li.url : null;
+        const path = typeof li.path === 'string' ? li.path : null;
+        if (url && path && !out.has(url)) out.set(url, path);
+      }
+    }
+    visit(e.quoted_post);
+  };
+  if (inventory && typeof inventory === 'object') {
+    const inv = inventory as { saves?: unknown[] };
+    if (Array.isArray(inv.saves)) for (const save of inv.saves) visit(save);
+  }
+  return [...out].map(([url, path]) => ({ url, path }));
 }
 
 export async function exportHtml(
@@ -66,14 +74,14 @@ export async function exportHtml(
   const extraFiles: ZipEntry[] = [];
 
   if (options.mode === 'zip') {
-    // Walk every image URL in the inventory; for each one we have bytes for,
-    // add it to the zip under images/<hash>.<ext> and rewrite the URL inside
-    // the JSON so the archive's <img> tags resolve to the local path.
-    const urls = extractImageUrls(inventory);
-    for (const url of urls) {
+    // bsky-saves' images.hydrate_images already wrote local_images:[{url,path}]
+    // entries with a stable filename per URL. For each one we have bytes for,
+    // include the file at images/<path> and rewrite occurrences of the URL
+    // inside the inventory JSON so <img> tags in the archive load locally.
+    for (const { url, path } of collectLocalImages(inventory)) {
       const blob = await loadImageBlob(url);
       if (!blob) continue;
-      const localPath = await urlToLocalName(url, blob);
+      const localPath = `images/${path}`;
       extraFiles.push({ path: localPath, content: blob });
       inventoryJson = inventoryJson.replace(
         new RegExp(escapeForRegex(JSON.stringify(url).slice(1, -1)), 'g'),

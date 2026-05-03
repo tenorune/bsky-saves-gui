@@ -13,7 +13,7 @@ describe('runJob', () => {
 
     const createSession = vi.fn().mockResolvedValue(session);
     const initialise = vi.fn().mockResolvedValue(undefined);
-    const runFetch = vi.fn().mockResolvedValue(inventory);
+    const runFetch = vi.fn().mockResolvedValue({ inventory, imageBlobs: [] });
     const onLog = vi.fn();
 
     const fakeRunner = { initialise, runFetch, onLog: () => () => {} };
@@ -47,6 +47,7 @@ describe('runJob', () => {
       fetch: true,
       enrich: true,
       threads: false,
+      images: false,
       existingInventory: undefined,
       preauthSession: {
         accessJwt: session.accessJwt,
@@ -66,7 +67,7 @@ describe('runJob', () => {
 
     const createSession = vi.fn();
     const initialise = vi.fn().mockResolvedValue(undefined);
-    const runFetch = vi.fn().mockResolvedValue(inventory);
+    const runFetch = vi.fn().mockResolvedValue({ inventory, imageBlobs: [] });
 
     const { runJob } = await import('./engine');
     const result = await runJob(
@@ -89,6 +90,7 @@ describe('runJob', () => {
       fetch: true,
       enrich: false,
       threads: true,
+      images: false,
       existingInventory: undefined,
       preauthSession: {
         accessJwt: session.accessJwt,
