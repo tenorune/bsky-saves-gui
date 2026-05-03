@@ -48,14 +48,23 @@ function renderSave(save: Save): string {
   if (save.thread && save.thread.length > 0) {
     lines.push('', '### Thread', '');
     for (const entry of save.thread) {
+      const blockLines: string[] = [];
       if (entry.record.text) {
-        lines.push(`> @${entry.author.handle}: ${entry.record.text}`);
+        const [first, ...rest] = entry.record.text.split('\n');
+        blockLines.push(`@${entry.author.handle}: ${first}`, ...rest);
       }
       if (entry.images) {
         for (const img of entry.images) {
-          lines.push(`> ![${img.alt ?? ''}](${img.url})`);
+          blockLines.push(`![${img.alt ?? ''}](${img.url})`);
         }
       }
+      // Prefix every line — including blank ones — with `>` so a multi-paragraph
+      // reply stays inside one blockquote instead of breaking out after the
+      // first blank line.
+      for (const bl of blockLines) {
+        lines.push(bl ? `> ${bl}` : '>');
+      }
+      lines.push('');
     }
   }
   lines.push('');
