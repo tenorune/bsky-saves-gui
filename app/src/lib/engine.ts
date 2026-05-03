@@ -4,28 +4,42 @@ import { saveInventory } from './inventory-store';
 import { saveAccount } from './account-store';
 import { setLastSession } from './last-session';
 
-export interface RunJobInput {
-  readonly handle: string;
-  readonly appPassword: string;
+export interface RunJobOptionsCommon {
   readonly pds: string;
   readonly enrich: boolean;
   readonly threads: boolean;
 }
 
-interface RunnerLike {
-  initialise(): Promise<void>;
-  runFetch(input: RunJobInput & {
-    preauthSession?: {
-      accessJwt: string;
-      refreshJwt: string;
-      did: string;
-      handle: string;
-    };
-  }): Promise<unknown>;
-  onLog(listener: (msg: string) => void): () => void;
+export type RunJobInput =
+  | (RunJobOptionsCommon & {
+      readonly mode: 'password';
+      readonly handle: string;
+      readonly appPassword: string;
+    })
+  | (RunJobOptionsCommon & {
+      readonly mode: 'session';
+      readonly session: AtSession;
+    });
+
+interface RunnerFetchInput {
+  readonly handle: string;
+  readonly appPassword: string;
+  readonly pds: string;
+  readonly enrich: boolean;
+  readonly threads: boolean;
+  readonly preauthSession?: {
+    readonly accessJwt: string;
+    readonly refreshJwt: string;
+    readonly did: string;
+    readonly handle: string;
+  };
 }
 
-
+interface RunnerLike {
+  initialise(): Promise<void>;
+  runFetch(input: RunnerFetchInput): Promise<unknown>;
+  onLog(listener: (msg: string) => void): () => void;
+}
 
 export interface RunJobDeps {
   readonly createSession?: typeof defaultCreateSession;
@@ -43,20 +57,41 @@ export async function runJob(input: RunJobInput, deps: RunJobDeps = {}): Promise
   const runner = deps.runner ?? new PyodideRunner();
   const log = deps.onLog ?? (() => {});
 
-  log('Signing in…');
-  const session = await createSession({
+  let session: AtSession;
+  let appPassword: string;
+
+  if (input.mode === 'password') {
+    log('Signing in…');
+    session = await createSession({
+      pds: input.pds,
+      identifier: input.handle,
+      password: input.appPassword,
+    });
+    appPassword = input.appPassword;
+    log(`Signed in as @${session.handle}.`);
+  } else {
+    session = input.session;
+    appPassword = '';
+    log(`Reusing session for @${session.handle}.`);
+  }
+
+  setLastSession({
     pds: input.pds,
-    identifier: input.handle,
-    password: input.appPassword,
+    accessJwt: session.accessJwt,
+    refreshJwt: session.refreshJwt,
+    did: session.did,
+    handle: session.handle,
   });
-  log(`Signed in as @${session.handle}.`);
-  setLastSession({ pds: input.pds, accessJwt: session.accessJwt, did: session.did, handle: session.handle });
 
   const off = runner.onLog(log);
   try {
     await runner.initialise();
     const inventory = await runner.runFetch({
-      ...input,
+      handle: session.handle,
+      appPassword,
+      pds: input.pds,
+      enrich: input.enrich,
+      threads: input.threads,
       preauthSession: {
         accessJwt: session.accessJwt,
         refreshJwt: session.refreshJwt,

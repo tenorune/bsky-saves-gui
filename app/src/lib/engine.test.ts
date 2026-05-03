@@ -1,9 +1,13 @@
 // app/src/lib/engine.test.ts
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 import 'fake-indexeddb/auto';
 
+beforeEach(() => {
+  if (typeof sessionStorage !== 'undefined') sessionStorage.clear();
+});
+
 describe('runJob', () => {
-  it('signs in, runs Pyodide fetch, persists inventory, returns it', async () => {
+  it('password mode: calls createSession, runs Pyodide fetch, persists inventory', async () => {
     const session = { accessJwt: 'a', refreshJwt: 'r', handle: 'h', did: 'd' };
     const inventory = { saves: [{ uri: 'x' }] };
 
@@ -12,17 +16,14 @@ describe('runJob', () => {
     const runFetch = vi.fn().mockResolvedValue(inventory);
     const onLog = vi.fn();
 
-    const fakeRunner = {
-      initialise,
-      runFetch,
-      onLog: () => () => {},
-    };
+    const fakeRunner = { initialise, runFetch, onLog: () => () => {} };
 
     const { runJob } = await import('./engine');
     const { loadInventory } = await import('./inventory-store');
 
     const result = await runJob(
       {
+        mode: 'password',
         handle: 'alice.bsky.social',
         appPassword: 'pw',
         pds: 'https://bsky.social',
@@ -39,7 +40,7 @@ describe('runJob', () => {
     });
     expect(initialise).toHaveBeenCalled();
     expect(runFetch).toHaveBeenCalledWith({
-      handle: 'alice.bsky.social',
+      handle: 'h',
       appPassword: 'pw',
       pds: 'https://bsky.social',
       enrich: true,
@@ -56,6 +57,44 @@ describe('runJob', () => {
     expect(await loadInventory()).toEqual(inventory);
   });
 
+  it('session mode: skips createSession and reuses the provided session', async () => {
+    const session = { accessJwt: 'a', refreshJwt: 'r', handle: 'h', did: 'd' };
+    const inventory = { saves: [] };
+
+    const createSession = vi.fn();
+    const initialise = vi.fn().mockResolvedValue(undefined);
+    const runFetch = vi.fn().mockResolvedValue(inventory);
+
+    const { runJob } = await import('./engine');
+    const result = await runJob(
+      {
+        mode: 'session',
+        session,
+        pds: 'https://bsky.social',
+        enrich: false,
+        threads: true,
+      },
+      { createSession, runner: { initialise, runFetch, onLog: () => () => {} } },
+    );
+
+    expect(createSession).not.toHaveBeenCalled();
+    expect(runFetch).toHaveBeenCalledWith({
+      handle: 'h',
+      appPassword: '',
+      pds: 'https://bsky.social',
+      enrich: false,
+      threads: true,
+      preauthSession: {
+        accessJwt: session.accessJwt,
+        refreshJwt: session.refreshJwt,
+        did: session.did,
+        handle: session.handle,
+      },
+    });
+    expect(result.session).toEqual(session);
+    expect(result.inventory).toEqual(inventory);
+  });
+
   it('does not initialise Pyodide if sign-in fails', async () => {
     const { InvalidCredentialsError } = await import('./atproto');
     const createSession = vi.fn().mockRejectedValue(new InvalidCredentialsError());
@@ -65,7 +104,14 @@ describe('runJob', () => {
     const { runJob } = await import('./engine');
     await expect(
       runJob(
-        { handle: 'a', appPassword: 'b', pds: 'https://x', enrich: false, threads: false },
+        {
+          mode: 'password',
+          handle: 'a',
+          appPassword: 'b',
+          pds: 'https://x',
+          enrich: false,
+          threads: false,
+        },
         {
           createSession,
           runner: { initialise, runFetch, onLog: () => () => {} },

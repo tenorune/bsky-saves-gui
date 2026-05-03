@@ -5,6 +5,7 @@
   import { saveInventory, clearInventory } from '$lib/inventory-store';
   import { clearCredentials } from '$lib/credentials-store';
   import { clearAccount } from '$lib/account-store';
+  import { clearLastSession } from '$lib/last-session';
   import { clearBeaconSent } from '$lib/beacon';
   import { loadProxyConfig, saveProxyConfig, clearProxyConfig } from '$lib/proxy-config';
   import { exportJson } from '../exporters/json-exporter';
@@ -65,6 +66,7 @@
       clearBeaconSent(),
       clearAccount(),
     ]);
+    clearLastSession();
     await loadFromDb();
     proxyUrl = '';
     proxySecret = '';

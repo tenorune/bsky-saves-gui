@@ -8,7 +8,8 @@ This is a static web app. There is no server the operator runs that receives you
 
 ## What stays local
 
-- Your handle and app password (only in browser memory unless you opt in to encrypted persistence).
+- Your handle and app password (only in browser memory unless you opt in to encrypted persistence in IndexedDB).
+- Your Bluesky session token (access JWT + refresh JWT + handle + DID + PDS), stored in your browser's `sessionStorage` so the **Refresh** button works after a page reload without re-typing your password. Wiped automatically when you close the tab or quit the browser, and when you click "Clear all local data" in Settings. The token is bounded by the scope of the app password that created it (see "How to revoke a Bluesky app password" below).
 - Your inventory of saved posts (in IndexedDB on this device).
 - Any hydrated content (article text, images, thread descendants).
 
@@ -29,7 +30,7 @@ Static files are hosted on GitHub Pages. GitHub sees server-level request metada
 
 ## Threats out of scope
 
-- A compromised browser extension can read anything this page can read.
+- A compromised browser extension can read anything this page can read, including the session token in `sessionStorage` and any unlocked credentials.
 - A compromised device is out of scope.
 - Supply chain attacks on the GitHub Pages deploy. Mitigated by version-pinned dependencies and tag-driven CI.
 

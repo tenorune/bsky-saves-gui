@@ -2,8 +2,9 @@
   import { onMount } from 'svelte';
   import { get } from 'svelte/store';
   import { signInDraft } from '$lib/sign-in-draft';
+  import { lastSession } from '$lib/last-session';
   import { navigate } from '$lib/router';
-  import { runJob } from '$lib/engine';
+  import { runJob, type RunJobInput } from '$lib/engine';
   import { saveCredentials } from '$lib/credentials-store';
   import { loadInventory } from '$lib/inventory-store';
   import { loadFromDb } from '$lib/inventory-loader';
@@ -19,25 +20,44 @@
 
   async function start() {
     const draft = get(signInDraft);
-    if (!draft) {
+    const session = get(lastSession);
+
+    let input: RunJobInput;
+    if (draft && draft.appPassword) {
+      // Fresh sign-in OR saved-creds unlock: do a full createSession.
+      input = {
+        mode: 'password',
+        handle: draft.handle,
+        appPassword: draft.appPassword,
+        pds: draft.pds,
+        enrich: draft.enrich,
+        threads: draft.threads,
+      };
+    } else if (session) {
+      // Refresh from a session that survived a reload via sessionStorage.
+      input = {
+        mode: 'session',
+        session: {
+          accessJwt: session.accessJwt,
+          refreshJwt: session.refreshJwt,
+          did: session.did,
+          handle: session.handle,
+        },
+        pds: session.pds,
+        enrich: draft?.enrich ?? true,
+        threads: draft?.threads ?? false,
+      };
+    } else {
       navigate('/');
       return;
     }
+
     status = 'running';
     const existing = await loadInventory();
     appendLog(existing ? 'Refreshing…' : 'Starting…');
     try {
-      await runJob(
-        {
-          handle: draft.handle,
-          appPassword: draft.appPassword,
-          pds: draft.pds,
-          enrich: draft.enrich,
-          threads: draft.threads,
-        },
-        { onLog: appendLog },
-      );
-      if (draft.saveCredentials && draft.passphrase) {
+      await runJob(input, { onLog: appendLog });
+      if (draft?.saveCredentials && draft.passphrase && draft.appPassword) {
         await saveCredentials(
           { handle: draft.handle, appPassword: draft.appPassword, pds: draft.pds },
           draft.passphrase,

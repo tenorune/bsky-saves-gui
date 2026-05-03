@@ -21,7 +21,7 @@
       canRefresh = true;
     } else if (session) {
       handle = session.handle;
-      canRefresh = false;
+      canRefresh = true;
     }
   });
 
@@ -30,7 +30,24 @@
       navigate('/');
       return;
     }
-    signInDraft.update((d) => (d ? { ...d, enrich, threads } : null));
+    // Persist the toggle choices so Run.svelte reads the right ones. If we're
+    // refreshing from a session-only state (no draft), create a minimal draft
+    // carrying just the toggles — Run.svelte falls back to the session for
+    // credentials.
+    signInDraft.update((d) =>
+      d
+        ? { ...d, enrich, threads }
+        : {
+            handle,
+            appPassword: '',
+            pds: '',
+            enrich,
+            threads,
+            saveInventory: false,
+            saveCredentials: false,
+            passphrase: '',
+          },
+    );
     navigate('/run');
   }
 
