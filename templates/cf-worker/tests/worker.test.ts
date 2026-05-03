@@ -237,7 +237,7 @@ describe('POST /fetch — happy path', () => {
     await worker.stop();
   });
 
-  it('proxies an https URL and returns status, headers, and base64 body', async () => {
+  it('proxies an https URL and returns status, headers, and base64 body', { timeout: 20_000 }, async () => {
     // Use httpbin.org's /get endpoint which is CORS-permissive and stable.
     // If this test runs offline it will return 502, which is also acceptable
     // behaviour — the assertion is on the response shape when successful.
@@ -269,7 +269,7 @@ describe('POST /fetch — happy path', () => {
     }
   });
 
-  it('sets Access-Control-Allow-Origin on the response', async () => {
+  it('sets Access-Control-Allow-Origin on the response', { timeout: 20_000 }, async () => {
     const res = await worker.fetch('/fetch', {
       method: 'POST',
       headers: {
