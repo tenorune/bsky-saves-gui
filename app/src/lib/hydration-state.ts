@@ -37,3 +37,9 @@ export const imageHydration: Writable<HydrationProgress> = writable(INITIAL);
 export function resetImageHydration(): void {
   imageHydration.set(INITIAL);
 }
+
+export const articleHydration: Writable<HydrationProgress> = writable(INITIAL);
+
+export function resetArticleHydration(): void {
+  articleHydration.set(INITIAL);
+}

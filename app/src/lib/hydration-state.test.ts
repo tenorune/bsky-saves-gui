@@ -2,8 +2,9 @@ import { describe, expect, it, beforeEach } from 'vitest';
 import { get } from 'svelte/store';
 
 beforeEach(async () => {
-  const { resetImageHydration } = await import('./hydration-state');
+  const { resetImageHydration, resetArticleHydration } = await import('./hydration-state');
   resetImageHydration();
+  resetArticleHydration();
 });
 
 describe('hydration-state', () => {
@@ -49,5 +50,46 @@ describe('hydration-state', () => {
       imageHydration.update((s) => ({ ...s, status }));
       expect(get(imageHydration).status).toBe(status);
     }
+  });
+
+  it('articleHydration starts in the same idle state', async () => {
+    const { articleHydration } = await import('./hydration-state');
+    expect(get(articleHydration)).toEqual({
+      status: 'idle',
+      total: 0,
+      fetched: 0,
+      skipped: 0,
+      failed: 0,
+      failures: [],
+    });
+  });
+
+  it('resetArticleHydration restores the initial state', async () => {
+    const { articleHydration, resetArticleHydration } = await import('./hydration-state');
+    articleHydration.set({
+      status: 'running',
+      total: 3,
+      fetched: 1,
+      skipped: 0,
+      failed: 1,
+      failures: [{ url: 'https://x', reason: 'paywall' }],
+    });
+    resetArticleHydration();
+    expect(get(articleHydration).status).toBe('idle');
+    expect(get(articleHydration).total).toBe(0);
+  });
+
+  it('image and article stores are independent', async () => {
+    const { imageHydration, articleHydration } = await import('./hydration-state');
+    imageHydration.set({
+      status: 'running',
+      total: 5,
+      fetched: 2,
+      skipped: 0,
+      failed: 0,
+      failures: [],
+    });
+    expect(get(articleHydration).status).toBe('idle');
+    expect(get(imageHydration).status).toBe('running');
   });
 });
