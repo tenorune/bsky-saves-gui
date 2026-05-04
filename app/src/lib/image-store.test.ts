@@ -1,3 +1,7 @@
+// Run this file in Node, not jsdom: jsdom's Blob loses its `.type` attribute
+// when round-tripped through fake-indexeddb's structured clone (the test
+// "round-trips a Blob keyed by URL" fails under jsdom otherwise). Other IDB
+// tests in this codebase don't store Blobs, so they don't need this override.
 // @vitest-environment node
 import { describe, expect, it, beforeEach } from 'vitest';
 import 'fake-indexeddb/auto';
