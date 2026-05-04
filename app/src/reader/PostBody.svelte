@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Save } from './inventory-shape';
   import QuotedPost from './QuotedPost.svelte';
+  import HydratedImage from '../components/HydratedImage.svelte';
 
   export let save: Save;
 
@@ -23,13 +24,13 @@
   {#if localImages.length > 0}
     <div class="post-body__images">
       {#each localImages as img}
-        <img src={img.path} alt="" loading="lazy" />
+        <HydratedImage src={img.path} alt="" />
       {/each}
     </div>
   {:else if embedImages.length > 0}
     <div class="post-body__images">
       {#each embedImages as img}
-        <img src={img.fullsize ?? img.thumb} alt={img.alt ?? ''} loading="lazy" />
+        <HydratedImage src={img.fullsize ?? img.thumb ?? ''} alt={img.alt ?? ''} />
       {/each}
     </div>
   {/if}
@@ -58,7 +59,7 @@
     gap: 0.5rem;
     margin-top: 0.75rem;
   }
-  .post-body__images img {
+  .post-body__images :global(img) {
     width: 100%;
     border-radius: 6px;
     object-fit: cover;

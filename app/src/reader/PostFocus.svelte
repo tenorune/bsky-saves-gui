@@ -2,6 +2,7 @@
   import type { Save } from './inventory-shape';
   import { formatAuthor, formatDateTime, formatHandle } from './format';
   import PostBody from './PostBody.svelte';
+  import HydratedImage from '../components/HydratedImage.svelte';
 
   export let save: Save;
 
@@ -46,7 +47,7 @@
             {#if entry.images && entry.images.length > 0}
               <div class="post-focus__thread-images">
                 {#each entry.images as img}
-                  <img src={img.url} alt={img.alt ?? ''} loading="lazy" />
+                  <HydratedImage src={img.url} alt={img.alt ?? ''} />
                 {/each}
               </div>
             {/if}
@@ -136,7 +137,7 @@
     gap: 0.5rem;
     margin-top: 0.5rem;
   }
-  .post-focus__thread-images img {
+  .post-focus__thread-images :global(img) {
     width: 100%;
     border-radius: 6px;
     object-fit: cover;
