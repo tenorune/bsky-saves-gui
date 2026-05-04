@@ -66,3 +66,48 @@ describe('helper-client probeHelper', () => {
     expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:47826/ping', expect.any(Object));
   });
 });
+
+describe('helper-client fetchImageViaHelper', () => {
+  it('POSTs the URL as JSON and returns the response body as a Blob', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: { get: (h: string) => (h.toLowerCase() === 'content-type' ? 'image/png' : null) },
+      blob: async () => new Blob(['IMG'], { type: 'image/png' }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { fetchImageViaHelper } = await import('./helper-client');
+    const blob = await fetchImageViaHelper('http://127.0.0.1:47826', 'https://cdn.bsky.app/img/foo.jpg');
+    expect(blob).toBeInstanceOf(Blob);
+    expect(blob.type).toBe('image/png');
+    expect(blob.size).toBe(3);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:47826/fetch-image',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ url: 'https://cdn.bsky.app/img/foo.jpg' }),
+      }),
+    );
+  });
+
+  it('throws on non-2xx response with the upstream status in the message', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 502, blob: async () => new Blob() })));
+    const { fetchImageViaHelper } = await import('./helper-client');
+    await expect(
+      fetchImageViaHelper('http://127.0.0.1:47826', 'https://cdn.bsky.app/img/foo.jpg'),
+    ).rejects.toThrow(/502/);
+  });
+
+  it('throws on network failure', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('Failed to fetch');
+      }),
+    );
+    const { fetchImageViaHelper } = await import('./helper-client');
+    await expect(
+      fetchImageViaHelper('http://127.0.0.1:47826', 'https://cdn.bsky.app/img/foo.jpg'),
+    ).rejects.toThrow();
+  });
+});

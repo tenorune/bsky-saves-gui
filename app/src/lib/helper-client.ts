@@ -55,3 +55,21 @@ export async function probeHelper(origin: string): Promise<HelperStatus> {
 export function probeConfiguredHelper(): Promise<HelperStatus> {
   return probeHelper(config.helperOrigin);
 }
+
+/**
+ * Fetch a single image via the local helper's POST /fetch-image endpoint.
+ * The helper does the outbound HTTP from the user's machine and streams the
+ * raw bytes back. Throws on non-2xx response or network error.
+ */
+export async function fetchImageViaHelper(origin: string, imageUrl: string): Promise<Blob> {
+  const base = origin.replace(/\/+$/, '');
+  const res = await fetch(`${base}/fetch-image`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url: imageUrl }),
+  });
+  if (!res.ok) {
+    throw new Error(`helper /fetch-image returned ${res.status}`);
+  }
+  return res.blob();
+}
