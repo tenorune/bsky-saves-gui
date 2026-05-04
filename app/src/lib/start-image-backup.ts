@@ -10,6 +10,7 @@
 // Module-level AbortController is fine here — image hydration is a singleton
 // operation. Plan 7+ may refactor when article hydration arrives.
 
+import { setBackupEnabled } from './backup-prefs';
 import { config } from './config';
 import { fetchImageViaHelper } from './helper-client';
 import { detectBackends, type Backend } from './image-fetcher';
@@ -36,6 +37,10 @@ export async function startImageBackup(inventory: unknown): Promise<StartResult>
 
   const controller = new AbortController();
   activeController = controller;
+
+  // Mark images as enabled so the discovery banner stops re-showing.
+  // Fire-and-forget: a slow IDB write shouldn't delay starting the run.
+  void setBackupEnabled('images', true);
 
   // Bind a fetcher to the backend we already detected. This avoids re-probing
   // on every image and ensures the whole run uses one consistent backend.
