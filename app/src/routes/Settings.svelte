@@ -131,9 +131,9 @@
   </section>
 
   <section class="settings-section">
-    <h3>Local data</h3>
+    <h3>Reset</h3>
     <p class="help">
-      Wipes inventory, saved credentials, proxy config, and beacon state from this browser.
+      Wipes the inventory, saved credentials, proxy config, and beacon state from this browser. This cannot be undone.
     </p>
     <button type="button" class="danger" on:click={clearAll}>Clear all local data</button>
   </section>
