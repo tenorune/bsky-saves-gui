@@ -16,6 +16,7 @@
   } from '$lib/backup-prefs';
   import { detectBackends, type Backend } from '$lib/image-fetcher';
   import { cancelImageBackup } from '$lib/start-image-backup';
+  import { startArticleBackup, cancelArticleBackup } from '$lib/start-article-backup';
   import { exportJson } from '../exporters/json-exporter';
   import { downloadFile } from '../exporters/file-download';
   import { parseInventory } from '../reader/inventory-shape';
@@ -43,10 +44,15 @@
 
   $: imagesEnabled = backupPrefs?.images.enabled ?? false;
   $: imagesDontAsk = backupPrefs?.images.dontAsk ?? false;
+  $: articlesEnabled = backupPrefs?.articles.enabled ?? false;
+  $: articlesDontAsk = backupPrefs?.articles.dontAsk ?? false;
   $: backupSectionVisible =
     imagesEnabled ||
     imagesDontAsk ||
-    (backupPrefs?.images.snoozeUntil ?? null) !== null;
+    (backupPrefs?.images.snoozeUntil ?? null) !== null ||
+    articlesEnabled ||
+    articlesDontAsk ||
+    (backupPrefs?.articles.snoozeUntil ?? null) !== null;
   $: helperBackend = detectedBackends.find((b) => b.kind === 'helper');
   $: workerBackend = detectedBackends.find((b) => b.kind === 'user-worker');
   $: imagesBackendLabel = imagesEnabled
@@ -55,6 +61,11 @@
       : workerBackend
         ? 'using your custom Cloudflare Worker'
         : 'no backend reachable right now'
+    : 'not set up';
+  $: articlesBackendLabel = articlesEnabled
+    ? helperBackend
+      ? `using local helper (bsky-saves ${helperBackend.version})`
+      : 'no helper running'
     : 'not set up';
 
   async function reloadBackupPrefs() {
@@ -86,6 +97,36 @@
     workerSecret = '';
     detectedBackends = await detectBackends();
     status = 'Worker config cleared.';
+  }
+
+  let articleSetupError = '';
+
+  async function handleSetUpArticles() {
+    if (backupPrefs === null) return;
+    articleSetupError = '';
+    const state = get(inventoryState);
+    if (state.status !== 'ready') {
+      articleSetupError = 'No library loaded.';
+      return;
+    }
+    const result = await startArticleBackup(state.inventory);
+    if (!result.started) {
+      articleSetupError = result.reason ?? 'Could not start article backup.';
+      return;
+    }
+    await reloadBackupPrefs();
+  }
+
+  async function handleDisableArticles() {
+    cancelArticleBackup();
+    await setBackupEnabled('articles', false);
+    await reloadBackupPrefs();
+  }
+
+  async function handleToggleArticlesDontAsk(event: Event) {
+    const checked = (event.target as HTMLInputElement).checked;
+    await setBackupDontAsk('articles', checked);
+    await reloadBackupPrefs();
   }
 
   $: libraryFetchedAt = (() => {
@@ -206,8 +247,9 @@
     <section class="settings-section">
       <h3>Backup</h3>
       <p class="help">
-        Save your own copy of images so they keep showing up even if Bluesky
-        changes. Articles will be added in a future update.
+        Save your own copies of images and linked articles so they keep showing
+        up even if Bluesky or the source site changes. Article backup needs the
+        local bsky-saves helper.
       </p>
 
       <div class="settings-row">
@@ -225,6 +267,29 @@
           on:change={handleToggleDontAsk}
         />
         <span>Don't ask me about image backup</span>
+      </label>
+
+      <div class="settings-row">
+        <strong>Articles:</strong>
+        <span>{articlesBackendLabel}</span>
+        {#if articlesEnabled}
+          <button type="button" on:click={handleDisableArticles}>Disable</button>
+        {:else}
+          <button type="button" on:click={handleSetUpArticles}>Set up article backup</button>
+        {/if}
+      </div>
+
+      {#if articleSetupError}
+        <p class="error" role="alert">{articleSetupError}</p>
+      {/if}
+
+      <label class="checkbox">
+        <input
+          type="checkbox"
+          checked={articlesDontAsk}
+          on:change={handleToggleArticlesDontAsk}
+        />
+        <span>Don't ask me about article backup</span>
       </label>
 
       <details
