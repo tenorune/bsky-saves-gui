@@ -5,6 +5,7 @@
   import { navigate } from '$lib/router';
   import { slideFromRight } from '$lib/slide-transition';
   import LibraryView from '../reader/LibraryView.svelte';
+  import BackupStatusRow from '../components/BackupStatusRow.svelte';
   import { rkeyOf } from '../reader/inventory-shape';
   import type { Save } from '../reader/inventory-shape';
 
@@ -43,6 +44,7 @@
     <p class="error">Failed to load inventory: {$inventoryState.message}</p>
     <button type="button" on:click={() => loadFromDb()}>Retry</button>
   {:else}
+    <BackupStatusRow inventory={$inventoryState.inventory} />
     <LibraryView inventory={$inventoryState.inventory} onSelectPost={open} />
   {/if}
 </section>
