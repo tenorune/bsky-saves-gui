@@ -19,6 +19,14 @@
   let error = '';
   let importInputEl: HTMLInputElement | undefined;
 
+  $: libraryFetchedAt = (() => {
+    const s = $inventoryState;
+    if (s.status !== 'ready') return null;
+    const inv = s.inventory as unknown as { fetched_at?: unknown };
+    if (typeof inv.fetched_at !== 'string') return null;
+    return inv.fetched_at.slice(0, 10);
+  })();
+
   onMount(async () => {
     const cfg = await loadProxyConfig();
     if (cfg) {
@@ -131,7 +139,13 @@
 
   <section class="settings-section">
     <h3>Inventory</h3>
-    <p class="help">Move your saved data between devices or browsers.</p>
+    {#if $inventoryState.status === 'ready'}
+      <p class="help">
+        {$inventoryState.inventory.saves.length} saves{#if libraryFetchedAt}, last updated {libraryFetchedAt}{/if}.
+      </p>
+    {:else if $inventoryState.status === 'empty'}
+      <p class="help">No saves yet.</p>
+    {/if}
     <div class="settings-row">
       {#if $inventoryState.status === 'ready'}
         <button type="button" on:click={exportInventory}>Export inventory file</button>
