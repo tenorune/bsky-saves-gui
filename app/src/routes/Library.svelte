@@ -6,6 +6,7 @@
   import { slideFromRight } from '$lib/slide-transition';
   import LibraryView from '../reader/LibraryView.svelte';
   import BackupBanner from '../components/BackupBanner.svelte';
+  import ArticleBackupBanner from '../components/ArticleBackupBanner.svelte';
   import BackupStatusRow from '../components/BackupStatusRow.svelte';
   import { rkeyOf } from '../reader/inventory-shape';
   import type { Save } from '../reader/inventory-shape';
@@ -46,6 +47,7 @@
     <button type="button" on:click={() => loadFromDb()}>Retry</button>
   {:else}
     <BackupBanner inventory={$inventoryState.inventory} />
+    <ArticleBackupBanner inventory={$inventoryState.inventory} />
     <BackupStatusRow inventory={$inventoryState.inventory} />
     <LibraryView inventory={$inventoryState.inventory} onSelectPost={open} />
   {/if}
