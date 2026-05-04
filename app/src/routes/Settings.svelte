@@ -5,12 +5,13 @@
   import { saveInventory, clearInventory } from '$lib/inventory-store';
   import { clearCredentials } from '$lib/credentials-store';
   import { clearAccount } from '$lib/account-store';
-  import { clearLastSession } from '$lib/last-session';
+  import { lastSession, clearLastSession } from '$lib/last-session';
   import { clearBeaconSent } from '$lib/beacon';
   import { loadProxyConfig, saveProxyConfig, clearProxyConfig } from '$lib/proxy-config';
   import { exportJson } from '../exporters/json-exporter';
   import { downloadFile } from '../exporters/file-download';
   import { parseInventory } from '../reader/inventory-shape';
+  import { navigate } from '$lib/router';
 
   let proxyUrl = '';
   let proxySecret = '';
@@ -73,6 +74,14 @@
     status = 'All local data cleared.';
   }
 
+  function signOut() {
+    // Sign out clears only the session token. Inventory, saved credentials,
+    // and account label all stay so the user can sign in again and pick up
+    // where they left off. To wipe everything, use "Clear all local data".
+    clearLastSession();
+    navigate('/');
+  }
+
   async function saveProxy() {
     error = '';
     if (!proxyUrl || !proxySecret) {
@@ -102,6 +111,23 @@
   {#if error}
     <p class="error" role="alert">{error}</p>
   {/if}
+
+  <section class="settings-section">
+    <h3>Account</h3>
+    {#if $lastSession}
+      <p class="help">
+        Signed in as <code>@{$lastSession.handle}</code>.
+      </p>
+      <div class="settings-row">
+        <button type="button" on:click={signOut}>Sign out</button>
+      </div>
+    {:else}
+      <p class="help">Not signed in.</p>
+      <div class="settings-row">
+        <button type="button" on:click={() => navigate('/')}>Sign in</button>
+      </div>
+    {/if}
+  </section>
 
   <section class="settings-section">
     <h3>Inventory</h3>
@@ -188,6 +214,12 @@
     border-radius: 6px;
     background: Canvas;
     color: CanvasText;
+  }
+  .settings-section code {
+    background: color-mix(in oklab, CanvasText 5%, Canvas);
+    padding: 0.1em 0.3em;
+    border-radius: 3px;
+    font-size: 0.9em;
   }
   .settings-row {
     display: flex;
