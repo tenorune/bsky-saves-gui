@@ -1,6 +1,11 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import 'fake-indexeddb/auto';
 
+// Snooze tests fake `Date` only, not setTimeout/queueMicrotask. fake-indexeddb
+// rides on real microtasks, so `vi.useFakeTimers()` (which intercepts everything
+// by default) hangs IDB transactions. `toFake: ['Date']` lets us pin Date.now()
+// for snooze math while leaving the IDB scheduler alive.
+
 beforeEach(async () => {
   const { clearBackupPrefs } = await import('./backup-prefs');
   await clearBackupPrefs();

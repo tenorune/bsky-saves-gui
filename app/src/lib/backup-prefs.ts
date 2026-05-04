@@ -1,6 +1,12 @@
 // Per-feature banner state. Records when the user last said "Remind me later"
 // and whether they ticked "Don't ask me again". Used by the Library's
 // just-in-time backup banners and mirrored as toggles in Settings.
+//
+// Concurrency note: snooze/dontAsk writes are read-modify-write without a
+// lock. In a single tab this is fine — the UI mutates one field at a time.
+// Across multiple open tabs, two near-simultaneous writes can clobber each
+// other; the worst outcome is that one tab's "Remind me later" gets lost.
+// Acceptable for banner state.
 
 import { get, set, del } from 'idb-keyval';
 
