@@ -45,7 +45,6 @@
   let saveInventory = true;
   let saveCredentials = false;
   let passphrase = '';
-  let enrich = true;
   let threads = false;
   let error = '';
 
@@ -68,7 +67,6 @@
       appPassword,
       pds,
       fetch: true,
-      enrich,
       threads,
       saveInventory,
       saveCredentials,
@@ -163,12 +161,6 @@
           Where your Bluesky account lives. The default works for most people;
           only change this if you know your account is on a different server.
         </p>
-
-        <label class="checkbox">
-          <input type="checkbox" bind:checked={enrich} />
-          <span>Add precise dates</span>
-        </label>
-        <p class="help">Show the exact time each post was made.</p>
 
         <label class="checkbox">
           <input type="checkbox" bind:checked={threads} />

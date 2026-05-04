@@ -17,7 +17,6 @@ interface FetchInput {
   readonly appPassword: string;
   readonly pds: string;
   readonly fetch: boolean;
-  readonly enrich: boolean;
   readonly threads: boolean;
   readonly existingInventory?: unknown;
   readonly preauthSession?: PreauthSession;
@@ -271,14 +270,12 @@ with open('${INVENTORY_PATH}', 'w') as _f:
 `);
   }
 
-  if (input.enrich) {
-    log('Enriching…');
-    await pyodide.runPythonAsync(`
+  log('Enriching…');
+  await pyodide.runPythonAsync(`
 from pathlib import Path
 import bsky_saves.enrich as _bsky_enrich
 _bsky_enrich.enrich_inventory(Path('${INVENTORY_PATH}'))
 `);
-  }
 
   if (input.threads) {
     log('Hydrating threads…');

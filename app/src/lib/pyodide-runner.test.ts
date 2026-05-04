@@ -79,7 +79,6 @@ describe('PyodideRunner', () => {
       appPassword: 'pw',
       pds: 'https://bsky.social',
       fetch: true,
-      enrich: true,
       threads: false,
     });
 
@@ -90,7 +89,6 @@ describe('PyodideRunner', () => {
         handle: 'alice.bsky.social',
         appPassword: 'pw',
         pds: 'https://bsky.social',
-        enrich: true,
       },
     });
     expect(inventory).toEqual({ saves: [{ uri: 'at://x/y/1' }] });
@@ -110,7 +108,6 @@ describe('PyodideRunner', () => {
       appPassword: 'b',
       pds: 'https://x',
       fetch: true,
-      enrich: false,
       threads: false,
     });
 

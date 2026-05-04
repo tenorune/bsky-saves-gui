@@ -28,7 +28,6 @@ describe('runJob', () => {
         appPassword: 'pw',
         pds: 'https://bsky.social',
         fetch: true,
-        enrich: true,
         threads: false,
       },
       { createSession, runner: fakeRunner, onLog },
@@ -45,7 +44,6 @@ describe('runJob', () => {
       appPassword: 'pw',
       pds: 'https://bsky.social',
       fetch: true,
-      enrich: true,
       threads: false,
 
       existingInventory: undefined,
@@ -76,7 +74,6 @@ describe('runJob', () => {
         session,
         pds: 'https://bsky.social',
         fetch: true,
-        enrich: false,
         threads: true,
       },
       { createSession, runner: { initialise, runFetch, onLog: () => () => {} } },
@@ -88,7 +85,6 @@ describe('runJob', () => {
       appPassword: '',
       pds: 'https://bsky.social',
       fetch: true,
-      enrich: false,
       threads: true,
 
       existingInventory: undefined,
@@ -118,7 +114,6 @@ describe('runJob', () => {
           appPassword: 'b',
           pds: 'https://x',
           fetch: true,
-          enrich: false,
           threads: false,
         },
         {

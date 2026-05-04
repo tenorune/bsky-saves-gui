@@ -16,7 +16,6 @@ export interface FetchInput {
   readonly appPassword: string;
   readonly pds: string;
   readonly fetch: boolean;
-  readonly enrich: boolean;
   readonly threads: boolean;
   /**
    * Existing inventory to seed the worker FS with when `fetch` is false, so

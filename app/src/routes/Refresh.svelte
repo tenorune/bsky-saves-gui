@@ -7,12 +7,11 @@
   import { slideFromRight } from '$lib/slide-transition';
 
   let fetchNew = true;
-  let enrich = false;
   let threads = false;
   let handle = '';
   let canRefresh = false;
 
-  $: canUpdate = canRefresh && (fetchNew || enrich || threads);
+  $: canUpdate = canRefresh && (fetchNew || threads);
 
   onMount(() => {
     const draft = get(signInDraft);
@@ -37,13 +36,12 @@
     // credentials.
     signInDraft.update((d) =>
       d
-        ? { ...d, fetch: fetchNew, enrich, threads }
+        ? { ...d, fetch: fetchNew, threads }
         : {
             handle,
             appPassword: '',
             pds: '',
             fetch: fetchNew,
-            enrich,
             threads,
             saveInventory: false,
             saveCredentials: false,
@@ -80,11 +78,6 @@
       <label class="checkbox">
         <input type="checkbox" bind:checked={fetchNew} />
         <span>Pull in any newly saved posts</span>
-      </label>
-
-      <label class="checkbox">
-        <input type="checkbox" bind:checked={enrich} />
-        <span>Add precise dates to posts that don't have them</span>
       </label>
 
       <label class="checkbox">

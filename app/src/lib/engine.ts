@@ -7,7 +7,6 @@ import { setLastSession } from './last-session';
 export interface RunJobOptionsCommon {
   readonly pds: string;
   readonly fetch: boolean;
-  readonly enrich: boolean;
   readonly threads: boolean;
 }
 
@@ -27,7 +26,6 @@ interface RunnerFetchInput {
   readonly appPassword: string;
   readonly pds: string;
   readonly fetch: boolean;
-  readonly enrich: boolean;
   readonly threads: boolean;
   readonly existingInventory?: unknown;
   readonly preauthSession?: {
@@ -60,7 +58,7 @@ export async function runJob(input: RunJobInput, deps: RunJobDeps = {}): Promise
   const runner = deps.runner ?? new PyodideRunner();
   const log = deps.onLog ?? (() => {});
 
-  if (!input.fetch && !input.enrich && !input.threads) {
+  if (!input.fetch && !input.threads) {
     throw new Error('Pick at least one step to run.');
   }
 
@@ -108,7 +106,6 @@ export async function runJob(input: RunJobInput, deps: RunJobDeps = {}): Promise
       appPassword,
       pds: input.pds,
       fetch: input.fetch,
-      enrich: input.enrich,
       threads: input.threads,
       existingInventory,
       preauthSession: {
