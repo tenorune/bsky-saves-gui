@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { get } from 'svelte/store';
   import { inventoryState, loadFromDb } from '$lib/inventory-loader';
   import { saveInventory, clearInventory } from '$lib/inventory-store';
@@ -6,7 +7,15 @@
   import { clearAccount } from '$lib/account-store';
   import { lastSession, clearLastSession } from '$lib/last-session';
   import { clearBeaconSent } from '$lib/beacon';
-  import { clearProxyConfig } from '$lib/proxy-config';
+  import { loadProxyConfig, saveProxyConfig, clearProxyConfig } from '$lib/proxy-config';
+  import {
+    loadBackupPrefs,
+    setBackupDontAsk,
+    setBackupEnabled,
+    type BackupPrefs,
+  } from '$lib/backup-prefs';
+  import { detectBackends, type Backend } from '$lib/image-fetcher';
+  import { cancelImageBackup } from '$lib/start-image-backup';
   import { exportJson } from '../exporters/json-exporter';
   import { downloadFile } from '../exporters/file-download';
   import { parseInventory } from '../reader/inventory-shape';
@@ -15,6 +24,69 @@
   let status = '';
   let error = '';
   let importInputEl: HTMLInputElement | undefined;
+
+  let backupPrefs: BackupPrefs | null = null;
+  let detectedBackends: Backend[] = [];
+  let backupAdvancedOpen = false;
+  let workerUrl = '';
+  let workerSecret = '';
+
+  onMount(async () => {
+    backupPrefs = await loadBackupPrefs();
+    detectedBackends = await detectBackends();
+    const cfg = await loadProxyConfig();
+    if (cfg) {
+      workerUrl = cfg.url;
+      workerSecret = cfg.sharedSecret;
+    }
+  });
+
+  $: imagesEnabled = backupPrefs?.images.enabled ?? false;
+  $: imagesDontAsk = backupPrefs?.images.dontAsk ?? false;
+  $: backupSectionVisible =
+    imagesEnabled ||
+    imagesDontAsk ||
+    (backupPrefs?.images.snoozeUntil ?? null) !== null;
+  $: helperBackend = detectedBackends.find((b) => b.kind === 'helper');
+  $: workerBackend = detectedBackends.find((b) => b.kind === 'user-worker');
+  $: imagesBackendLabel = imagesEnabled
+    ? helperBackend
+      ? `using local helper (bsky-saves ${helperBackend.version})`
+      : workerBackend
+        ? 'using your custom Cloudflare Worker'
+        : 'no backend reachable right now'
+    : 'not set up';
+
+  async function reloadBackupPrefs() {
+    backupPrefs = await loadBackupPrefs();
+  }
+
+  async function handleDisableImages() {
+    cancelImageBackup();
+    await setBackupEnabled('images', false);
+    await reloadBackupPrefs();
+  }
+
+  async function handleToggleDontAsk(event: Event) {
+    const checked = (event.target as HTMLInputElement).checked;
+    await setBackupDontAsk('images', checked);
+    await reloadBackupPrefs();
+  }
+
+  async function handleSaveWorker() {
+    if (!workerUrl || !workerSecret) return;
+    await saveProxyConfig({ url: workerUrl, sharedSecret: workerSecret });
+    detectedBackends = await detectBackends();
+    status = 'Worker config saved.';
+  }
+
+  async function handleClearWorker() {
+    await clearProxyConfig();
+    workerUrl = '';
+    workerSecret = '';
+    detectedBackends = await detectBackends();
+    status = 'Worker config cleared.';
+  }
 
   $: libraryFetchedAt = (() => {
     const s = $inventoryState;
@@ -130,6 +202,63 @@
     </div>
   </section>
 
+  {#if backupSectionVisible}
+    <section class="settings-section">
+      <h3>Backup</h3>
+      <p class="help">
+        Save your own copy of images so they keep showing up even if Bluesky
+        changes. Articles will be added in a future update.
+      </p>
+
+      <div class="settings-row">
+        <strong>Images:</strong>
+        <span>{imagesBackendLabel}</span>
+        {#if imagesEnabled}
+          <button type="button" on:click={handleDisableImages}>Disable</button>
+        {/if}
+      </div>
+
+      <label class="checkbox">
+        <input
+          type="checkbox"
+          checked={imagesDontAsk}
+          on:change={handleToggleDontAsk}
+        />
+        <span>Don't ask me about image backup</span>
+      </label>
+
+      <details
+        class="advanced-toggle"
+        bind:open={backupAdvancedOpen}
+      >
+        <summary>Advanced backup options</summary>
+
+        <p class="help">
+          Custom Cloudflare Worker proxy. Used as a fallback when no local helper
+          is running. See <code>templates/cf-worker/</code> in the project repo
+          for how to deploy your own.
+        </p>
+
+        <label>
+          Proxy URL
+          <input
+            type="url"
+            bind:value={workerUrl}
+            placeholder="https://your-worker.workers.dev"
+          />
+        </label>
+        <label>
+          Shared secret
+          <input type="password" bind:value={workerSecret} />
+        </label>
+        <div class="settings-row">
+          <button type="button" on:click={handleSaveWorker}>Save</button>
+          <button type="button" on:click={handleClearWorker}>Clear</button>
+        </div>
+      </details>
+    </section>
+  {/if}
+
   <section class="settings-section">
     <h3>Reset</h3>
     <p class="help">
@@ -162,7 +291,7 @@
     font-size: 0.875rem;
     opacity: 0.8;
   }
-  /* Retained for Plan 2 — Backup → Advanced reintroduces the URL/secret form. */
+  /* Used by Backup → Advanced (URL/secret form). */
   .settings-section label {
     display: flex;
     flex-direction: column;
