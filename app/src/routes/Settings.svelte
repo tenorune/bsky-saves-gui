@@ -137,7 +137,7 @@
   </section>
 
   <section class="settings-section">
-    <h3>Inventory</h3>
+    <h3>Library</h3>
     {#if $inventoryState.status === 'ready'}
       <p class="help">
         {$inventoryState.inventory.saves.length} saves{#if libraryFetchedAt}, last updated {libraryFetchedAt}{/if}.
