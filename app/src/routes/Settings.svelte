@@ -22,9 +22,8 @@
   $: libraryFetchedAt = (() => {
     const s = $inventoryState;
     if (s.status !== 'ready') return null;
-    const inv = s.inventory as unknown as { fetched_at?: unknown };
-    if (typeof inv.fetched_at !== 'string') return null;
-    return inv.fetched_at.slice(0, 10);
+    const f = s.inventory.fetched_at;
+    return typeof f === 'string' && f.length >= 10 ? f.slice(0, 10) : null;
   })();
 
   onMount(async () => {
