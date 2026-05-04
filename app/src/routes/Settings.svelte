@@ -53,7 +53,7 @@
   }
 
   async function clearAll() {
-    if (!confirm('Clear inventory, saved credentials, proxy config, and beacon state? This cannot be undone.')) {
+    if (!confirm('Clear inventory, saved credentials, and beacon state? This cannot be undone.')) {
       return;
     }
     await Promise.all([
@@ -133,7 +133,7 @@
   <section class="settings-section">
     <h3>Reset</h3>
     <p class="help">
-      Wipes the inventory, saved credentials, proxy config, and beacon state from this browser. This cannot be undone.
+      Wipes the inventory, saved credentials, and beacon state from this browser. This cannot be undone.
     </p>
     <button type="button" class="danger" on:click={clearAll}>Clear all local data</button>
   </section>
@@ -162,6 +162,7 @@
     font-size: 0.875rem;
     opacity: 0.8;
   }
+  /* Retained for Plan 2 — Backup → Advanced reintroduces the URL/secret form. */
   .settings-section label {
     display: flex;
     flex-direction: column;
