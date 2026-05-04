@@ -16,8 +16,8 @@ describe('backup-prefs', () => {
   it('returns defaults when nothing is set', async () => {
     const { loadBackupPrefs } = await import('./backup-prefs');
     expect(await loadBackupPrefs()).toEqual({
-      images: { snoozeUntil: null, dontAsk: false },
-      articles: { snoozeUntil: null, dontAsk: false },
+      images: { snoozeUntil: null, dontAsk: false, enabled: false },
+      articles: { snoozeUntil: null, dontAsk: false, enabled: false },
     });
   });
 
@@ -66,5 +66,25 @@ describe('backup-prefs', () => {
     const { setBackupDontAsk, shouldShowBackupBanner } = await import('./backup-prefs');
     await setBackupDontAsk('images', true);
     expect(await shouldShowBackupBanner('images')).toBe(false);
+  });
+
+  it('setBackupEnabled persists and round-trips', async () => {
+    const { setBackupEnabled, loadBackupPrefs } = await import('./backup-prefs');
+    await setBackupEnabled('images', true);
+    expect((await loadBackupPrefs()).images.enabled).toBe(true);
+    await setBackupEnabled('images', false);
+    expect((await loadBackupPrefs()).images.enabled).toBe(false);
+  });
+
+  it('shouldShowBackupBanner is false when enabled is true (even without snooze)', async () => {
+    const { setBackupEnabled, shouldShowBackupBanner } = await import('./backup-prefs');
+    await setBackupEnabled('images', true);
+    expect(await shouldShowBackupBanner('images')).toBe(false);
+  });
+
+  it('enabled does not affect the OTHER feature', async () => {
+    const { setBackupEnabled, shouldShowBackupBanner } = await import('./backup-prefs');
+    await setBackupEnabled('images', true);
+    expect(await shouldShowBackupBanner('articles')).toBe(true);
   });
 });

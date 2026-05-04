@@ -15,6 +15,7 @@ export type BackupFeature = 'images' | 'articles';
 export interface FeaturePrefs {
   readonly snoozeUntil: number | null; // epoch ms; null means never snoozed
   readonly dontAsk: boolean;
+  readonly enabled: boolean;
 }
 
 export interface BackupPrefs {
@@ -27,8 +28,8 @@ const SNOOZE_DAYS = 7;
 const SNOOZE_MS = SNOOZE_DAYS * 24 * 60 * 60 * 1000;
 
 const DEFAULTS: BackupPrefs = Object.freeze({
-  images: { snoozeUntil: null, dontAsk: false },
-  articles: { snoozeUntil: null, dontAsk: false },
+  images: { snoozeUntil: null, dontAsk: false, enabled: false },
+  articles: { snoozeUntil: null, dontAsk: false, enabled: false },
 });
 
 function isFeaturePrefs(v: unknown): v is FeaturePrefs {
@@ -36,7 +37,8 @@ function isFeaturePrefs(v: unknown): v is FeaturePrefs {
   const r = v as Record<string, unknown>;
   return (
     (r.snoozeUntil === null || typeof r.snoozeUntil === 'number') &&
-    typeof r.dontAsk === 'boolean'
+    typeof r.dontAsk === 'boolean' &&
+    typeof r.enabled === 'boolean'
   );
 }
 
@@ -76,10 +78,23 @@ export async function setBackupDontAsk(
   await saveBackupPrefs(next);
 }
 
+export async function setBackupEnabled(
+  feature: BackupFeature,
+  enabled: boolean,
+): Promise<void> {
+  const prefs = await loadBackupPrefs();
+  const next: BackupPrefs = {
+    ...prefs,
+    [feature]: { ...prefs[feature], enabled },
+  };
+  await saveBackupPrefs(next);
+}
+
 export async function shouldShowBackupBanner(feature: BackupFeature): Promise<boolean> {
   const prefs = await loadBackupPrefs();
   const f = prefs[feature];
   if (f.dontAsk) return false;
+  if (f.enabled) return false;
   if (f.snoozeUntil !== null && Date.now() < f.snoozeUntil) return false;
   return true;
 }
