@@ -111,3 +111,95 @@ describe('helper-client fetchImageViaHelper', () => {
     ).rejects.toThrow();
   });
 });
+
+describe('helper-client extractArticleViaHelper', () => {
+  it('POSTs the URL as JSON and returns the parsed envelope', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        url: 'https://example.com/post',
+        title: 'A great post',
+        text: 'Body of the article.',
+        fetched_at: '2026-05-04T12:00:00Z',
+      }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { extractArticleViaHelper } = await import('./helper-client');
+    const result = await extractArticleViaHelper(
+      'http://127.0.0.1:47826',
+      'https://example.com/post',
+    );
+    expect(result).toEqual({
+      url: 'https://example.com/post',
+      title: 'A great post',
+      text: 'Body of the article.',
+      fetched_at: '2026-05-04T12:00:00Z',
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:47826/extract-article',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ url: 'https://example.com/post' }),
+      }),
+    );
+  });
+
+  it('returns {note} when the helper indicates no extractable body', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          url: 'https://example.com/paywall',
+          title: '',
+          text: '',
+          fetched_at: '2026-05-04T12:00:00Z',
+          note: 'no extractable body',
+        }),
+      })),
+    );
+    const { extractArticleViaHelper } = await import('./helper-client');
+    const result = await extractArticleViaHelper(
+      'http://127.0.0.1:47826',
+      'https://example.com/paywall',
+    );
+    expect(result.note).toBe('no extractable body');
+    expect(result.text).toBe('');
+  });
+
+  it('throws on non-2xx with status in the message', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: false, status: 502, json: async () => ({ error: 'upstream' }) })),
+    );
+    const { extractArticleViaHelper } = await import('./helper-client');
+    await expect(
+      extractArticleViaHelper('http://127.0.0.1:47826', 'https://example.com/x'),
+    ).rejects.toThrow(/502/);
+  });
+
+  it('throws on malformed envelope', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, json: async () => ({ unexpected: true }) })),
+    );
+    const { extractArticleViaHelper } = await import('./helper-client');
+    await expect(
+      extractArticleViaHelper('http://127.0.0.1:47826', 'https://example.com/x'),
+    ).rejects.toThrow(/malformed/i);
+  });
+
+  it('throws on network failure', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('Failed to fetch');
+      }),
+    );
+    const { extractArticleViaHelper } = await import('./helper-client');
+    await expect(
+      extractArticleViaHelper('http://127.0.0.1:47826', 'https://example.com/x'),
+    ).rejects.toThrow();
+  });
+});

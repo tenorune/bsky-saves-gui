@@ -73,3 +73,48 @@ export async function fetchImageViaHelper(origin: string, imageUrl: string): Pro
   }
   return res.blob();
 }
+
+export interface ExtractedArticle {
+  readonly url: string;
+  readonly title: string;
+  readonly text: string;
+  readonly fetched_at: string;
+  readonly note?: string;
+}
+
+function isExtractedArticle(v: unknown): v is ExtractedArticle {
+  if (!v || typeof v !== 'object') return false;
+  const r = v as Record<string, unknown>;
+  return (
+    typeof r.url === 'string' &&
+    typeof r.title === 'string' &&
+    typeof r.text === 'string' &&
+    typeof r.fetched_at === 'string' &&
+    (r.note === undefined || typeof r.note === 'string')
+  );
+}
+
+/**
+ * Extract an article via the local helper's POST /extract-article endpoint.
+ * Returns title + text + metadata. Throws on non-2xx, malformed envelope, or
+ * network failure.
+ */
+export async function extractArticleViaHelper(
+  origin: string,
+  articleUrl: string,
+): Promise<ExtractedArticle> {
+  const base = origin.replace(/\/+$/, '');
+  const res = await fetch(`${base}/extract-article`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url: articleUrl }),
+  });
+  if (!res.ok) {
+    throw new Error(`helper /extract-article returned ${res.status}`);
+  }
+  const body = (await res.json()) as unknown;
+  if (!isExtractedArticle(body)) {
+    throw new Error('helper /extract-article returned malformed JSON');
+  }
+  return body;
+}
