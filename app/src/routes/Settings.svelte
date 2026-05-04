@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { get } from 'svelte/store';
   import { inventoryState, loadFromDb } from '$lib/inventory-loader';
   import { saveInventory, clearInventory } from '$lib/inventory-store';
@@ -7,14 +6,12 @@
   import { clearAccount } from '$lib/account-store';
   import { lastSession, clearLastSession } from '$lib/last-session';
   import { clearBeaconSent } from '$lib/beacon';
-  import { loadProxyConfig, saveProxyConfig, clearProxyConfig } from '$lib/proxy-config';
+  import { clearProxyConfig } from '$lib/proxy-config';
   import { exportJson } from '../exporters/json-exporter';
   import { downloadFile } from '../exporters/file-download';
   import { parseInventory } from '../reader/inventory-shape';
   import { navigate } from '$lib/router';
 
-  let proxyUrl = '';
-  let proxySecret = '';
   let status = '';
   let error = '';
   let importInputEl: HTMLInputElement | undefined;
@@ -25,14 +22,6 @@
     const f = s.inventory.fetched_at;
     return typeof f === 'string' && f.length >= 10 ? f.slice(0, 10) : null;
   })();
-
-  onMount(async () => {
-    const cfg = await loadProxyConfig();
-    if (cfg) {
-      proxyUrl = cfg.url;
-      proxySecret = cfg.sharedSecret;
-    }
-  });
 
   async function exportInventory() {
     error = '';
@@ -76,8 +65,6 @@
     ]);
     clearLastSession();
     await loadFromDb();
-    proxyUrl = '';
-    proxySecret = '';
     status = 'All local data cleared.';
   }
 
@@ -87,23 +74,6 @@
     // where they left off. To wipe everything, use "Clear all local data".
     clearLastSession();
     navigate('/');
-  }
-
-  async function saveProxy() {
-    error = '';
-    if (!proxyUrl || !proxySecret) {
-      error = 'Both URL and shared secret are required.';
-      return;
-    }
-    await saveProxyConfig({ url: proxyUrl, sharedSecret: proxySecret });
-    status = 'Proxy config saved.';
-  }
-
-  async function clearProxy() {
-    await clearProxyConfig();
-    proxyUrl = '';
-    proxySecret = '';
-    status = 'Proxy config cleared.';
   }
 </script>
 
@@ -157,26 +127,6 @@
         on:change={importInventory}
         hidden
       />
-    </div>
-  </section>
-
-  <section class="settings-section">
-    <h3>Cloudflare Worker proxy</h3>
-    <p class="help">
-      Used for article hydration when no local helper is running. See the project's
-      <code>templates/cf-worker/</code> README for how to deploy your own.
-    </p>
-    <label>
-      Proxy URL
-      <input type="url" bind:value={proxyUrl} placeholder="https://your-worker.workers.dev" />
-    </label>
-    <label>
-      Shared secret
-      <input type="password" bind:value={proxySecret} />
-    </label>
-    <div class="settings-row">
-      <button type="button" on:click={saveProxy}>Save proxy</button>
-      <button type="button" on:click={clearProxy}>Clear</button>
     </div>
   </section>
 
