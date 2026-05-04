@@ -357,6 +357,30 @@ The privacy doc (`docs/privacy.md`) needs updates to describe each backend hones
 
 This is an honest model: privacy is layered, and the doc reflects the user's chosen layer.
 
+## Phase 2: helper as primary engine
+
+Tracked as a follow-up after Phase 1 ships.
+
+When `bsky-saves serve` is detected, the GUI should be able to use it for **all** operations — fetch, enrich, hydrate-threads, hydrate-images, hydrate-articles — not just the hydration steps. This eliminates Pyodide entirely for helper users:
+
+- **Today:** Pyodide is unconditionally loaded for fetch/enrich/threads (~6 MB download, slow startup, custom httpx shim, sync-XHR workarounds for some PDSes).
+- **Phase 2:** GUI detects helper at startup. If present, all engine operations run via helper HTTP calls. Pyodide is loaded lazily only when no helper is detected — most B/C-tier users never pay the cost.
+
+Required helper extension: a single `POST /run` endpoint that accepts the same flags as `bsky-saves fetch ...` (handle, app password, pds, fetch/enrich/threads/images/articles toggles) and returns the resulting inventory + any hydrated asset bytes in one response. Auth lives entirely on the helper side; the GUI hands credentials over and the helper does its own `createSession`. No browser-side AT-Proto session needed when helper is in use.
+
+GUI changes for Phase 2:
+- `engine.ts` becomes a router that picks helper vs. Pyodide.
+- The Pyodide worker is loaded lazily (`new Worker(...)` only on the no-helper path).
+- The "Use a different method" disclosure in the setup wizard becomes more meaningful — switching backends is a real architectural choice, not just a hydration choice.
+- The current preauth-session monkey-patch (the workaround for eurosky.social hangs) is no longer needed for helper users; remains relevant only for the Pyodide path.
+
+This is a Phase 2 follow-up because:
+- It's a meaningfully larger architectural change than the Phase 1 UX redesign.
+- It depends on `bsky-saves serve` shipping first and proving stable in its smaller form.
+- It's purely an under-the-hood improvement — no new UX surfaces — so it can land independently after the user-visible work is done.
+
+The Phase 2 work is referenced in `docs/bsky-saves-serve-requirements.md` so the bsky-saves project is aware of the planned API expansion when designing v1.
+
 ## Out of scope
 
 Explicitly deferred:

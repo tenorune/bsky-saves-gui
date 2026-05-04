@@ -149,6 +149,25 @@ If `/ping` returns a JSON body with `name === "bsky-saves"`, the helper is consi
 
 If detection fails, the web app does not retry on a timer. The user re-triggers detection by reloading or by clicking a "Check for helper" button in Settings.
 
+## Phase 2 (planned follow-up, not part of v1)
+
+The GUI's longer-term goal is to **eliminate Pyodide for helper users** by routing fetch/enrich/threads through the helper as well. This is tracked separately and is not part of v1.
+
+The expected v2 API addition is a single endpoint:
+
+```
+POST /run
+  body: { handle, app_password, pds, fetch, enrich, threads, images, articles }
+  response: 200 { inventory: {...}, image_blobs: [...], article_extracts: [...] }
+          or  4xx/5xx with { error: "..." }
+```
+
+Semantics: a one-shot equivalent of `bsky-saves fetch ...` with all the toggles a CLI user would pass. Helper does its own `createSession`; credentials are received in the request body and not persisted. Returns the full inventory plus any hydrated asset bytes in a single JSON response (binary asset bytes encoded as base64 in JSON, or shipped via `multipart/form-data` — TBD when v2 is designed).
+
+When designing v1, please **avoid** decisions that would make adding `/run` later painful — e.g. don't pin `bsky-saves serve` to a single-feature framing in user-facing copy or in error messages, since it will eventually be the primary engine for the GUI.
+
+`/ping`'s `features` array gives the GUI a forward-compatible way to detect when a helper supports `/run`: v2 helpers will advertise `"run"` in `features`; v1 helpers will not.
+
 ## Out of scope (for this version)
 
 - Authenticated endpoints (sessions, JWT, etc.). Helper is anonymous within its origin allowlist.
