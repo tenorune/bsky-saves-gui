@@ -13,12 +13,15 @@
     setBackupDontAsk,
     setBackupEnabled,
     setOperatorProxyOptOut,
+    clearBackupPrefs,
     type BackupPrefs,
   } from '$lib/backup-prefs';
   import { config } from '$lib/config';
   import { detectBackends, type Backend } from '$lib/image-fetcher';
   import { cancelImageBackup } from '$lib/start-image-backup';
   import { startArticleBackup, cancelArticleBackup } from '$lib/start-article-backup';
+  import { clearImageBlobs } from '$lib/image-store';
+  import { resetImageHydration, resetArticleHydration } from '$lib/hydration-state';
   import { exportJson } from '../exporters/json-exporter';
   import { downloadFile } from '../exporters/file-download';
   import { parseInventory } from '../reader/inventory-shape';
@@ -196,17 +199,30 @@
   }
 
   async function clearAll() {
-    if (!confirm('Clear inventory, saved credentials, and beacon state? This cannot be undone.')) {
+    if (!confirm('Clear inventory, saved credentials, backup state, and beacon state? This cannot be undone.')) {
       return;
     }
+    cancelImageBackup();
+    cancelArticleBackup();
     await Promise.all([
       clearInventory(),
       clearCredentials(),
       clearProxyConfig(),
       clearBeaconSent(),
       clearAccount(),
+      clearBackupPrefs(),
+      clearImageBlobs(),
     ]);
     clearLastSession();
+    resetImageHydration();
+    resetArticleHydration();
+    // Refresh local UI state so the Backup section disappears immediately.
+    backupPrefs = await loadBackupPrefs();
+    detectedBackends = await detectBackends();
+    workerUrl = '';
+    workerSecret = '';
+    operatorProxyReachable = 'unknown';
+    void probeOperatorProxy();
     await loadFromDb();
     status = 'All local data cleared.';
   }
