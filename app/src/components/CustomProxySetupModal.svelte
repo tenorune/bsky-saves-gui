@@ -128,7 +128,6 @@
           <ul>
             <li>
               Variable <code>ALLOWED_ORIGIN</code> = <code>{allowedOrigin}</code>
-              <CopyButton text={allowedOrigin} label="Copy origin" />
             </li>
             <li>
               Secret <code>SHARED_SECRET</code> = the 64-character hex string

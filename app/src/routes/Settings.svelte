@@ -352,10 +352,10 @@
       >
         <summary>Advanced backup options</summary>
 
+        <p class="advanced-heading"><strong>Custom Cloudflare Worker proxy</strong></p>
         <p class="help">
-          Custom Cloudflare Worker proxy. Used as a fallback when no local helper
-          is running. The setup is one-time, takes about 10 minutes, and runs on
-          Cloudflare's free tier.
+          Used as a fallback when no local helper is running. The setup is
+          one-time, takes about 10 minutes, and runs on Cloudflare's free tier.
         </p>
 
         <button type="button" class="setup-guide-trigger" on:click={() => (setupModalOpen = true)}>
@@ -363,10 +363,8 @@
         </button>
 
         {#if operatorProxyConfigured}
-          <hr class="advanced-divider" />
+          <p class="advanced-heading advanced-heading--spaced"><strong>Operator's image proxy</strong></p>
           <p class="help">
-            <strong>Operator's image proxy</strong>
-            <br />
             <code>{config.operatorImageProxyUrl}</code>
             {#if operatorProxyReachable === 'ok'}
               <span class="status-ok">· reachable</span>
@@ -497,10 +495,15 @@
     color: color-mix(in oklab, red 70%, CanvasText);
     font-weight: 500;
   }
-  .advanced-divider {
-    border: 0;
-    border-top: 1px solid color-mix(in oklab, CanvasText 12%, transparent);
-    margin: 1rem 0 0.75rem;
+  .advanced-toggle > summary {
+    margin-bottom: 0.75rem;
+  }
+  .advanced-heading {
+    margin: 0 0 0.25rem;
+    font-size: 0.9rem;
+  }
+  .advanced-heading--spaced {
+    margin-top: 1rem;
   }
   .status-ok {
     color: color-mix(in oklab, green 70%, CanvasText);
