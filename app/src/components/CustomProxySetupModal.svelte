@@ -8,7 +8,7 @@
   import workerSourceWithArticles from '../../../templates/cf-worker/dist/worker-with-articles.bundle.js?raw';
   import { onMount } from 'svelte';
   import { loadProxyConfig, saveProxyConfig, clearProxyConfig } from '$lib/proxy-config';
-  import { probeWorkerCapabilities } from '$lib/user-worker-client';
+  import { probeWorkerCapabilities, type ProbeResult } from '$lib/user-worker-client';
 
   export let open = false;
 
@@ -43,12 +43,28 @@
     }
     await saveProxyConfig({ url: workerUrl, sharedSecret: workerSecret, supportsArticles: false });
     saveStatus = 'Saved. Probing capabilities…';
-    const supports = await probeWorkerCapabilities(workerUrl, workerSecret);
+    const result = await probeWorkerCapabilities(workerUrl, workerSecret);
+    const supports = result.kind === 'has-articles';
     await saveProxyConfig({ url: workerUrl, sharedSecret: workerSecret, supportsArticles: supports });
-    saveStatus = supports
-      ? '✓ Saved. Article extraction is enabled on this worker.'
-      : '⚠ Saved. This worker is image-only — paste the article-enabled bundle in step 3 to enable article backup.';
+    saveStatus = describeProbeResult(result, allowedOrigin);
     dispatch('change');
+  }
+
+  function describeProbeResult(result: ProbeResult, origin: string): string {
+    switch (result.kind) {
+      case 'has-articles':
+        return '✓ Saved. Article extraction is enabled on this worker.';
+      case 'image-only':
+        return '⚠ Saved. This worker is image-only — paste the article-enabled bundle in step 3 to enable article backup.';
+      case 'unauthorized':
+        return '⚠ Saved. The shared secret doesn’t match — check the SHARED_SECRET env var on your worker.';
+      case 'origin-blocked':
+        return `⚠ Saved. The worker rejected this origin — set ALLOWED_ORIGIN to ${origin} on your worker.`;
+      case 'no-capabilities-endpoint':
+        return '⚠ Saved. The worker doesn’t expose /capabilities — redeploy with the current source from step 3.';
+      case 'unreachable':
+        return `⚠ Saved. Couldn’t reach the worker (${result.reason}). Check the URL and that the worker is deployed.`;
+    }
   }
 
   async function handleClearWorker() {
@@ -175,8 +191,8 @@
           It's at the top of the worker page, ending in
           <code>.workers.dev</code>. Test it by pasting
           <code>&lt;that URL&gt;/fetch</code> into a browser tab — you should
-          see <code>{`{"error":"forbidden"}`}</code> with status 403. That
-          means the worker is reachable.
+          see <code>{`{"error":"Origin not allowed"}`}</code> with status 403.
+          That means the worker is reachable and gating origins correctly.
         </li>
 
         <li>
