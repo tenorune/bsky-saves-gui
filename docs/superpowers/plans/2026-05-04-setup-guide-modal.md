@@ -196,7 +196,7 @@ Create `app/src/components/CustomProxySetupModal.svelte`:
           Go to
           <a href="https://dash.cloudflare.com" target="_blank" rel="noopener noreferrer">dash.cloudflare.com</a>
           → Compute → Workers &amp; Pages → Create application → Start with
-          Hello World! → Create Worker. Name it something like
+          Hello World! Name it something like
           <code>bsky-saves-image-proxy</code>. Click <em>Deploy</em> to accept
           the placeholder.
         </li>
