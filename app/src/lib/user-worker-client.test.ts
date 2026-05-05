@@ -107,3 +107,103 @@ describe('user-worker-client fetchImageViaUserWorker', () => {
     );
   });
 });
+
+import { extractArticleViaWorker, probeWorkerCapabilities, WorkerNoArticlesError } from './user-worker-client';
+
+describe('extractArticleViaWorker', () => {
+  const cfg = { url: 'https://w.example/', sharedSecret: 's', supportsArticles: true };
+
+  it('returns the parsed article on 200', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      url: 'https://a.example/post', title: 'T', text: 'body', fetched_at: '2026-05-05T00:00:00Z',
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const out = await extractArticleViaWorker(cfg, 'https://a.example/post');
+      expect(out.title).toBe('T');
+      expect(out.text).toBe('body');
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://w.example/extract-article',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({ 'X-Proxy-Secret': 's' }),
+        }),
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('throws WorkerNoArticlesError on 404', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('not found', { status: 404 })));
+    try {
+      await expect(extractArticleViaWorker(cfg, 'https://a.example/p')).rejects.toBeInstanceOf(WorkerNoArticlesError);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('throws Error with reason on 502', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'upstream timeout' }), {
+      status: 502, headers: { 'Content-Type': 'application/json' },
+    })));
+    try {
+      await expect(extractArticleViaWorker(cfg, 'https://a.example/p')).rejects.toThrow(/upstream timeout/);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('throws on malformed JSON', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ wrong: 'shape' }), {
+      status: 200, headers: { 'Content-Type': 'application/json' },
+    })));
+    try {
+      await expect(extractArticleViaWorker(cfg, 'https://a.example/p')).rejects.toThrow(/malformed/);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe('probeWorkerCapabilities', () => {
+  it('returns true when /extract-article is in the endpoints list', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ endpoints: ['/fetch', '/extract-article'] }), {
+      status: 200, headers: { 'Content-Type': 'application/json' },
+    })));
+    try {
+      expect(await probeWorkerCapabilities('https://w.example/', 's')).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('returns false when only /fetch is listed', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ endpoints: ['/fetch'] }), {
+      status: 200, headers: { 'Content-Type': 'application/json' },
+    })));
+    try {
+      expect(await probeWorkerCapabilities('https://w.example/', 's')).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('returns false when probe returns 404 (old worker, no /capabilities)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('nope', { status: 404 })));
+    try {
+      expect(await probeWorkerCapabilities('https://w.example/', 's')).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('returns false when probe network call fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('network down'); }));
+    try {
+      expect(await probeWorkerCapabilities('https://w.example/', 's')).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});

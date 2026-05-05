@@ -70,3 +70,96 @@ export async function fetchImageViaUserWorker(
     'application/octet-stream';
   return new Blob([bytes.slice().buffer], { type: contentType });
 }
+
+export class WorkerNoArticlesError extends Error {
+  constructor() {
+    super('worker does not support /extract-article');
+    this.name = 'WorkerNoArticlesError';
+  }
+}
+
+interface ExtractArticleResponse {
+  readonly url: string;
+  readonly title: string;
+  readonly text: string;
+  readonly fetched_at: string;
+  readonly note?: string;
+}
+
+function isExtractArticleResponse(v: unknown): v is ExtractArticleResponse {
+  if (!v || typeof v !== 'object') return false;
+  const r = v as Record<string, unknown>;
+  return (
+    typeof r.url === 'string' &&
+    typeof r.title === 'string' &&
+    typeof r.text === 'string' &&
+    typeof r.fetched_at === 'string' &&
+    (r.note === undefined || typeof r.note === 'string')
+  );
+}
+
+/**
+ * Call the user worker's POST /extract-article endpoint.
+ *
+ * Throws:
+ *   - WorkerNoArticlesError on 404 (old worker without article support)
+ *   - Error("worker reported …") with the worker's error message on other non-2xx
+ *   - Error("malformed JSON") when the response shape is wrong
+ */
+export async function extractArticleViaWorker(
+  config: ProxyConfig,
+  articleUrl: string,
+): Promise<ExtractArticleResponse> {
+  const base = config.url.replace(/\/+$/, '');
+  const res = await fetch(`${base}/extract-article`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Proxy-Secret': config.sharedSecret,
+    },
+    body: JSON.stringify({ url: articleUrl }),
+  });
+  if (res.status === 404) {
+    throw new WorkerNoArticlesError();
+  }
+  if (!res.ok) {
+    let reason = `user worker returned ${res.status}`;
+    try {
+      const body = (await res.json()) as { error?: string };
+      if (typeof body.error === 'string') reason = body.error;
+    } catch {
+      // keep default reason
+    }
+    throw new Error(reason);
+  }
+  const body = (await res.json()) as unknown;
+  if (!isExtractArticleResponse(body)) {
+    throw new Error('user worker /extract-article returned malformed JSON');
+  }
+  return body;
+}
+
+/**
+ * Probe the worker's GET /capabilities endpoint.
+ * Returns true if the response lists "/extract-article". Returns false on
+ * any failure (404, non-2xx, malformed body, network error) — the caller
+ * conservatively treats anything ambiguous as "image-only worker".
+ */
+export async function probeWorkerCapabilities(
+  url: string,
+  sharedSecret: string,
+): Promise<boolean> {
+  const base = url.replace(/\/+$/, '');
+  try {
+    const res = await fetch(`${base}/capabilities`, {
+      method: 'GET',
+      headers: { 'X-Proxy-Secret': sharedSecret },
+    });
+    if (!res.ok) return false;
+    const body = (await res.json()) as { endpoints?: unknown };
+    if (!Array.isArray(body.endpoints)) return false;
+    return body.endpoints.includes('/extract-article');
+  } catch {
+    return false;
+  }
+}
