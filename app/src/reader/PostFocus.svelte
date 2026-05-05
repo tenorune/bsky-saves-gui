@@ -3,16 +3,66 @@
   import { formatAuthor, formatDateTime, formatHandle } from './format';
   import PostBody from './PostBody.svelte';
   import HydratedImage from '../components/HydratedImage.svelte';
+  import { imageHydration, articleHydration } from '$lib/hydration-state';
+  import { getSavedImageUrls } from '$lib/image-store';
+  import { getPostBackupStatus } from '$lib/post-backup-status';
 
   export let save: Save;
 
   $: thread = save.thread ?? [];
   $: bskyUrl = (() => {
-    // Best-effort link to the original post on bsky.app: at://did/coll/rkey → /profile/handle/post/rkey
     const m = /\/([^/]+)$/.exec(save.uri);
     const rkey = m?.[1] ?? '';
     return `https://bsky.app/profile/${encodeURIComponent(save.author.handle)}/post/${encodeURIComponent(rkey)}`;
   })();
+
+  // Image URLs in this post: walk save.images and save.embed.images for http(s) entries.
+  function imageUrlsForSave(s: Save): string[] {
+    const out = new Set<string>();
+    const collect = (arr: unknown) => {
+      if (!Array.isArray(arr)) return;
+      for (const img of arr) {
+        if (!img || typeof img !== 'object') continue;
+        const url = (img as Record<string, unknown>).url;
+        if (typeof url === 'string' && /^https?:\/\//.test(url)) out.add(url);
+      }
+    };
+    collect((s as Record<string, unknown>).images);
+    const embed = (s as Record<string, unknown>).embed;
+    if (embed && typeof embed === 'object') {
+      collect((embed as Record<string, unknown>).images);
+    }
+    return [...out];
+  }
+
+  // Article URL: save.embed.url if it looks like an article link.
+  function articleUrlForSave(s: Save): string | null {
+    const embed = (s as Record<string, unknown>).embed;
+    if (!embed || typeof embed !== 'object') return null;
+    const url = (embed as Record<string, unknown>).url;
+    return typeof url === 'string' && /^https?:\/\//.test(url) ? url : null;
+  }
+
+  $: imageUrls = imageUrlsForSave(save);
+  $: articleUrl = articleUrlForSave(save);
+
+  let savedImageUrls = new Set<string>();
+
+  // Re-query IDB whenever image hydration progresses (or on mount via reactive run).
+  $: void (async () => {
+    // Reactive trigger: depend on imageUrls and the fetched count.
+    void $imageHydration.fetched;
+    savedImageUrls = await getSavedImageUrls(imageUrls);
+  })();
+
+  $: status = getPostBackupStatus({
+    save,
+    imageUrlsInPost: imageUrls,
+    articleUrlInPost: articleUrl,
+    savedImageUrls,
+    imageHydration: $imageHydration,
+    articleHydration: $articleHydration,
+  });
 </script>
 
 <article class="post-focus">
@@ -29,6 +79,16 @@
   <p class="post-focus__link">
     <a href={bskyUrl} target="_blank" rel="noopener noreferrer">View on bsky.app</a>
   </p>
+
+  {#if status.hasAssets}
+    <footer
+      class="post-focus__backup"
+      class:post-focus__backup--failed={status.anyFailed}
+      aria-label="Backup status"
+    >
+      {status.summary}
+    </footer>
+  {/if}
 
   {#if thread.length > 0}
     <section class="post-focus__thread">
@@ -141,5 +201,14 @@
     width: 100%;
     border-radius: 6px;
     object-fit: cover;
+  }
+  .post-focus__backup {
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+    opacity: 0.7;
+  }
+  .post-focus__backup--failed {
+    color: color-mix(in oklab, red 70%, CanvasText);
+    opacity: 0.95;
   }
 </style>
