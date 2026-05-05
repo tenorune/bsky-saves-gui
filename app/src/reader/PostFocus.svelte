@@ -6,15 +6,13 @@
   import { imageHydration, articleHydration } from '$lib/hydration-state';
   import { getSavedImageUrls } from '$lib/image-store';
   import { getPostBackupStatus } from '$lib/post-backup-status';
+  import BackupFailuresModal from '../components/BackupFailuresModal.svelte';
+  import { bskyPostUrl } from '$lib/bsky-permalink';
 
   export let save: Save;
 
   $: thread = save.thread ?? [];
-  $: bskyUrl = (() => {
-    const m = /\/([^/]+)$/.exec(save.uri);
-    const rkey = m?.[1] ?? '';
-    return `https://bsky.app/profile/${encodeURIComponent(save.author.handle)}/post/${encodeURIComponent(rkey)}`;
-  })();
+  $: bskyUrl = bskyPostUrl(save);
 
   // Image URLs in this post: walk save.images and save.embed.images for http(s) entries.
   function imageUrlsForSave(s: Save): string[] {
@@ -63,6 +61,17 @@
     imageHydration: $imageHydration,
     articleHydration: $articleHydration,
   });
+
+  let failuresOpen = false;
+
+  $: postScopedFailures = [
+    ...$imageHydration.failures
+      .filter((f) => imageUrls.includes(f.url))
+      .map((f) => ({ ...f, type: 'image' as const })),
+    ...$articleHydration.failures
+      .filter((f) => f.url === articleUrl)
+      .map((f) => ({ ...f, type: 'article' as const })),
+  ];
 </script>
 
 <article class="post-focus">
@@ -86,7 +95,17 @@
       class:post-focus__backup--failed={status.anyFailed}
       aria-label="Backup status"
     >
-      {status.summary}
+      {#if status.anyFailed}
+        <button
+          type="button"
+          class="post-focus__backup-button"
+          on:click={() => (failuresOpen = true)}
+        >
+          {status.summary}
+        </button>
+      {:else}
+        {status.summary}
+      {/if}
     </footer>
   {/if}
 
@@ -116,6 +135,14 @@
       </ol>
     </section>
   {/if}
+
+  <BackupFailuresModal
+    open={failuresOpen}
+    failures={postScopedFailures}
+    inventory={{ saves: [save] }}
+    title="Backup failures for this post"
+    on:close={() => (failuresOpen = false)}
+  />
 </article>
 
 <style>
@@ -210,5 +237,18 @@
   .post-focus__backup--failed {
     color: color-mix(in oklab, red 70%, CanvasText);
     opacity: 0.95;
+  }
+  .post-focus__backup-button {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 0;
+    padding: 0;
+    text-align: left;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+  .post-focus__backup-button:hover {
+    text-decoration: none;
   }
 </style>
