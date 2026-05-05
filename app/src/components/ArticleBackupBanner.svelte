@@ -9,6 +9,7 @@
   import { articleHydration } from '$lib/hydration-state';
   import { startArticleBackup } from '$lib/start-article-backup';
   import { describeArticleBackend } from '$lib/describe-backend';
+  import { imageBannerVisible } from '$lib/backup-banner-state';
 
   /** Inventory the banner observes for article content. Required. */
   export let inventory: unknown;
@@ -52,7 +53,7 @@
 
   $: articleCount = extractArticleUrls(inventory).length;
   $: status = $articleHydration.status;
-  $: visible = prefsAllow && articleCount > 0 && status === 'idle';
+  $: visible = !$imageBannerVisible && prefsAllow && articleCount > 0 && status === 'idle';
 </script>
 
 {#if visible}
