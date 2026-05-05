@@ -19,6 +19,7 @@
   let errorMessage = '';
   let failuresOpen = false;
   let setupOpen = false;
+  let confirmation = '';
 
   $: store = domain === 'images' ? imageHydration : articleHydration;
   $: hydration = $store as HydrationProgress;
@@ -32,10 +33,15 @@
 
   $: line = buildBackupStatusLine({ domain, hydration, backendDescription });
 
-  $: visible =
-    mode === 'settings' || status !== 'idle';
+  $: visible = mode === 'settings' || status !== 'idle';
 
-  $: failedFailures = hydration.failures.map((f) => ({ ...f, type: domain === 'images' ? ('image' as const) : ('article' as const) }));
+  $: failedFailures = hydration.failures.map((f) => ({
+    ...f,
+    type: domain === 'images' ? ('image' as const) : ('article' as const),
+  }));
+
+  $: title = domain === 'images' ? 'Images' : 'Articles';
+  $: backendAvailable = backendDescription !== null;
 
   async function refreshBackend() {
     if (domain === 'images') {
@@ -60,6 +66,31 @@
     await refreshBackend();
   })();
 
+  function showConfirmation(message: string) {
+    confirmation = message;
+    setTimeout(() => {
+      if (confirmation === message) confirmation = '';
+    }, 2500);
+  }
+
+  function waitForRunCompletion(): Promise<HydrationProgress> {
+    const s = domain === 'images' ? imageHydration : articleHydration;
+    return new Promise((resolve) => {
+      let firstCall = true;
+      const unsub = s.subscribe((current) => {
+        // Skip the synchronous initial callback Svelte fires on subscribe.
+        if (firstCall) {
+          firstCall = false;
+          return;
+        }
+        if (current.status === 'done' || current.status === 'cancelled') {
+          unsub();
+          resolve(current);
+        }
+      });
+    });
+  }
+
   async function handleStart() {
     if (busy || status === 'running') return;
     errorMessage = '';
@@ -70,8 +101,16 @@
         : await startArticleBackup(inventory);
       if (!result.started) {
         errorMessage = result.reason ?? 'Could not start backup.';
-      } else {
-        await reloadPrefs();
+        return;
+      }
+      await reloadPrefs();
+      const final = await waitForRunCompletion();
+      if (final.status === 'cancelled') {
+        showConfirmation('✓ Stopped');
+      } else if (final.fetched === 0 && final.failed === 0) {
+        showConfirmation('✓ Already up to date');
+      } else if (final.fetched > 0 && final.failed === 0) {
+        showConfirmation('✓ Done');
       }
     } finally {
       busy = false;
@@ -96,17 +135,12 @@
 
 {#if visible}
   <div class="backup-row">
+    {#if mode === 'settings'}
+      <h4 class="backup-row__title">{title}</h4>
+    {/if}
+
     <p class="backup-row__line">
-      {#if line.link?.kind === 'setup'}
-        {@const trailing = line.link.phrase}
-        Not yet saved · no backend available — <button
-          type="button"
-          class="backup-row__inline-link"
-          on:click={() => (setupOpen = true)}
-        >{trailing}</button>
-      {:else}
-        {line.text}
-      {/if}
+      {line.text}
       {#if status === 'done' && hydration.failed > 0}
         (<button
           type="button"
@@ -114,11 +148,16 @@
           on:click={() => (failuresOpen = true)}
         >{hydration.failed} failed</button>)
       {/if}
+      {#if confirmation}
+        <span class="backup-row__confirmation">{confirmation}</span>
+      {/if}
     </p>
 
     {#if mode === 'settings'}
       <div class="backup-row__actions">
-        {#if status === 'running'}
+        {#if !backendAvailable}
+          <button type="button" on:click={() => (setupOpen = true)}>Set up a backend</button>
+        {:else if status === 'running'}
           <button type="button" on:click={handleStop}>Stop</button>
         {:else}
           <button type="button" on:click={handleStart} disabled={busy}>Save my own copy</button>
@@ -189,7 +228,6 @@
     font-size: 0.875rem;
     opacity: 0.85;
   }
-  .backup-row__inline-link,
   .backup-row__failed-link {
     font: inherit;
     background: none;
@@ -218,5 +256,16 @@
     cursor: pointer;
     text-decoration: underline;
     opacity: 0.85;
+  }
+  .backup-row__title {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+  }
+  .backup-row__confirmation {
+    margin-left: 0.4rem;
+    color: color-mix(in oklab, green 70%, CanvasText);
+    font-weight: 500;
+    font-size: 0.85rem;
   }
 </style>
