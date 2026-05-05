@@ -197,6 +197,7 @@
     flex-direction: column;
     gap: 0.4rem;
     padding: 0.5rem 0;
+    margin-bottom: 0.75rem;
   }
   .backup-row__line {
     margin: 0;

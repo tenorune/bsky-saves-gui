@@ -1,3 +1,4 @@
+import { get } from 'svelte/store';
 import { extractImageUrls } from './extract-image-urls';
 import { extractArticleUrls } from './extract-article-urls';
 import { hasImageBlob } from './image-store';
@@ -10,17 +11,26 @@ import { loadBackupPrefs } from './backup-prefs';
  * IDB, article_text in the inventory itself), so for domains the user has
  * already opted into we reconstruct per-asset counts and set the stores to
  * a 'done'-with-counts state. Domains the user hasn't yet triggered stay
- * idle so the discovery banner can still show. Failures are not persisted,
- * so the failures arrays remain empty after restore.
+ * idle so the discovery banner can still show.
+ *
+ * If the in-memory store already has non-initial state (e.g., the user
+ * navigated within the SPA — Library mounted, ran a backup, navigated to
+ * Settings, and came back), don't overwrite it: doing so would wipe the
+ * accumulated failures list. Skip per-domain.
+ *
+ * Failures aren't persisted across full page reloads (the in-memory store
+ * is the source of truth), so a hard refresh still drops them.
  */
 export async function restoreHydrationFromInventory(
   inventory: unknown,
 ): Promise<void> {
   const prefs = await loadBackupPrefs();
 
-  // Images: only restore when the user has opted into image backup at least
-  // once. Otherwise leave the store at idle so the discovery banner shows.
-  if (prefs.images.enabled) {
+  // Images: only restore when the user has opted into image backup AND the
+  // store is currently at its initial idle/empty state.
+  const currentImage = get(imageHydration);
+  const imageStoreIsInitial = currentImage.status === 'idle' && currentImage.total === 0;
+  if (prefs.images.enabled && imageStoreIsInitial) {
     const imageUrls = extractImageUrls(inventory);
     if (imageUrls.length > 0) {
       let fetched = 0;
@@ -40,8 +50,10 @@ export async function restoreHydrationFromInventory(
     }
   }
 
-  // Articles: only restore when the user has opted into article backup.
-  if (prefs.articles.enabled) {
+  // Articles: same guard.
+  const currentArticle = get(articleHydration);
+  const articleStoreIsInitial = currentArticle.status === 'idle' && currentArticle.total === 0;
+  if (prefs.articles.enabled && articleStoreIsInitial) {
     let articleTotal = 0;
     let articleFetched = 0;
     if (inventory && typeof inventory === 'object') {
