@@ -39,6 +39,8 @@ jobs:
           VITE_HELPER_ORIGIN: ${{ vars.VITE_HELPER_ORIGIN }}
           VITE_REPO_URL: ${{ vars.VITE_REPO_URL }}
           VITE_PYODIDE_VERSION: ${{ vars.VITE_PYODIDE_VERSION }}
+          VITE_OPERATOR_IMAGE_PROXY_URL: ${{ vars.VITE_OPERATOR_IMAGE_PROXY_URL }}
+          VITE_OPERATOR_IMAGE_PROXY_SECRET: ${{ secrets.VITE_OPERATOR_IMAGE_PROXY_SECRET }}
         run: pnpm build
 
       - uses: actions/configure-pages@v5
