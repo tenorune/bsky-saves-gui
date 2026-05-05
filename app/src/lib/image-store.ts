@@ -29,3 +29,19 @@ export async function deleteImageBlob(url: string): Promise<void> {
 export async function clearImageBlobs(): Promise<void> {
   await clear(store);
 }
+
+/**
+ * Given a set of image URLs, return the subset that already have a blob in IDB.
+ * Used by PostFocus to render per-post backup status.
+ */
+export async function getSavedImageUrls(
+  urls: readonly string[],
+): Promise<Set<string>> {
+  const out = new Set<string>();
+  await Promise.all(
+    urls.map(async (url) => {
+      if (await hasImageBlob(url)) out.add(url);
+    }),
+  );
+  return out;
+}
