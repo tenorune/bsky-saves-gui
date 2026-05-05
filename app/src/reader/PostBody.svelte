@@ -5,6 +5,18 @@
 
   export let save: Save;
 
+  // Trafilatura's article_text uses one or more newlines between paragraphs;
+  // some upstreams strip blank lines entirely. Split on blank lines first,
+  // and if that yields a single chunk, fall back to splitting on single
+  // newlines so paragraphs don't run together as one wall of text.
+  function splitParagraphs(text: string): string[] {
+    const trimmed = text.trim();
+    if (!trimmed) return [];
+    const byBlank = trimmed.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+    if (byBlank.length > 1) return byBlank;
+    return trimmed.split(/\n/).map((p) => p.trim()).filter(Boolean);
+  }
+
   type ImageEmbedView = { thumb?: string; fullsize?: string; alt?: string };
 
   $: text = save.record.text;
@@ -59,7 +71,9 @@
   {#if save.article && save.article.text}
     <details class="post-body__article">
       <summary>View backed-up article text</summary>
-      <p>{save.article.text}</p>
+      {#each splitParagraphs(save.article.text) as para}
+        <p>{para}</p>
+      {/each}
     </details>
   {/if}
 </div>
@@ -108,5 +122,8 @@
   .post-body__article p {
     margin: 0.5rem 0 0;
     white-space: pre-wrap;
+  }
+  .post-body__article p + p {
+    margin-top: 0.85rem;
   }
 </style>
