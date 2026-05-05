@@ -4,15 +4,25 @@
   // The cf-worker source, loaded at build time. The `?raw` suffix is a Vite
   // feature that bundles the file content as a string. Path is relative to
   // this file (app/src/components/) → up three → into templates/cf-worker.
-  import workerSource from '../../../templates/cf-worker/worker.js?raw';
+  import workerSourceImageOnly from '../../../templates/cf-worker/worker.js?raw';
+  import workerSourceWithArticles from '../../../templates/cf-worker/dist/worker-with-articles.bundle.js?raw';
   import { onMount } from 'svelte';
   import { loadProxyConfig, saveProxyConfig, clearProxyConfig } from '$lib/proxy-config';
+  import { probeWorkerCapabilities } from '$lib/user-worker-client';
 
   export let open = false;
 
   const dispatch = createEventDispatcher<{ close: void; change: void }>();
 
   const SECRET_GEN = `crypto.getRandomValues(new Uint8Array(32)).reduce((a,b)=>a+b.toString(16).padStart(2,'0'),'')`;
+
+  type Tab = 'image' | 'articles';
+  let activeTab: Tab = 'image';
+  $: workerSource = activeTab === 'image' ? workerSourceImageOnly : workerSourceWithArticles;
+  $: workerCopyLabel = activeTab === 'image' ? 'Copy worker source' : 'Copy bundled worker';
+  $: workerHint = activeTab === 'image'
+    ? 'Image-only proxy. ~200 lines of readable source.'
+    : 'Image proxy + article extraction. Pre-built bundle (minified). Source: templates/cf-worker/src/worker-with-articles.ts in the repo.';
 
   let workerUrl = '';
   let workerSecret = '';
@@ -32,7 +42,12 @@
       return;
     }
     await saveProxyConfig({ url: workerUrl, sharedSecret: workerSecret, supportsArticles: false });
-    saveStatus = 'Saved.';
+    saveStatus = 'Saved. Probing capabilities…';
+    const supports = await probeWorkerCapabilities(workerUrl, workerSecret);
+    await saveProxyConfig({ url: workerUrl, sharedSecret: workerSecret, supportsArticles: supports });
+    saveStatus = supports
+      ? '✓ Saved. Article extraction is enabled on this worker.'
+      : '⚠ Saved. This worker is image-only — paste the article-enabled bundle in step 3 to enable article backup.';
     dispatch('change');
   }
 
@@ -114,11 +129,30 @@
 
         <li>
           <strong>Paste the worker source.</strong>
-          On the worker page click <em>Edit code</em>. Paste the following over
-          the placeholder. Click <em>Deploy</em>.
+          On the worker page click <em>Edit code</em>. Paste the source below
+          over the placeholder. Click <em>Deploy</em>.
+          <div class="modal__tabs" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'image'}
+              class="modal__tab"
+              class:modal__tab--active={activeTab === 'image'}
+              on:click={() => (activeTab = 'image')}
+            >Image only</button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'articles'}
+              class="modal__tab"
+              class:modal__tab--active={activeTab === 'articles'}
+              on:click={() => (activeTab = 'articles')}
+            >Image + article extraction</button>
+          </div>
+          <p class="modal__tab-hint">{workerHint}</p>
           <div class="modal__codeblock modal__codeblock--scroll">
             <pre>{workerSource}</pre>
-            <CopyButton text={workerSource} label="Copy worker source" />
+            <CopyButton text={workerSource} label={workerCopyLabel} />
           </div>
         </li>
 
@@ -327,5 +361,32 @@
   a {
     color: inherit;
     text-decoration: underline;
+  }
+  .modal__tabs {
+    display: flex;
+    gap: 0.25rem;
+    margin: 0.5rem 0 0.25rem;
+    border-bottom: 1px solid color-mix(in oklab, CanvasText 12%, transparent);
+  }
+  .modal__tab {
+    font: inherit;
+    padding: 0.35rem 0.75rem;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: none;
+    color: inherit;
+    cursor: pointer;
+    opacity: 0.7;
+  }
+  .modal__tab:hover { opacity: 1; }
+  .modal__tab--active {
+    opacity: 1;
+    font-weight: 600;
+    border-bottom-color: CanvasText;
+  }
+  .modal__tab-hint {
+    margin: 0.25rem 0 0;
+    font-size: 0.8rem;
+    opacity: 0.75;
   }
 </style>
