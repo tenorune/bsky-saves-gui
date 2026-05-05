@@ -1,5 +1,5 @@
-// Cloudflare Worker — CORS proxy for bsky-saves-gui article hydration.
-// Deploy instructions: see README.md in this directory.
+// Cloudflare Worker — CORS proxy for bsky-saves-gui image backup.
+// User-deployed (via the in-app setup guide) or operator-deployed.
 // Environment variables (set via `wrangler secret put`):
 //   ALLOWED_ORIGIN  — the Origin header value allowed to call this worker
 //                     (e.g. "https://saves.lightseed.net")
