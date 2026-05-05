@@ -5,6 +5,7 @@
 
 import { detectBackends } from './image-fetcher';
 import { probeConfiguredHelper } from './helper-client';
+import { loadProxyConfig } from './proxy-config';
 
 /**
  * Returns a description of the highest-priority available image backend, or
@@ -34,20 +35,24 @@ export interface ArticleBackendStatus {
  */
 export async function describeArticleBackend(): Promise<ArticleBackendStatus> {
   const status = await probeConfiguredHelper();
-  if (status.status !== 'available') {
+  if (status.status === 'available') {
+    if (!status.features.includes('extract-article')) {
+      return {
+        available: false,
+        description: `local helper (bsky-saves ${status.version}) does not advertise article extraction`,
+      };
+    }
     return {
-      available: false,
-      description: 'the local helper is not running',
+      available: true,
+      description: `the local helper (bsky-saves ${status.version})`,
     };
   }
-  if (!status.features.includes('extract-article')) {
-    return {
-      available: false,
-      description: `local helper (bsky-saves ${status.version}) does not advertise article extraction`,
-    };
+
+  // Helper absent — fall back to user worker if it supports articles.
+  const proxy = await loadProxyConfig();
+  if (proxy && proxy.supportsArticles) {
+    return { available: true, description: 'your custom Cloudflare Worker' };
   }
-  return {
-    available: true,
-    description: `the local helper (bsky-saves ${status.version})`,
-  };
+
+  return { available: false, description: 'the local helper is not running' };
 }

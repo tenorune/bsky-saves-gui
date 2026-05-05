@@ -91,4 +91,36 @@ describe('describeArticleBackend', () => {
     const result = await describeArticleBackend();
     expect(result.available).toBe(false);
   });
+
+  it('reports the user worker for articles when helper is absent and supportsArticles is true', async () => {
+    // Arrange: helper returns 404; proxy config supports articles.
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo) => {
+      const u = typeof input === 'string' ? input : (input as Request).url;
+      if (u.includes('/ping')) return new Response('nope', { status: 404 });
+      throw new Error(`unexpected fetch ${u}`);
+    }));
+    const { saveProxyConfig } = await import('./proxy-config');
+    await saveProxyConfig({ url: 'https://w.example/', sharedSecret: 's', supportsArticles: true });
+    const { describeArticleBackend } = await import('./describe-backend');
+    try {
+      const result = await describeArticleBackend();
+      expect(result.available).toBe(true);
+      expect(result.description).toMatch(/custom Cloudflare Worker/i);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('reports unavailable when helper is absent and worker is image-only', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('nope', { status: 404 })));
+    const { saveProxyConfig } = await import('./proxy-config');
+    await saveProxyConfig({ url: 'https://w.example/', sharedSecret: 's', supportsArticles: false });
+    const { describeArticleBackend } = await import('./describe-backend');
+    try {
+      const result = await describeArticleBackend();
+      expect(result.available).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
