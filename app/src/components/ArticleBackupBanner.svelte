@@ -62,7 +62,7 @@
   <div class="article-banner" role="region" aria-label="Article backup suggestion">
     <p class="article-banner__text">
       {articleCount} of your saves link to articles. Save the full article
-      text so it doesn't disappear if the source goes away. Save your own copy.
+      text so it doesn't disappear if the source goes away.
     </p>
     <p class="article-banner__sub">
       {#if articleBackendStatus.available}
@@ -70,22 +70,27 @@
       {:else}
         Article backup needs the local bsky-saves helper or a custom Cloudflare
         Worker with article extraction.
-        <button
-          type="button"
-          class="article-banner__inline-link"
-          on:click={() => (setupOpen = true)}
-        >Set up a backend</button>
       {/if}
     </p>
     <div class="article-banner__actions">
-      <button
-        type="button"
-        class="article-banner__primary"
-        on:click={handleSave}
-        disabled={busy}
-      >
-        Save my own copy
-      </button>
+      {#if articleBackendStatus.available}
+        <button
+          type="button"
+          class="article-banner__primary"
+          on:click={handleSave}
+          disabled={busy}
+        >
+          Save my own copy
+        </button>
+      {:else}
+        <button
+          type="button"
+          class="article-banner__primary"
+          on:click={() => (setupOpen = true)}
+        >
+          Set up a backend
+        </button>
+      {/if}
       <button type="button" class="article-banner__link" on:click={handleSnooze}>
         Remind me later
       </button>
@@ -167,14 +172,5 @@
     margin: 0;
     color: color-mix(in oklab, red 70%, CanvasText);
     font-weight: 500;
-  }
-  .article-banner__inline-link {
-    font: inherit;
-    background: none;
-    border: 0;
-    padding: 0;
-    color: inherit;
-    text-decoration: underline;
-    cursor: pointer;
   }
 </style>
