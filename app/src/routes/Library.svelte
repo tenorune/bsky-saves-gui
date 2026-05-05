@@ -10,10 +10,15 @@
   import BackupStatusRow from '../components/BackupStatusRow.svelte';
   import { rkeyOf } from '../reader/inventory-shape';
   import type { Save } from '../reader/inventory-shape';
+  import { restoreHydrationFromInventory } from '$lib/restore-hydration';
 
-  onMount(() => {
+  onMount(async () => {
     if (get(inventoryState).status === 'loading') {
-      void loadFromDb();
+      await loadFromDb();
+    }
+    const s = get(inventoryState);
+    if (s.status === 'ready') {
+      await restoreHydrationFromInventory(s.inventory);
     }
   });
 
