@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { describe, expect, it, beforeEach, vi, afterEach } from 'vitest';
 import 'fake-indexeddb/auto';
 import { get } from 'svelte/store';
 
@@ -114,5 +114,68 @@ describe('hydrateArticles cancellation', () => {
     expect(result.cancelled).toBe(true);
     const { articleHydration } = await import('./hydration-state');
     expect(get(articleHydration).status).toBe('cancelled');
+  });
+});
+
+describe('hydrateArticles default backend selection', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    const { clearInventory } = await import('./inventory-store');
+    await clearInventory();
+    const { resetArticleHydration } = await import('./hydration-state');
+    resetArticleHydration();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('uses worker fetcher when helper is absent and worker supportsArticles', async () => {
+    // The hydrator is given an inventory with one article URL.
+    // We do NOT pass a custom fetcher, so the default backend-selection logic runs.
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo) => {
+      const u = typeof input === 'string' ? input : (input as Request).url;
+      if (u.endsWith('/ping')) return new Response('nope', { status: 404 });
+      if (u.endsWith('/extract-article')) {
+        return new Response(JSON.stringify({
+          url: 'https://a.example/p', title: 'T', text: 'body', fetched_at: '2026-05-05T00:00:00Z',
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      throw new Error(`unexpected fetch ${u}`);
+    }));
+    const { saveProxyConfig } = await import('./proxy-config');
+    await saveProxyConfig({ url: 'https://w.example/', sharedSecret: 's', supportsArticles: true });
+    const inv = { saves: [{ embed: { url: 'https://a.example/p' } }] };
+    const { hydrateArticles } = await import('./article-hydrator');
+    const r = await hydrateArticles(inv);
+    expect(r.fetched).toBe(1);
+    expect(r.failed).toBe(0);
+  });
+
+  it('flips supportsArticles to false on runtime 404 from worker', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo) => {
+      const u = typeof input === 'string' ? input : (input as Request).url;
+      if (u.endsWith('/ping')) return new Response('nope', { status: 404 });
+      if (u.endsWith('/extract-article')) return new Response('not found', { status: 404 });
+      throw new Error(`unexpected fetch ${u}`);
+    }));
+    const { saveProxyConfig, loadProxyConfig } = await import('./proxy-config');
+    await saveProxyConfig({ url: 'https://w.example/', sharedSecret: 's', supportsArticles: true });
+    const inv = { saves: [{ embed: { url: 'https://a.example/p' } }, { embed: { url: 'https://a.example/q' } }] };
+    const { hydrateArticles } = await import('./article-hydrator');
+    const r = await hydrateArticles(inv);
+    expect(r.failed).toBe(2);
+    const updated = await loadProxyConfig();
+    expect(updated?.supportsArticles).toBe(false);
+  });
+
+  it('fails with a clear note when neither helper nor worker is available', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('nope', { status: 404 })));
+    const { clearProxyConfig } = await import('./proxy-config');
+    await clearProxyConfig();
+    const inv = { saves: [{ embed: { url: 'https://a.example/p' } }] };
+    const { hydrateArticles } = await import('./article-hydrator');
+    const r = await hydrateArticles(inv);
+    expect(r.failed).toBe(1);
   });
 });

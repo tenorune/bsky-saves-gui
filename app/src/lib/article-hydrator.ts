@@ -7,10 +7,53 @@
 // bsky-saves' CLI shape and the existing parser's article synthesis.
 
 import { extractArticleUrls } from './extract-article-urls';
-import { extractArticleViaHelper, type ExtractedArticle } from './helper-client';
+import { extractArticleViaHelper, type ExtractedArticle, pingHelper } from './helper-client';
 import { config } from './config';
 import { saveInventory } from './inventory-store';
 import { articleHydration, type HydrationFailure } from './hydration-state';
+import { loadProxyConfig, saveProxyConfig } from './proxy-config';
+import { extractArticleViaWorker, WorkerNoArticlesError } from './user-worker-client';
+
+function makeDefaultFetcher(): (url: string) => Promise<ExtractedArticle> {
+  // Cache the backend choice for the duration of the run. Probe lazily on first
+  // call so unit tests that don't actually fetch still see the right shape.
+  let resolved: 'helper' | 'worker' | 'none' | undefined;
+  let proxy: { url: string; sharedSecret: string; supportsArticles: boolean } | null = null;
+
+  async function resolveBackend() {
+    if (resolved !== undefined) return;
+    if (await pingHelper(config.helperOrigin)) {
+      resolved = 'helper';
+      return;
+    }
+    proxy = await loadProxyConfig();
+    if (proxy && proxy.supportsArticles) {
+      resolved = 'worker';
+      return;
+    }
+    resolved = 'none';
+  }
+
+  return async (url: string) => {
+    await resolveBackend();
+    if (resolved === 'helper') {
+      return extractArticleViaHelper(config.helperOrigin, url);
+    }
+    if (resolved === 'worker' && proxy) {
+      try {
+        return await extractArticleViaWorker(proxy, url);
+      } catch (err) {
+        if (err instanceof WorkerNoArticlesError) {
+          await saveProxyConfig({ ...proxy, supportsArticles: false });
+          resolved = 'none';
+          throw new Error('worker no longer supports articles — redeploy with the article-enabled bundle');
+        }
+        throw err;
+      }
+    }
+    throw new Error('no article backend available — start the local helper or enable article extraction on your custom worker');
+  };
+}
 
 export interface HydrateArticleResult {
   readonly fetched: number;
@@ -50,8 +93,7 @@ export async function hydrateArticles(
   inventory: unknown,
   options: HydrateArticleOptions = {},
 ): Promise<HydrateArticleResult> {
-  const fetcher =
-    options.fetcher ?? ((url: string) => extractArticleViaHelper(config.helperOrigin, url));
+  const fetcher = options.fetcher ?? makeDefaultFetcher();
   const signal = options.signal;
 
   const allUrls: string[] = [];

@@ -57,6 +57,22 @@ export function probeConfiguredHelper(): Promise<HelperStatus> {
 }
 
 /**
+ * Lightweight reachability check: returns true if the helper's /ping responds
+ * with any 2xx status. Returns false on any non-2xx or network error.
+ *
+ * Never throws.
+ */
+export async function pingHelper(origin: string): Promise<boolean> {
+  const base = origin.replace(/\/+$/, '');
+  try {
+    const res = await fetch(`${base}/ping`);
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Fetch a single image via the local helper's POST /fetch-image endpoint.
  * The helper does the outbound HTTP from the user's machine and streams the
  * raw bytes back. Throws on non-2xx response or network error.
