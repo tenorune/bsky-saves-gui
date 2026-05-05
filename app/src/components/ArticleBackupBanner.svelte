@@ -8,6 +8,7 @@
   } from '$lib/backup-prefs';
   import { articleHydration } from '$lib/hydration-state';
   import { startArticleBackup } from '$lib/start-article-backup';
+  import { describeArticleBackend } from '$lib/describe-backend';
 
   /** Inventory the banner observes for article content. Required. */
   export let inventory: unknown;
@@ -15,9 +16,14 @@
   let prefsAllow = false; // false until we've loaded prefs once
   let busy = false;
   let startError = '';
+  let articleBackendStatus: { available: boolean; description: string } = {
+    available: false,
+    description: 'the local helper is not running',
+  };
 
   onMount(async () => {
     prefsAllow = await shouldShowBackupBanner('articles');
+    articleBackendStatus = await describeArticleBackend();
   });
 
   async function handleSave() {
@@ -56,7 +62,11 @@
       text so it doesn't disappear if the source goes away. Set up backup →
     </p>
     <p class="article-banner__sub">
-      Article backup needs the local bsky-saves helper.
+      {#if articleBackendStatus.available}
+        Will use {articleBackendStatus.description}.
+      {:else}
+        Article backup needs the local bsky-saves helper — currently {articleBackendStatus.description}.
+      {/if}
     </p>
     <div class="article-banner__actions">
       <button

@@ -8,6 +8,7 @@
   } from '$lib/backup-prefs';
   import { imageHydration } from '$lib/hydration-state';
   import { startImageBackup } from '$lib/start-image-backup';
+  import { describeAvailableImageBackend } from '$lib/describe-backend';
 
   /** Inventory the banner observes for image content. Required. */
   export let inventory: unknown;
@@ -15,9 +16,11 @@
   let prefsAllow = false; // false until we've loaded prefs once
   let busy = false;
   let startError = '';
+  let backendDesc: string | null = null;
 
   onMount(async () => {
     prefsAllow = await shouldShowBackupBanner('images');
+    backendDesc = await describeAvailableImageBackend();
   });
 
   async function handleSave() {
@@ -54,6 +57,13 @@
     <p class="backup-banner__text">
       {imageCount} of your saves include images. They'll work as long as Bluesky keeps
       them online. Save your own copy →
+    </p>
+    <p class="backup-banner__sub">
+      {#if backendDesc}
+        Will use {backendDesc}.
+      {:else}
+        No backup method is available — set up the local helper or a custom Cloudflare Worker first (Settings → Backup → Advanced).
+      {/if}
     </p>
     <div class="backup-banner__actions">
       <button
@@ -127,6 +137,12 @@
   }
   .backup-banner__link:hover {
     opacity: 1;
+  }
+  .backup-banner__sub {
+    flex-basis: 100%;
+    margin: 0;
+    font-size: 0.85rem;
+    opacity: 0.75;
   }
   .backup-banner__error {
     flex-basis: 100%;
