@@ -5,12 +5,44 @@
   // feature that bundles the file content as a string. Path is relative to
   // this file (app/src/components/) → up three → into templates/cf-worker.
   import workerSource from '../../../templates/cf-worker/worker.js?raw';
+  import { onMount } from 'svelte';
+  import { loadProxyConfig, saveProxyConfig, clearProxyConfig } from '$lib/proxy-config';
 
   export let open = false;
 
-  const dispatch = createEventDispatcher<{ close: void }>();
+  const dispatch = createEventDispatcher<{ close: void; change: void }>();
 
   const SECRET_GEN = `crypto.getRandomValues(new Uint8Array(32)).reduce((a,b)=>a+b.toString(16).padStart(2,'0'),'')`;
+
+  let workerUrl = '';
+  let workerSecret = '';
+  let saveStatus = '';
+
+  onMount(async () => {
+    const cfg = await loadProxyConfig();
+    if (cfg) {
+      workerUrl = cfg.url;
+      workerSecret = cfg.sharedSecret;
+    }
+  });
+
+  async function handleSaveWorker() {
+    if (!workerUrl || !workerSecret) {
+      saveStatus = 'Both URL and shared secret are required.';
+      return;
+    }
+    await saveProxyConfig({ url: workerUrl, sharedSecret: workerSecret });
+    saveStatus = 'Saved.';
+    dispatch('change');
+  }
+
+  async function handleClearWorker() {
+    await clearProxyConfig();
+    workerUrl = '';
+    workerSecret = '';
+    saveStatus = 'Cleared.';
+    dispatch('change');
+  }
 
   $: allowedOrigin = typeof window !== 'undefined' ? window.location.origin : '';
 
@@ -45,6 +77,17 @@
           ✕
         </button>
       </header>
+
+      <p class="modal__step0">
+        <strong>Prefer the command line?</strong>
+        See the
+        <a
+          href="https://github.com/tenorune/bsky-saves-gui/blob/main/templates/cf-worker/README.md"
+          target="_blank"
+          rel="noopener noreferrer"
+        >cf-worker README</a>
+        for <code>wrangler deploy</code> instructions.
+      </p>
 
       <ol class="modal__steps">
         <li>
@@ -104,9 +147,24 @@
         </li>
 
         <li>
-          <strong>Paste below.</strong>
+          <strong>Paste here.</strong>
           Put the URL into <em>Proxy URL</em> and the same hex string into
           <em>Shared secret</em>. Click Save.
+          <div class="modal__form">
+            <label class="modal__field">
+              Proxy URL
+              <input type="url" bind:value={workerUrl} placeholder="https://your-worker.workers.dev" />
+            </label>
+            <label class="modal__field">
+              Shared secret
+              <input type="password" bind:value={workerSecret} />
+            </label>
+            <div class="modal__form-actions">
+              <button type="button" on:click={handleSaveWorker}>Save</button>
+              <button type="button" on:click={handleClearWorker}>Clear</button>
+              {#if saveStatus}<span class="modal__form-status">{saveStatus}</span>{/if}
+            </div>
+          </div>
         </li>
       </ol>
 
@@ -202,6 +260,53 @@
   .modal__steps li :global(.copy-button) {
     margin-left: 0.4rem;
     vertical-align: middle;
+  }
+  .modal__step0 {
+    margin: 0 0 0.75rem;
+    padding: 0.5rem 0.75rem;
+    background: color-mix(in oklab, CanvasText 4%, Canvas);
+    border-radius: 6px;
+    font-size: 0.85rem;
+  }
+  .modal__form {
+    margin-top: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .modal__field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+  }
+  .modal__field input {
+    font: inherit;
+    padding: 0.4rem 0.6rem;
+    border: 1px solid color-mix(in oklab, CanvasText 20%, transparent);
+    border-radius: 4px;
+    background: Canvas;
+    color: CanvasText;
+  }
+  .modal__form-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .modal__form-actions button {
+    font: inherit;
+    padding: 0.35rem 0.85rem;
+    border: 1px solid color-mix(in oklab, CanvasText 20%, transparent);
+    border-radius: 4px;
+    background: Canvas;
+    color: CanvasText;
+    cursor: pointer;
+  }
+  .modal__form-status {
+    font-size: 0.85rem;
+    opacity: 0.8;
   }
   .modal__footer {
     display: flex;
