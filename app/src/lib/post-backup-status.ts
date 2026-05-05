@@ -15,6 +15,7 @@ export interface PostBackupStatus {
   hydrating: boolean;
   summary: string;
   anyFailed: boolean;
+  link: 'library' | 'setup' | null;
 }
 
 export interface PostBackupStatusInput {
@@ -24,6 +25,7 @@ export interface PostBackupStatusInput {
   savedImageUrls: ReadonlySet<string>;
   imageHydration: HydrationProgress;
   articleHydration: HydrationProgress;
+  setupAvailable: boolean;
 }
 
 function findFailureReason(
@@ -98,32 +100,39 @@ export function getPostBackupStatus(
   const anyFailed =
     images.failed > 0 || (article !== null && article.state === 'failed');
 
-  const summary = (() => {
-    if (!hasAssets) return '';
+  // An image is "outstanding" if it has not yet been saved or failed.
+  const outstandingImages =
+    images.total > 0 && images.saved + images.failed < images.total;
+  const articlePending = article !== null && article.state === 'pending';
+  const allPending =
+    (images.total === 0 || outstandingImages) &&
+    (article === null || articlePending) &&
+    images.saved === 0;
 
-    // An image is "outstanding" if it has not yet been saved or failed.
-    const outstandingImages =
-      images.total > 0 && images.saved + images.failed < images.total;
-    const articlePending = article !== null && article.state === 'pending';
-    const allPending =
-      (images.total === 0 || outstandingImages) &&
-      (article === null || articlePending) &&
-      images.saved === 0;
+  let summary = '';
+  let link: 'library' | 'setup' | null = null;
 
-    if (allPending && !hydrating) return 'Not backed up yet.';
-    if (hydrating && (outstandingImages || articlePending)) return 'Backing up…';
-
+  if (!hasAssets) {
+    summary = '';
+  } else if (allPending && !hydrating) {
+    if (input.setupAvailable) {
+      summary = 'Not yet saved — go to Library to save.';
+      link = 'library';
+    } else {
+      summary = 'Not yet saved — set up a backend.';
+      link = 'setup';
+    }
+  } else if (hydrating && (outstandingImages || articlePending)) {
+    summary = 'Backing up…';
+  } else {
     const parts: string[] = [];
-    if (images.total > 0) {
-      parts.push(imagesPart(images.total, images.saved, images.failed));
+    if (images.total > 0) parts.push(imagesPart(images.total, images.saved, images.failed));
+    if (article !== null) parts.push(articlePart(article));
+    summary = parts.join(' · ') + '.';
+    if (summary.length > 0) {
+      summary = summary.charAt(0).toUpperCase() + summary.slice(1);
     }
-    if (article !== null) {
-      parts.push(articlePart(article));
-    }
-    const joined = parts.join(' · ') + '.';
-    // Sentence-case: capitalize the first character.
-    return joined.charAt(0).toUpperCase() + joined.slice(1);
-  })();
+  }
 
-  return { hasAssets, images, article, hydrating, summary, anyFailed };
+  return { hasAssets, images, article, hydrating, summary, anyFailed, link };
 }
