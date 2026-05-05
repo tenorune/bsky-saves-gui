@@ -18,6 +18,7 @@
   } from '$lib/backup-prefs';
   import { config } from '$lib/config';
   import { detectBackends, type Backend } from '$lib/image-fetcher';
+  import { describeAvailableImageBackend, describeArticleBackend } from '$lib/describe-backend';
   import { cancelImageBackup } from '$lib/start-image-backup';
   import { startArticleBackup, cancelArticleBackup } from '$lib/start-article-backup';
   import { clearImageBlobs } from '$lib/image-store';
@@ -33,6 +34,11 @@
 
   let backupPrefs: BackupPrefs | null = null;
   let detectedBackends: Backend[] = [];
+  let availableImageBackendDesc: string | null = null;
+  let articleBackendStatus: { available: boolean; description: string } = {
+    available: false,
+    description: 'the local helper is not running',
+  };
   let backupAdvancedOpen = false;
   let workerUrl = '';
   let workerSecret = '';
@@ -40,6 +46,8 @@
   onMount(async () => {
     backupPrefs = await loadBackupPrefs();
     detectedBackends = await detectBackends();
+    availableImageBackendDesc = await describeAvailableImageBackend();
+    articleBackendStatus = await describeArticleBackend();
     const cfg = await loadProxyConfig();
     if (cfg) {
       workerUrl = cfg.url;
@@ -73,6 +81,7 @@
     await setOperatorProxyOptOut(checked);
     await reloadBackupPrefs();
     detectedBackends = await detectBackends();
+    availableImageBackendDesc = await describeAvailableImageBackend();
   }
 
   $: imagesEnabled = backupPrefs?.images.enabled ?? false;
@@ -93,13 +102,20 @@
       ? `using local helper (bsky-saves ${helperBackend.version})`
       : workerBackend
         ? 'using your custom Cloudflare Worker'
-        : 'no backend reachable right now'
-    : 'not set up';
+        : detectedBackends.find((b) => b.kind === 'operator-proxy')
+          ? "using the operator's image proxy"
+          : 'no backend reachable right now'
+    : availableImageBackendDesc !== null
+      ? `not yet enabled — would use ${availableImageBackendDesc}`
+      : 'not set up — no backend available';
+
   $: articlesBackendLabel = articlesEnabled
     ? helperBackend
       ? `using local helper (bsky-saves ${helperBackend.version})`
       : 'no helper running'
-    : 'not set up';
+    : articleBackendStatus.available
+      ? `not yet enabled — would use ${articleBackendStatus.description}`
+      : `not set up — ${articleBackendStatus.description}`;
 
   async function reloadBackupPrefs() {
     backupPrefs = await loadBackupPrefs();
@@ -121,6 +137,7 @@
     if (!workerUrl || !workerSecret) return;
     await saveProxyConfig({ url: workerUrl, sharedSecret: workerSecret });
     detectedBackends = await detectBackends();
+    availableImageBackendDesc = await describeAvailableImageBackend();
     status = 'Worker config saved.';
   }
 
@@ -129,6 +146,7 @@
     workerUrl = '';
     workerSecret = '';
     detectedBackends = await detectBackends();
+    availableImageBackendDesc = await describeAvailableImageBackend();
     status = 'Worker config cleared.';
   }
 
