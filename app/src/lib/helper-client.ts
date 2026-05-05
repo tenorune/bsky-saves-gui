@@ -118,12 +118,14 @@ function isExtractedArticle(v: unknown): v is ExtractedArticle {
 export async function extractArticleViaHelper(
   origin: string,
   articleUrl: string,
+  options: { signal?: AbortSignal } = {},
 ): Promise<ExtractedArticle> {
   const base = origin.replace(/\/+$/, '');
   const res = await fetch(`${base}/extract-article`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url: articleUrl }),
+    signal: options.signal,
   });
   if (!res.ok) {
     throw new Error(`helper /extract-article returned ${res.status}`);

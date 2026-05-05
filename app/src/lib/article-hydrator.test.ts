@@ -117,6 +117,58 @@ describe('hydrateArticles cancellation', () => {
   });
 });
 
+describe('hydrateArticles aborts in-flight fetch when signal fires', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    const { clearInventory } = await import('./inventory-store');
+    await clearInventory();
+    const { resetArticleHydration } = await import('./hydration-state');
+    resetArticleHydration();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('aborts the in-flight fetch when signal is triggered', async () => {
+    // Configure a proxy that supportsArticles so makeDefaultFetcher picks the
+    // worker path (helper /ping returns 404 immediately, keeping the test fast).
+    const { saveProxyConfig } = await import('./proxy-config');
+    await saveProxyConfig({ url: 'https://w.example/', sharedSecret: 's', supportsArticles: true });
+
+    let abortedDuringFetch = false;
+    const fetchMock = vi.fn(async (input: RequestInfo, init?: RequestInit) => {
+      const u = typeof input === 'string' ? input : (input as Request).url;
+      // Helper probe: return 404 quickly so the worker path is chosen.
+      if (u.endsWith('/ping')) return new Response('nope', { status: 404 });
+      // Mimic a slow upstream that respects AbortSignal.
+      const sig = init?.signal;
+      return new Promise<Response>((_resolve, reject) => {
+        sig?.addEventListener('abort', () => {
+          abortedDuringFetch = true;
+          reject(new DOMException('aborted', 'AbortError'));
+        });
+        // never resolves unless aborted
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { hydrateArticles } = await import('./article-hydrator');
+
+    const inv = { saves: [{ embed: { url: 'https://a.example/p' } }] };
+    const ctrl = new AbortController();
+    const promise = hydrateArticles(inv, { signal: ctrl.signal });
+
+    // Give the fetch a tick to start, then abort.
+    await new Promise((r) => setTimeout(r, 5));
+    ctrl.abort();
+
+    const r = await promise;
+    expect(r.cancelled).toBe(true);
+    expect(abortedDuringFetch).toBe(true);
+    vi.unstubAllGlobals();
+  });
+});
+
 describe('hydrateArticles default backend selection', () => {
   beforeEach(async () => {
     vi.resetModules();

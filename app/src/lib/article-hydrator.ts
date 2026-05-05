@@ -14,7 +14,7 @@ import { articleHydration, type HydrationFailure } from './hydration-state';
 import { loadProxyConfig, saveProxyConfig } from './proxy-config';
 import { extractArticleViaWorker, WorkerNoArticlesError } from './user-worker-client';
 
-function makeDefaultFetcher(): (url: string) => Promise<ExtractedArticle> {
+function makeDefaultFetcher(signal: AbortSignal | undefined): (url: string) => Promise<ExtractedArticle> {
   // Cache the backend choice for the duration of the run. Probe lazily on first
   // call so unit tests that don't actually fetch still see the right shape.
   let resolved: 'helper' | 'worker' | 'none' | undefined;
@@ -37,11 +37,11 @@ function makeDefaultFetcher(): (url: string) => Promise<ExtractedArticle> {
   return async (url: string) => {
     await resolveBackend();
     if (resolved === 'helper') {
-      return extractArticleViaHelper(config.helperOrigin, url);
+      return extractArticleViaHelper(config.helperOrigin, url, { signal });
     }
     if (resolved === 'worker' && proxy) {
       try {
-        return await extractArticleViaWorker(proxy, url);
+        return await extractArticleViaWorker(proxy, url, { signal });
       } catch (err) {
         if (err instanceof WorkerNoArticlesError) {
           await saveProxyConfig({ ...proxy, supportsArticles: false });
@@ -93,8 +93,8 @@ export async function hydrateArticles(
   inventory: unknown,
   options: HydrateArticleOptions = {},
 ): Promise<HydrateArticleResult> {
-  const fetcher = options.fetcher ?? makeDefaultFetcher();
   const signal = options.signal;
+  const fetcher = options.fetcher ?? makeDefaultFetcher(signal);
 
   const allUrls: string[] = [];
   if (inventory && typeof inventory === 'object') {
@@ -150,6 +150,11 @@ export async function hydrateArticles(
       fetched++;
       articleHydration.update((s) => ({ ...s, fetched: s.fetched + 1 }));
     } catch (err) {
+      // AbortError: the user clicked Stop. Fall through; the next iteration's
+      // signal.aborted check will exit cleanly.
+      if (err instanceof Error && err.name === 'AbortError') {
+        continue;
+      }
       const failure: HydrationFailure = { url, reason: reasonOf(err) };
       failed++;
       articleHydration.update((s) => ({
@@ -158,6 +163,18 @@ export async function hydrateArticles(
         failures: [...s.failures, failure],
       }));
     }
+  }
+
+  // If the signal fired mid-fetch the AbortError catch above did a `continue`
+  // which exits the loop. Detect that and return as cancelled.
+  if (signal?.aborted) {
+    articleHydration.update((s) => ({ ...s, status: 'cancelled' }));
+    try {
+      await saveInventory(inventory);
+    } catch {
+      // best-effort persist
+    }
+    return { fetched, skipped, failed, cancelled: true };
   }
 
   // Persist the mutated inventory once at the end of the run.

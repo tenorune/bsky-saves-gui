@@ -109,6 +109,7 @@ function isExtractArticleResponse(v: unknown): v is ExtractArticleResponse {
 export async function extractArticleViaWorker(
   config: ProxyConfig,
   articleUrl: string,
+  options: { signal?: AbortSignal } = {},
 ): Promise<ExtractArticleResponse> {
   const base = config.url.replace(/\/+$/, '');
   const res = await fetch(`${base}/extract-article`, {
@@ -118,6 +119,7 @@ export async function extractArticleViaWorker(
       'X-Proxy-Secret': config.sharedSecret,
     },
     body: JSON.stringify({ url: articleUrl }),
+    signal: options.signal,
   });
   if (res.status === 404) {
     throw new WorkerNoArticlesError();
