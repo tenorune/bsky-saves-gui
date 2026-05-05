@@ -167,41 +167,82 @@ describe('extractArticleViaWorker', () => {
 });
 
 describe('probeWorkerCapabilities', () => {
-  it('returns true when /extract-article is in the endpoints list', async () => {
+  it('returns has-articles when /extract-article is in endpoints', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ endpoints: ['/fetch', '/extract-article'] }), {
       status: 200, headers: { 'Content-Type': 'application/json' },
     })));
     try {
-      expect(await probeWorkerCapabilities('https://w.example/', 's')).toBe(true);
+      expect(await probeWorkerCapabilities('https://w.example/', 's')).toEqual({ kind: 'has-articles' });
     } finally {
       vi.unstubAllGlobals();
     }
   });
 
-  it('returns false when only /fetch is listed', async () => {
+  it('returns image-only when only /fetch is listed', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ endpoints: ['/fetch'] }), {
       status: 200, headers: { 'Content-Type': 'application/json' },
     })));
     try {
-      expect(await probeWorkerCapabilities('https://w.example/', 's')).toBe(false);
+      expect(await probeWorkerCapabilities('https://w.example/', 's')).toEqual({ kind: 'image-only' });
     } finally {
       vi.unstubAllGlobals();
     }
   });
 
-  it('returns false when probe returns 404 (old worker, no /capabilities)', async () => {
+  it('returns unauthorized on 401', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('nope', { status: 401 })));
+    try {
+      expect(await probeWorkerCapabilities('https://w.example/', 's')).toEqual({ kind: 'unauthorized' });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('returns origin-blocked on 403', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('nope', { status: 403 })));
+    try {
+      expect(await probeWorkerCapabilities('https://w.example/', 's')).toEqual({ kind: 'origin-blocked' });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('returns no-capabilities-endpoint on 404', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('nope', { status: 404 })));
     try {
-      expect(await probeWorkerCapabilities('https://w.example/', 's')).toBe(false);
+      expect(await probeWorkerCapabilities('https://w.example/', 's')).toEqual({ kind: 'no-capabilities-endpoint' });
     } finally {
       vi.unstubAllGlobals();
     }
   });
 
-  it('returns false when probe network call fails', async () => {
+  it('returns unreachable on a network error', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('network down'); }));
     try {
-      expect(await probeWorkerCapabilities('https://w.example/', 's')).toBe(false);
+      const r = await probeWorkerCapabilities('https://w.example/', 's');
+      expect(r.kind).toBe('unreachable');
+      if (r.kind === 'unreachable') expect(r.reason).toMatch(/network down/);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('returns unreachable on 5xx', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('boom', { status: 502 })));
+    try {
+      const r = await probeWorkerCapabilities('https://w.example/', 's');
+      expect(r.kind).toBe('unreachable');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('returns image-only when 200 OK but body is malformed', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ wrong: 'shape' }), {
+      status: 200, headers: { 'Content-Type': 'application/json' },
+    })));
+    try {
+      expect(await probeWorkerCapabilities('https://w.example/', 's')).toEqual({ kind: 'image-only' });
     } finally {
       vi.unstubAllGlobals();
     }

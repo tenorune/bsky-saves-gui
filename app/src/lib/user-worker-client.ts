@@ -142,26 +142,56 @@ export async function extractArticleViaWorker(
 }
 
 /**
+ * Result of probing a user worker's GET /capabilities endpoint. The caller
+ * uses the kind to surface specific guidance:
+ *   - has-articles: the worker advertises POST /extract-article.
+ *   - image-only: the worker is reachable but only advertises /fetch.
+ *   - unauthorized: 401 — wrong shared secret.
+ *   - origin-blocked: 403 — ALLOWED_ORIGIN doesn't match the GUI's origin.
+ *   - no-capabilities-endpoint: 404 — old worker (predates GET /capabilities).
+ *   - unreachable: network error, CORS preflight failure, 5xx, etc.
+ */
+export type ProbeResult =
+  | { kind: 'has-articles' }
+  | { kind: 'image-only' }
+  | { kind: 'unauthorized' }
+  | { kind: 'origin-blocked' }
+  | { kind: 'no-capabilities-endpoint' }
+  | { kind: 'unreachable'; reason: string };
+
+/**
  * Probe the worker's GET /capabilities endpoint.
- * Returns true if the response lists "/extract-article". Returns false on
- * any failure (404, non-2xx, malformed body, network error) — the caller
- * conservatively treats anything ambiguous as "image-only worker".
+ *
+ * Never throws — every failure mode is reported via the `kind` discriminator.
  */
 export async function probeWorkerCapabilities(
   url: string,
   sharedSecret: string,
-): Promise<boolean> {
+): Promise<ProbeResult> {
   const base = url.replace(/\/+$/, '');
+  let res: Response;
   try {
-    const res = await fetch(`${base}/capabilities`, {
+    res = await fetch(`${base}/capabilities`, {
       method: 'GET',
       headers: { 'X-Proxy-Secret': sharedSecret },
     });
-    if (!res.ok) return false;
-    const body = (await res.json()) as { endpoints?: unknown };
-    if (!Array.isArray(body.endpoints)) return false;
-    return body.endpoints.includes('/extract-article');
-  } catch {
-    return false;
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    return { kind: 'unreachable', reason };
   }
+  if (res.status === 401) return { kind: 'unauthorized' };
+  if (res.status === 403) return { kind: 'origin-blocked' };
+  if (res.status === 404) return { kind: 'no-capabilities-endpoint' };
+  if (!res.ok) {
+    return { kind: 'unreachable', reason: `HTTP ${res.status}` };
+  }
+  let body: { endpoints?: unknown };
+  try {
+    body = (await res.json()) as { endpoints?: unknown };
+  } catch {
+    return { kind: 'image-only' };
+  }
+  if (!Array.isArray(body.endpoints)) return { kind: 'image-only' };
+  if (body.endpoints.includes('/extract-article')) return { kind: 'has-articles' };
+  return { kind: 'image-only' };
 }
