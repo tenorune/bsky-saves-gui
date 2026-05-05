@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { extractImageUrls } from '$lib/extract-image-urls';
   import {
     shouldShowBackupBanner,
@@ -9,6 +9,7 @@
   import { imageHydration } from '$lib/hydration-state';
   import { startImageBackup } from '$lib/start-image-backup';
   import { describeAvailableImageBackend } from '$lib/describe-backend';
+  import { imageBannerVisible } from '$lib/backup-banner-state';
 
   /** Inventory the banner observes for image content. Required. */
   export let inventory: unknown;
@@ -21,6 +22,10 @@
   onMount(async () => {
     prefsAllow = await shouldShowBackupBanner('images');
     backendDesc = await describeAvailableImageBackend();
+  });
+
+  onDestroy(() => {
+    imageBannerVisible.set(false);
   });
 
   async function handleSave() {
@@ -50,6 +55,7 @@
   $: imageCount = extractImageUrls(inventory).length;
   $: status = $imageHydration.status;
   $: visible = prefsAllow && imageCount > 0 && status === 'idle';
+  $: imageBannerVisible.set(visible);
 </script>
 
 {#if visible}
