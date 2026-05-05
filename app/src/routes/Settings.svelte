@@ -352,15 +352,16 @@
       >
         <summary>Advanced backup options</summary>
 
-        <p class="advanced-heading"><strong>Custom Cloudflare Worker proxy</strong></p>
-        <p class="help">
-          Used as a fallback when no local helper is running. The setup is
-          one-time, takes about 10 minutes, and runs on Cloudflare's free tier.
-        </p>
+        <div class="card advanced">
+          <p class="advanced-heading"><strong>Custom Cloudflare Worker proxy</strong></p>
+          <p class="help">
+            Used as a fallback when no local helper is running. The setup is
+            one-time, takes about 10 minutes, and runs on Cloudflare's free tier.
+          </p>
 
-        <button type="button" class="setup-guide-trigger" on:click={() => (setupModalOpen = true)}>
-          {customProxyConfigured ? 'Edit setup' : 'Setup guide'}
-        </button>
+          <button type="button" class="setup-guide-trigger" on:click={() => (setupModalOpen = true)}>
+            {customProxyConfigured ? 'Edit setup' : 'Setup guide'}
+          </button>
 
         {#if operatorProxyConfigured}
           <p class="advanced-heading advanced-heading--spaced"><strong>Operator's image proxy</strong></p>
@@ -387,6 +388,7 @@
             <span>Don't use the operator's proxy</span>
           </label>
         {/if}
+        </div>
       </details>
     </section>
   {/if}
@@ -498,12 +500,20 @@
   .advanced-toggle > summary {
     margin-bottom: 0.75rem;
   }
+  .card.advanced {
+    border: 1px solid color-mix(in oklab, CanvasText 15%, transparent);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+  }
   .advanced-heading {
-    margin: 0 0 0.25rem;
+    margin: 0 0 0.5rem;
     font-size: 0.9rem;
   }
   .advanced-heading--spaced {
-    margin-top: 1rem;
+    margin-top: 1.25rem;
+  }
+  .card.advanced .help {
+    margin-top: 0;
   }
   .status-ok {
     color: color-mix(in oklab, green 70%, CanvasText);

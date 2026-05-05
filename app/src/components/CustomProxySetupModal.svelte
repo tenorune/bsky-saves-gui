@@ -231,6 +231,9 @@
     margin: 0.5rem 0 0 1rem;
     padding: 0;
   }
+  .modal__steps ul li {
+    margin-bottom: 0.15rem;
+  }
   .modal__codeblock {
     position: relative;
     margin: 0.5rem 0;
