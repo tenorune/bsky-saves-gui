@@ -256,7 +256,7 @@
         <strong>Images:</strong>
         <span>{imagesBackendLabel}</span>
         {#if imagesEnabled}
-          <button type="button" on:click={handleDisableImages}>Disable</button>
+          <button type="button" class="link-button" on:click={handleDisableImages}>Disable</button>
         {/if}
       </div>
 
@@ -273,7 +273,7 @@
         <strong>Articles:</strong>
         <span>{articlesBackendLabel}</span>
         {#if articlesEnabled}
-          <button type="button" on:click={handleDisableArticles}>Disable</button>
+          <button type="button" class="link-button" on:click={handleDisableArticles}>Disable</button>
         {:else}
           <button type="button" on:click={handleSetUpArticles}>Set up article backup</button>
         {/if}
@@ -363,6 +363,31 @@
     gap: 0.25rem;
     margin-bottom: 0.5rem;
     font-weight: 500;
+  }
+  /* Inline checkboxes for "Don't ask me" toggles: input first, then small label. */
+  .settings-section label.checkbox {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0.25rem 0 0.5rem;
+    font-weight: normal;
+    font-size: 0.875rem;
+    opacity: 0.85;
+  }
+  /* Inline link-style button for in-row actions like "Disable". */
+  .link-button {
+    background: none;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    color: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+    font: inherit;
+    opacity: 0.85;
+  }
+  .link-button:hover {
+    opacity: 1;
   }
   .settings-section input[type='url'],
   .settings-section input[type='password'] {
