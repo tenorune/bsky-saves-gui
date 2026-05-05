@@ -13,7 +13,14 @@ export default defineConfig(({ mode }) => {
     root: projectRoot,
     publicDir: resolve(projectRoot, 'app/public'),
     define: {
-      __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+      __BUILD_TIME__: JSON.stringify(
+        new Intl.DateTimeFormat('sv-SE', {
+          timeZone: 'Europe/Berlin',
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit',
+          timeZoneName: 'short',
+        }).format(new Date()),
+      ),
     },
     build: {
       outDir: 'dist',
