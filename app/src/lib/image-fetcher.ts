@@ -2,16 +2,16 @@
 // available and exposes fetchImage(url), which picks the highest-priority
 // backend and delegates.
 //
-// Priority: helper > user-worker. The operator-hosted proxy is not yet
-// implemented; it will be added in a later plan once the deployment story is
-// settled.
+// Priority: helper > user-worker > operator-proxy. The operator-hosted proxy
+// is a build-time-configured fallback that uses the same cf-worker template
+// as the user-worker, so dispatch goes through the same client.
 
 import { probeConfiguredHelper, fetchImageViaHelper } from './helper-client';
 import { loadProxyConfig, type ProxyConfig } from './proxy-config';
 import { fetchImageViaUserWorker } from './user-worker-client';
 import { config } from './config';
 
-export type BackendKind = 'helper' | 'user-worker';
+export type BackendKind = 'helper' | 'user-worker' | 'operator-proxy';
 
 export interface HelperBackend {
   readonly kind: 'helper';
@@ -24,7 +24,12 @@ export interface UserWorkerBackend {
   readonly config: ProxyConfig;
 }
 
-export type Backend = HelperBackend | UserWorkerBackend;
+export interface OperatorProxyBackend {
+  readonly kind: 'operator-proxy';
+  readonly config: ProxyConfig;
+}
+
+export type Backend = HelperBackend | UserWorkerBackend | OperatorProxyBackend;
 
 export class NoBackendsAvailableError extends Error {
   constructor() {
@@ -54,6 +59,18 @@ export async function detectBackends(): Promise<Backend[]> {
   if (proxyCfg !== null && proxyCfg.url !== '' && proxyCfg.sharedSecret !== '') {
     out.push({ kind: 'user-worker', config: proxyCfg });
   }
+  if (
+    config.operatorImageProxyUrl !== '' &&
+    config.operatorImageProxySecret !== ''
+  ) {
+    out.push({
+      kind: 'operator-proxy',
+      config: {
+        url: config.operatorImageProxyUrl,
+        sharedSecret: config.operatorImageProxySecret,
+      },
+    });
+  }
   return out;
 }
 
@@ -70,5 +87,7 @@ export async function fetchImage(imageUrl: string): Promise<Blob> {
   if (backend.kind === 'helper') {
     return fetchImageViaHelper(config.helperOrigin, imageUrl);
   }
+  // Both user-worker and operator-proxy use the same cf-worker template's
+  // POST /fetch envelope, so we can dispatch through the same client.
   return fetchImageViaUserWorker(backend.config, imageUrl);
 }

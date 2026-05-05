@@ -123,3 +123,60 @@ describe('fetchImage', () => {
     await expect(fetchImage('https://x/y')).rejects.toBeInstanceOf(NoBackendsAvailableError);
   });
 });
+
+describe('operator-proxy backend', () => {
+  it('detectBackends includes operator-proxy when configured at build time', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('Failed to fetch'); // helper probe fails
+      }),
+    );
+    vi.doMock('./config', () => ({
+      config: {
+        helperOrigin: 'http://127.0.0.1:47826',
+        operatorImageProxyUrl: 'https://operator.example/fetch',
+        operatorImageProxySecret: 'op-secret',
+      },
+    }));
+    const { detectBackends } = await import('./image-fetcher');
+    const backends = await detectBackends();
+    expect(backends.map((b) => b.kind)).toEqual(['operator-proxy']);
+    vi.doUnmock('./config');
+  });
+
+  it('detectBackends orders operator-proxy AFTER user-worker', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('Failed to fetch');
+      }),
+    );
+    vi.doMock('./config', () => ({
+      config: {
+        helperOrigin: 'http://127.0.0.1:47826',
+        operatorImageProxyUrl: 'https://operator.example/fetch',
+        operatorImageProxySecret: 'op-secret',
+      },
+    }));
+    const { saveProxyConfig } = await import('./proxy-config');
+    await saveProxyConfig({ url: 'https://my.workers.dev', sharedSecret: 's' });
+    const { detectBackends } = await import('./image-fetcher');
+    const backends = await detectBackends();
+    expect(backends.map((b) => b.kind)).toEqual(['user-worker', 'operator-proxy']);
+    vi.doUnmock('./config');
+  });
+
+  it('detectBackends omits operator-proxy when not configured', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('Failed to fetch');
+      }),
+    );
+    // Default config (test setup) has empty operator URL.
+    const { detectBackends } = await import('./image-fetcher');
+    const backends = await detectBackends();
+    expect(backends.map((b) => b.kind)).not.toContain('operator-proxy');
+  });
+});

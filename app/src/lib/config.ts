@@ -11,6 +11,11 @@ function optional(key: keyof ImportMetaEnv): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
+function optionalString(key: keyof ImportMetaEnv): string {
+  const value = import.meta.env[key];
+  return typeof value === 'string' ? value : '';
+}
+
 export interface Config {
   readonly appName: string;
   readonly appDomain: string;
@@ -20,6 +25,8 @@ export interface Config {
   readonly helperOrigin: string;
   readonly repoUrl: string;
   readonly pyodideVersion: string;
+  readonly operatorImageProxyUrl: string;
+  readonly operatorImageProxySecret: string;
 }
 
 export const config: Config = Object.freeze({
@@ -31,4 +38,6 @@ export const config: Config = Object.freeze({
   helperOrigin: required('VITE_HELPER_ORIGIN'),
   repoUrl: required('VITE_REPO_URL'),
   pyodideVersion: required('VITE_PYODIDE_VERSION'),
+  operatorImageProxyUrl: optionalString('VITE_OPERATOR_IMAGE_PROXY_URL'),
+  operatorImageProxySecret: optionalString('VITE_OPERATOR_IMAGE_PROXY_SECRET'),
 });

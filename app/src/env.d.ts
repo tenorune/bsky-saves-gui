@@ -10,6 +10,8 @@ interface ImportMetaEnv {
   readonly VITE_HELPER_ORIGIN: string;
   readonly VITE_REPO_URL: string;
   readonly VITE_PYODIDE_VERSION: string;
+  readonly VITE_OPERATOR_IMAGE_PROXY_URL: string;
+  readonly VITE_OPERATOR_IMAGE_PROXY_SECRET: string;
 }
 
 interface ImportMeta {
