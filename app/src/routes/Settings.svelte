@@ -12,8 +12,10 @@
     loadBackupPrefs,
     setBackupDontAsk,
     setBackupEnabled,
+    setOperatorProxyOptOut,
     type BackupPrefs,
   } from '$lib/backup-prefs';
+  import { config } from '$lib/config';
   import { detectBackends, type Backend } from '$lib/image-fetcher';
   import { cancelImageBackup } from '$lib/start-image-backup';
   import { startArticleBackup, cancelArticleBackup } from '$lib/start-article-backup';
@@ -40,7 +42,35 @@
       workerUrl = cfg.url;
       workerSecret = cfg.sharedSecret;
     }
+    void probeOperatorProxy();
   });
+
+  let operatorProxyReachable: 'unknown' | 'ok' | 'fail' = 'unknown';
+
+  $: operatorProxyConfigured = config.operatorImageProxyUrl !== '';
+  $: operatorProxyOptOut = backupPrefs?.operatorProxyOptOut ?? false;
+
+  async function probeOperatorProxy(): Promise<void> {
+    if (!operatorProxyConfigured) return;
+    operatorProxyReachable = 'unknown';
+    try {
+      const url = config.operatorImageProxyUrl.replace(/\/+$/, '') + '/fetch';
+      const res = await fetch(url, {
+        method: 'OPTIONS',
+        headers: { Origin: window.location.origin },
+      });
+      operatorProxyReachable = res.status === 204 ? 'ok' : 'fail';
+    } catch {
+      operatorProxyReachable = 'fail';
+    }
+  }
+
+  async function handleToggleOperatorProxyOptOut(event: Event) {
+    const checked = (event.target as HTMLInputElement).checked;
+    await setOperatorProxyOptOut(checked);
+    await reloadBackupPrefs();
+    detectedBackends = await detectBackends();
+  }
 
   $: imagesEnabled = backupPrefs?.images.enabled ?? false;
   $: imagesDontAsk = backupPrefs?.images.dontAsk ?? false;
@@ -320,6 +350,34 @@
           <button type="button" on:click={handleSaveWorker}>Save</button>
           <button type="button" on:click={handleClearWorker}>Clear</button>
         </div>
+
+        {#if operatorProxyConfigured}
+          <hr class="advanced-divider" />
+          <p class="help">
+            <strong>Operator's image proxy</strong>
+            <br />
+            <code>{config.operatorImageProxyUrl}</code>
+            {#if operatorProxyReachable === 'ok'}
+              <span class="status-ok">· reachable</span>
+            {:else if operatorProxyReachable === 'fail'}
+              <span class="status-fail">· unreachable</span>
+            {/if}
+          </p>
+          <p class="help">
+            When set up by the site operator, this proxy is used as a fallback
+            for image backup when no local helper or custom Cloudflare Worker is
+            configured. Image bytes flow through the operator's worker; the
+            operator does not log URLs or content.
+          </p>
+          <label class="checkbox">
+            <input
+              type="checkbox"
+              checked={operatorProxyOptOut}
+              on:change={handleToggleOperatorProxyOptOut}
+            />
+            <span>Don't use the operator's proxy</span>
+          </label>
+        {/if}
       </details>
     </section>
   {/if}
@@ -435,6 +493,19 @@
     font-weight: 500;
   }
   .error {
+    color: color-mix(in oklab, red 70%, CanvasText);
+    font-weight: 500;
+  }
+  .advanced-divider {
+    border: 0;
+    border-top: 1px solid color-mix(in oklab, CanvasText 12%, transparent);
+    margin: 1rem 0 0.75rem;
+  }
+  .status-ok {
+    color: color-mix(in oklab, green 70%, CanvasText);
+    font-weight: 500;
+  }
+  .status-fail {
     color: color-mix(in oklab, red 70%, CanvasText);
     font-weight: 500;
   }
