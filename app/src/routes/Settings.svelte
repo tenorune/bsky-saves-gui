@@ -120,7 +120,9 @@
   $: articlesBackendLabel = articlesEnabled
     ? helperBackend
       ? `using local helper (bsky-saves ${helperBackend.version})`
-      : 'no helper running'
+      : articleBackendStatus.available
+        ? `using ${articleBackendStatus.description}`
+        : 'no backend reachable right now'
     : articleBackendStatus.available
       ? `not yet enabled — would use ${articleBackendStatus.description}`
       : `not set up — ${articleBackendStatus.description}`;
