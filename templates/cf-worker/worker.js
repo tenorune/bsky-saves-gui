@@ -69,6 +69,18 @@ export default {
       return new Response(null, { status: 204, headers: cors });
     }
 
+    // 3b. GET /capabilities — auth-guarded endpoint listing.
+    if (request.method === 'GET' && new URL(request.url).pathname === '/capabilities') {
+      const secret = request.headers.get('X-Proxy-Secret') ?? '';
+      if (secret !== env.SHARED_SECRET) {
+        return jsonError('Unauthorized', 401, cors);
+      }
+      return new Response(
+        JSON.stringify({ endpoints: ['/fetch'] }),
+        { status: 200, headers: { 'Content-Type': 'application/json', ...cors } },
+      );
+    }
+
     // 4. Only POST /fetch is supported beyond preflight.
     const url = new URL(request.url);
     if (request.method !== 'POST' || url.pathname !== '/fetch') {

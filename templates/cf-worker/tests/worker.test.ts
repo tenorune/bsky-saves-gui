@@ -318,6 +318,45 @@ describe('routing', () => {
 });
 
 // ---------------------------------------------------------------------------
+// GET /capabilities
+// ---------------------------------------------------------------------------
+describe('GET /capabilities', () => {
+  let worker: UnstableDevWorker;
+  beforeAll(async () => {
+    worker = await startGoodWorker();
+  });
+  afterAll(async () => {
+    await worker.stop();
+  });
+
+  it('returns the endpoint list with /fetch only', async () => {
+    const res = await worker.fetch('/capabilities', {
+      method: 'GET',
+      headers: { Origin: GOOD_ORIGIN, 'X-Proxy-Secret': GOOD_SECRET },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json() as { endpoints: string[] };
+    expect(body.endpoints).toEqual(['/fetch']);
+  });
+
+  it('returns 403 for a disallowed origin', async () => {
+    const res = await worker.fetch('/capabilities', {
+      method: 'GET',
+      headers: { Origin: 'https://evil.example.com', 'X-Proxy-Secret': GOOD_SECRET },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 401 for a wrong secret', async () => {
+    const res = await worker.fetch('/capabilities', {
+      method: 'GET',
+      headers: { Origin: GOOD_ORIGIN, 'X-Proxy-Secret': 'wrong' },
+    });
+    expect(res.status).toBe(401);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // URL_ALLOWLIST
 // ---------------------------------------------------------------------------
 describe('URL_ALLOWLIST', () => {
