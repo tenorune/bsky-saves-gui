@@ -18,7 +18,16 @@ describe('backup-prefs', () => {
     expect(await loadBackupPrefs()).toEqual({
       images: { snoozeUntil: null, dontAsk: false, enabled: false },
       articles: { snoozeUntil: null, dontAsk: false, enabled: false },
+      operatorProxyOptOut: false,
     });
+  });
+
+  it('setOperatorProxyOptOut persists and round-trips', async () => {
+    const { setOperatorProxyOptOut, loadBackupPrefs } = await import('./backup-prefs');
+    await setOperatorProxyOptOut(true);
+    expect((await loadBackupPrefs()).operatorProxyOptOut).toBe(true);
+    await setOperatorProxyOptOut(false);
+    expect((await loadBackupPrefs()).operatorProxyOptOut).toBe(false);
   });
 
   it('snoozes a feature for 7 days', async () => {

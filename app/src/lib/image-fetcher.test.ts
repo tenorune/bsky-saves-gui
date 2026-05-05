@@ -6,6 +6,8 @@ beforeEach(async () => {
   vi.resetModules();
   const { clearProxyConfig } = await import('./proxy-config');
   await clearProxyConfig();
+  const { clearBackupPrefs } = await import('./backup-prefs');
+  await clearBackupPrefs();
 });
 
 describe('detectBackends', () => {
@@ -178,5 +180,27 @@ describe('operator-proxy backend', () => {
     const { detectBackends } = await import('./image-fetcher');
     const backends = await detectBackends();
     expect(backends.map((b) => b.kind)).not.toContain('operator-proxy');
+  });
+
+  it('respects operatorProxyOptOut: omits operator-proxy when opted out', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('Failed to fetch');
+      }),
+    );
+    vi.doMock('./config', () => ({
+      config: {
+        helperOrigin: 'http://127.0.0.1:47826',
+        operatorImageProxyUrl: 'https://operator.example/fetch',
+        operatorImageProxySecret: 'op-secret',
+      },
+    }));
+    const { setOperatorProxyOptOut } = await import('./backup-prefs');
+    await setOperatorProxyOptOut(true);
+    const { detectBackends } = await import('./image-fetcher');
+    const backends = await detectBackends();
+    expect(backends.map((b) => b.kind)).toEqual([]);
+    vi.doUnmock('./config');
   });
 });

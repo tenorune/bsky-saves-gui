@@ -21,6 +21,7 @@ export interface FeaturePrefs {
 export interface BackupPrefs {
   readonly images: FeaturePrefs;
   readonly articles: FeaturePrefs;
+  readonly operatorProxyOptOut: boolean;
 }
 
 const KEY = 'backup-prefs:v1';
@@ -30,6 +31,7 @@ const SNOOZE_MS = SNOOZE_DAYS * 24 * 60 * 60 * 1000;
 const DEFAULTS: BackupPrefs = Object.freeze({
   images: { snoozeUntil: null, dontAsk: false, enabled: false },
   articles: { snoozeUntil: null, dontAsk: false, enabled: false },
+  operatorProxyOptOut: false,
 });
 
 function isFeaturePrefs(v: unknown): v is FeaturePrefs {
@@ -45,7 +47,11 @@ function isFeaturePrefs(v: unknown): v is FeaturePrefs {
 function isBackupPrefs(v: unknown): v is BackupPrefs {
   if (!v || typeof v !== 'object') return false;
   const r = v as Record<string, unknown>;
-  return isFeaturePrefs(r.images) && isFeaturePrefs(r.articles);
+  return (
+    isFeaturePrefs(r.images) &&
+    isFeaturePrefs(r.articles) &&
+    typeof r.operatorProxyOptOut === 'boolean'
+  );
 }
 
 export async function loadBackupPrefs(): Promise<BackupPrefs> {
@@ -87,6 +93,12 @@ export async function setBackupEnabled(
     ...prefs,
     [feature]: { ...prefs[feature], enabled },
   };
+  await saveBackupPrefs(next);
+}
+
+export async function setOperatorProxyOptOut(optOut: boolean): Promise<void> {
+  const prefs = await loadBackupPrefs();
+  const next: BackupPrefs = { ...prefs, operatorProxyOptOut: optOut };
   await saveBackupPrefs(next);
 }
 

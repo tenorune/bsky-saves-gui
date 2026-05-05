@@ -10,6 +10,7 @@ import { probeConfiguredHelper, fetchImageViaHelper } from './helper-client';
 import { loadProxyConfig, type ProxyConfig } from './proxy-config';
 import { fetchImageViaUserWorker } from './user-worker-client';
 import { config } from './config';
+import { loadBackupPrefs } from './backup-prefs';
 
 export type BackendKind = 'helper' | 'user-worker' | 'operator-proxy';
 
@@ -43,9 +44,10 @@ export class NoBackendsAvailableError extends Error {
  * (most preferred first). Probes are run in parallel.
  */
 export async function detectBackends(): Promise<Backend[]> {
-  const [helperStatus, proxyCfg] = await Promise.all([
+  const [helperStatus, proxyCfg, prefs] = await Promise.all([
     probeConfiguredHelper(),
     loadProxyConfig(),
+    loadBackupPrefs(),
   ]);
 
   const out: Backend[] = [];
@@ -60,6 +62,7 @@ export async function detectBackends(): Promise<Backend[]> {
     out.push({ kind: 'user-worker', config: proxyCfg });
   }
   if (
+    !prefs.operatorProxyOptOut &&
     config.operatorImageProxyUrl !== '' &&
     config.operatorImageProxySecret !== ''
   ) {
