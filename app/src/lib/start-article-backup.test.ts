@@ -11,6 +11,8 @@ beforeEach(async () => {
   resetArticleHydration();
   const { clearBackupPrefs } = await import('./backup-prefs');
   await clearBackupPrefs();
+  const { clearProxyConfig } = await import('./proxy-config');
+  await clearProxyConfig();
 });
 
 const okPing = {
@@ -37,7 +39,7 @@ const sampleInventory = () => ({
 });
 
 describe('startArticleBackup', () => {
-  it('returns {started: false, reason} when the helper is not running', async () => {
+  it('returns {started: false, reason} when the helper is not running and no worker is configured', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => {
@@ -47,7 +49,7 @@ describe('startArticleBackup', () => {
     const { startArticleBackup } = await import('./start-article-backup');
     const result = await startArticleBackup(sampleInventory());
     expect(result.started).toBe(false);
-    expect(result.reason).toMatch(/helper/i);
+    expect(result.reason).toMatch(/no article backend available/i);
   });
 
   it('returns {started: true} when helper is available and runs the loop', async () => {
@@ -115,5 +117,68 @@ describe('startArticleBackup', () => {
   it('cancelArticleBackup is a safe no-op when nothing is running', async () => {
     const { cancelArticleBackup } = await import('./start-article-backup');
     expect(() => cancelArticleBackup()).not.toThrow();
+  });
+
+  it('returns {started: true} when helper is absent but worker supportsArticles', async () => {
+    let extractCalls = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo) => {
+        const u = typeof input === 'string' ? input : (input as Request).url;
+        if (u.endsWith('/ping')) throw new TypeError('Failed to fetch');
+        if (u.endsWith('/extract-article')) {
+          extractCalls++;
+          return {
+            ok: true,
+            json: async () => ({
+              url: 'https://example.com/a',
+              title: 't',
+              text: 'body',
+              fetched_at: '2026-05-04T12:00:00Z',
+            }),
+          };
+        }
+        throw new Error(`unexpected fetch ${u}`);
+      }),
+    );
+    const { saveProxyConfig } = await import('./proxy-config');
+    await saveProxyConfig({ url: 'https://w.example/', sharedSecret: 's', supportsArticles: true });
+    const { startArticleBackup } = await import('./start-article-backup');
+    const { articleHydration } = await import('./hydration-state');
+    const result = await startArticleBackup(sampleInventory());
+    expect(result.started).toBe(true);
+    await vi.waitUntil(() => get(articleHydration).status === 'done', { timeout: 1000 });
+    expect(get(articleHydration).fetched).toBe(1);
+    expect(extractCalls).toBe(1);
+  });
+
+  it('returns {started: false} with the unified reason when neither helper nor worker is available', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('Failed to fetch');
+      }),
+    );
+    const { clearProxyConfig } = await import('./proxy-config');
+    await clearProxyConfig();
+    const { startArticleBackup } = await import('./start-article-backup');
+    const result = await startArticleBackup(sampleInventory());
+    expect(result.started).toBe(false);
+    expect(result.reason).toMatch(/no article backend available/i);
+  });
+
+  it('returns {started: false} when proxy config exists but supportsArticles is false', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('Failed to fetch');
+      }),
+    );
+    const { saveProxyConfig } = await import('./proxy-config');
+    await saveProxyConfig({ url: 'https://w.example/', sharedSecret: 's', supportsArticles: false });
+    const { startArticleBackup } = await import('./start-article-backup');
+    const result = await startArticleBackup(sampleInventory());
+    expect(result.started).toBe(false);
+    expect(result.reason).toMatch(/no article backend available/i);
   });
 });
