@@ -178,3 +178,54 @@ Error responses follow the same JSON shape:
 | `404` | Unknown path or method |
 | `500` | Worker misconfigured (missing env var) |
 | `502` | Upstream fetch failed or timed out |
+
+## Deploying as the site's operator proxy
+
+The bsky-saves-gui app supports a layered image-backup backend strategy:
+
+1. **Local helper** (`bsky-saves serve`) — most private, requires user to install bsky-saves locally.
+2. **User-deployed Cloudflare Worker** — user runs `wrangler deploy` and pastes URL+secret into Settings.
+3. **Operator-deployed Cloudflare Worker** *(this section)* — set up by the site operator; used as a fallback when no helper or user-worker is configured. Users opt in by default but can opt out from Settings → Backup → Advanced.
+
+Operators who deploy this worker should harden it with a URL allowlist so that
+the worker only proxies the bsky CDN, limiting abuse surface to a single host.
+
+### Required environment variables
+
+Set these via `wrangler secret put` (for secrets) or `wrangler.toml` `[vars]` (for non-sensitive values):
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `ALLOWED_ORIGIN` | yes | The deployed GUI's origin, e.g. `https://saves.example.com`. Requests with other Origins are rejected. |
+| `SHARED_SECRET` | yes | Random secret. The GUI sends this in the `X-Proxy-Secret` header. |
+| `URL_ALLOWLIST` | recommended for operator deployments | Comma-separated URL prefixes the worker is allowed to fetch. For an operator proxy, set this to `https://cdn.bsky.app/img/` so the worker only relays the bsky image CDN. Empty/unset = no restriction (only safe for trusted user deployments). |
+
+### Wiring into the GUI build
+
+The GUI reads these build-time environment variables:
+
+```
+VITE_OPERATOR_IMAGE_PROXY_URL=https://your-operator-worker.workers.dev
+VITE_OPERATOR_IMAGE_PROXY_SECRET=<same value as SHARED_SECRET>
+```
+
+In a GitHub Pages deploy (see `.github/workflows/pages.yml`), add these as repository **variables** (URL) and **secrets** (the secret), then reference them under the build step's `env:` block.
+
+The secret is baked into the deployed JS bundle and is therefore visible to anyone who inspects the page. This is acceptable: the secret's purpose is to deter random internet traffic, not to keep the URL or auth flow secret. The real protection is the **URL allowlist** (which makes the proxy useless for anything other than the bsky CDN) plus Cloudflare's standard rate-limiting and abuse defenses.
+
+### Opt-out behavior
+
+Users can opt out of the operator proxy from the GUI: Settings → Backup → Advanced backup options → "Don't use the operator's proxy". When opted out, the GUI excludes the operator backend from `detectBackends`, regardless of the build-time configuration. The user can re-enable by unticking the checkbox.
+
+The opt-out preference is persisted per browser (in IndexedDB).
+
+### Privacy expectations
+
+Operators should clearly document in their privacy policy:
+- That the operator proxy is configured.
+- The URL of the deployed worker.
+- The fact that image bytes flow through the worker.
+- Whether the worker logs any traffic (it should not — the template doesn't).
+- The opt-out path.
+
+See `docs/privacy.md` in the GUI repo for the canonical reference.
