@@ -39,35 +39,35 @@
 
 {#if open}
   <div
-    class="modal-backdrop"
+    class="failmodal-backdrop"
     on:click={onBackdropClick}
     on:keydown|self
     role="presentation"
   >
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="failures-modal-title">
-      <header class="modal__header">
-        <h3 id="failures-modal-title" class="modal__title">
+    <div class="failmodal" role="dialog" aria-modal="true" aria-labelledby="failures-modal-title">
+      <header class="failmodal__header">
+        <h3 id="failures-modal-title" class="failmodal__title">
           {title} ({failures.length})
         </h3>
-        <button type="button" class="modal__close" on:click={close} aria-label="Close">
+        <button type="button" class="failmodal__close" on:click={close} aria-label="Close">
           ✕
         </button>
       </header>
 
       {#if failures.length === 0}
-        <p class="modal__empty">No failures.</p>
+        <p class="failmodal__empty">No failures.</p>
       {:else}
-        <ul class="modal__list">
+        <ul class="failmodal__list">
           {#each failures as f (f.url + ':' + f.type)}
-            <li class="modal__row">
-              <div class="modal__row-head">
-                <span class="modal__type modal__type--{f.type}">{f.type === 'image' ? 'IMG' : 'ARTICLE'}</span>
-                <span class="modal__reason">{f.reason}</span>
+            <li class="failmodal__row">
+              <div class="failmodal__row-head">
+                <span class="failmodal__type failmodal__type--{f.type}">{f.type === 'image' ? 'IMG' : 'ARTICLE'}</span>
+                <span class="failmodal__reason">{f.reason}</span>
               </div>
-              <div class="modal__url" title={f.url}>{f.url}</div>
+              <div class="failmodal__url" title={f.url}>{f.url}</div>
               {#if permalinkFor(f.url)}
                 <a
-                  class="modal__permalink"
+                  class="failmodal__permalink"
                   href={permalinkFor(f.url)}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -78,7 +78,7 @@
         </ul>
       {/if}
 
-      <footer class="modal__footer">
+      <footer class="failmodal__footer">
         <button type="button" on:click={close}>Close</button>
       </footer>
     </div>
@@ -86,7 +86,7 @@
 {/if}
 
 <style>
-  .modal-backdrop {
+  .failmodal-backdrop {
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.5);
@@ -96,7 +96,7 @@
     padding: 1rem;
     z-index: 100;
   }
-  .modal {
+  .failmodal {
     max-width: 40rem;
     width: 100%;
     max-height: 90vh;
@@ -107,17 +107,17 @@
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
     padding: 1rem 1.25rem 1.25rem;
   }
-  .modal__header {
+  .failmodal__header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     margin-bottom: 0.75rem;
   }
-  .modal__title {
+  .failmodal__title {
     margin: 0;
     font-size: 1.05rem;
   }
-  .modal__close {
+  .failmodal__close {
     background: none;
     border: 0;
     padding: 0.25rem 0.5rem;
@@ -126,33 +126,33 @@
     color: inherit;
     opacity: 0.6;
   }
-  .modal__close:hover {
+  .failmodal__close:hover {
     opacity: 1;
   }
-  .modal__empty {
+  .failmodal__empty {
     margin: 0 0 0.5rem;
     opacity: 0.7;
     font-size: 0.9rem;
   }
-  .modal__list {
+  .failmodal__list {
     list-style: none;
     margin: 0;
     padding: 0;
   }
-  .modal__row {
+  .failmodal__row {
     padding: 0.6rem 0;
     border-bottom: 1px solid color-mix(in oklab, CanvasText 10%, transparent);
   }
-  .modal__row:last-child {
+  .failmodal__row:last-child {
     border-bottom: 0;
   }
-  .modal__row-head {
+  .failmodal__row-head {
     display: flex;
     align-items: center;
     gap: 0.5rem;
     margin-bottom: 0.25rem;
   }
-  .modal__type {
+  .failmodal__type {
     font-size: 0.7rem;
     font-weight: 600;
     letter-spacing: 0.05em;
@@ -160,11 +160,11 @@
     border-radius: 3px;
     background: color-mix(in oklab, CanvasText 12%, Canvas);
   }
-  .modal__reason {
+  .failmodal__reason {
     color: color-mix(in oklab, red 70%, CanvasText);
     font-size: 0.9rem;
   }
-  .modal__url {
+  .failmodal__url {
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 0.78rem;
     opacity: 0.75;
@@ -172,19 +172,19 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .modal__permalink {
+  .failmodal__permalink {
     display: inline-block;
     margin-top: 0.25rem;
     font-size: 0.8rem;
     color: inherit;
     text-decoration: underline;
   }
-  .modal__footer {
+  .failmodal__footer {
     display: flex;
     justify-content: flex-end;
     margin-top: 0.75rem;
   }
-  .modal__footer button {
+  .failmodal__footer button {
     font: inherit;
     padding: 0.4rem 1rem;
     border: 1px solid color-mix(in oklab, CanvasText 25%, transparent);

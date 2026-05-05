@@ -10,7 +10,7 @@ export const slideFromRight: Action<HTMLElement> = (node) => {
       { transform, opacity: reduce ? 0 : 1 },
       { transform: 'translateX(0)', opacity: 1 },
     ],
-    { duration, easing: 'cubic-bezier(0.2, 0.7, 0.2, 1)', fill: 'both' },
+    { duration, easing: 'cubic-bezier(0.2, 0.7, 0.2, 1)', fill: 'backwards' },
   );
 
   return {};
