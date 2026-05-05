@@ -53,6 +53,7 @@
     await refreshCustomProxyStatus();
     detectedBackends = await detectBackends();
     availableImageBackendDesc = await describeAvailableImageBackend();
+    articleBackendStatus = await describeArticleBackend();
   }
 
   onMount(async () => {

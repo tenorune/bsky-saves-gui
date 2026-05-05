@@ -41,6 +41,24 @@
       saveStatus = 'Both URL and shared secret are required.';
       return;
     }
+    // Normalize URL: strip whitespace, default to https:// if no scheme,
+    // reject anything that doesn't end up as a valid http(s) URL.
+    let normalized = workerUrl.trim();
+    if (!/^https?:\/\//i.test(normalized)) {
+      normalized = 'https://' + normalized;
+    }
+    let parsed: URL;
+    try {
+      parsed = new URL(normalized);
+    } catch {
+      saveStatus = '⚠ Invalid URL.';
+      return;
+    }
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      saveStatus = '⚠ Worker URL must use http or https.';
+      return;
+    }
+    workerUrl = parsed.toString().replace(/\/+$/, '');
     await saveProxyConfig({ url: workerUrl, sharedSecret: workerSecret, supportsArticles: false });
     saveStatus = 'Saved. Probing capabilities…';
     const result = await probeWorkerCapabilities(workerUrl, workerSecret);
