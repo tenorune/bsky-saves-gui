@@ -3,6 +3,7 @@
   import { startImageBackup, cancelImageBackup } from '$lib/start-image-backup';
   import { articleHydration } from '$lib/hydration-state';
   import { startArticleBackup, cancelArticleBackup } from '$lib/start-article-backup';
+  import BackupFailuresModal from './BackupFailuresModal.svelte';
 
   /** Inventory the backup operates on. Required. */
   export let inventory: unknown;
@@ -49,6 +50,18 @@
   let articleBusy = false;
   let articleErrorMessage = '';
 
+  let imageFailuresOpen = false;
+  let articleFailuresOpen = false;
+
+  $: imageFailuresRows = $imageHydration.failures.map((f) => ({
+    ...f,
+    type: 'image' as const,
+  }));
+  $: articleFailuresRows = $articleHydration.failures.map((f) => ({
+    ...f,
+    type: 'article' as const,
+  }));
+
   async function handleStartArticles() {
     if (articleBusy) return;
     articleErrorMessage = '';
@@ -90,7 +103,9 @@
     {#if status === 'running'}
       <p class="backup-status__line">
         Saving images: {succeeded} of {total}
-        {#if failed > 0}({failed} failed){/if}
+        {#if failed > 0}
+          (<button type="button" class="backup-status__failed-link" on:click={() => (imageFailuresOpen = true)}>{failed} failed</button>)
+        {/if}
       </p>
       <button type="button" on:click={handleStop}>Stop</button>
     {:else if status === 'done' && total > 0}
@@ -99,14 +114,17 @@
         <button type="button" on:click={handleStart} disabled={busy}>Re-check</button>
       {:else}
         <p class="backup-status__line">
-          {succeeded} of {total} images saved ({failed} failed)
+          {succeeded} of {total} images saved
+          (<button type="button" class="backup-status__failed-link" on:click={() => (imageFailuresOpen = true)}>{failed} failed</button>)
         </p>
         <button type="button" on:click={handleStart} disabled={busy}>Retry</button>
       {/if}
     {:else if status === 'cancelled'}
       <p class="backup-status__line">
         Stopped at {succeeded} of {total} images
-        {#if failed > 0}({failed} failed){/if}
+        {#if failed > 0}
+          (<button type="button" class="backup-status__failed-link" on:click={() => (imageFailuresOpen = true)}>{failed} failed</button>)
+        {/if}
       </p>
       <button type="button" on:click={handleStart} disabled={busy}>Resume</button>
     {/if}
@@ -114,7 +132,9 @@
     {#if aStatus === 'running'}
       <p class="backup-status__line">
         Saving articles: {aSucceeded} of {aTotal}
-        {#if aFailed > 0}({aFailed} failed){/if}
+        {#if aFailed > 0}
+          (<button type="button" class="backup-status__failed-link" on:click={() => (articleFailuresOpen = true)}>{aFailed} failed</button>)
+        {/if}
       </p>
       <button type="button" on:click={handleStopArticles}>Stop</button>
     {:else if aStatus === 'done' && aTotal > 0}
@@ -123,19 +143,37 @@
         <button type="button" on:click={handleStartArticles} disabled={articleBusy}>Re-check</button>
       {:else}
         <p class="backup-status__line">
-          {aSucceeded} of {aTotal} articles saved ({aFailed} failed)
+          {aSucceeded} of {aTotal} articles saved
+          (<button type="button" class="backup-status__failed-link" on:click={() => (articleFailuresOpen = true)}>{aFailed} failed</button>)
         </p>
         <button type="button" on:click={handleStartArticles} disabled={articleBusy}>Retry</button>
       {/if}
     {:else if aStatus === 'cancelled'}
       <p class="backup-status__line">
         Stopped at {aSucceeded} of {aTotal} articles
-        {#if aFailed > 0}({aFailed} failed){/if}
+        {#if aFailed > 0}
+          (<button type="button" class="backup-status__failed-link" on:click={() => (articleFailuresOpen = true)}>{aFailed} failed</button>)
+        {/if}
       </p>
       <button type="button" on:click={handleStartArticles} disabled={articleBusy}>Resume</button>
     {/if}
   </div>
 {/if}
+
+<BackupFailuresModal
+  open={imageFailuresOpen}
+  failures={imageFailuresRows}
+  {inventory}
+  title="Image backup failures"
+  on:close={() => (imageFailuresOpen = false)}
+/>
+<BackupFailuresModal
+  open={articleFailuresOpen}
+  failures={articleFailuresRows}
+  {inventory}
+  title="Article backup failures"
+  on:close={() => (articleFailuresOpen = false)}
+/>
 
 <style>
   .backup-status {
@@ -178,5 +216,17 @@
   }
   .backup-status__dismiss {
     margin-left: auto;
+  }
+  .backup-status__failed-link {
+    font: inherit;
+    background: none;
+    border: 0;
+    padding: 0;
+    color: color-mix(in oklab, red 70%, CanvasText);
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  .backup-status__failed-link:hover {
+    text-decoration: none;
   }
 </style>
