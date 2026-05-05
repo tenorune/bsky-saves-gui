@@ -316,3 +316,53 @@ describe('routing', () => {
     expect(res.status).toBe(404);
   });
 });
+
+// ---------------------------------------------------------------------------
+// URL_ALLOWLIST
+// ---------------------------------------------------------------------------
+describe('URL_ALLOWLIST', () => {
+  let worker: UnstableDevWorker;
+  beforeAll(async () => {
+    worker = await unstable_dev(WORKER_SCRIPT, {
+      vars: {
+        ALLOWED_ORIGIN: GOOD_ORIGIN,
+        SHARED_SECRET: GOOD_SECRET,
+        URL_ALLOWLIST: 'https://cdn.bsky.app/img/',
+      },
+      experimental: EXPERIMENTAL,
+    });
+  });
+  afterAll(async () => {
+    await worker.stop();
+  });
+
+  it('allows URLs that match the allowlist prefix', { timeout: 20_000 }, async () => {
+    const res = await worker.fetch('/fetch', {
+      method: 'POST',
+      headers: {
+        Origin: GOOD_ORIGIN,
+        'Content-Type': 'application/json',
+        'X-Proxy-Secret': GOOD_SECRET,
+      },
+      body: JSON.stringify({ url: 'https://cdn.bsky.app/img/anything' }),
+    });
+    // We accept any non-400 status (success or upstream error) — what we're
+    // testing is that the allowlist check did NOT reject the URL.
+    expect(res.status).not.toBe(400);
+  });
+
+  it('rejects URLs that do not match the allowlist prefix', async () => {
+    const res = await worker.fetch('/fetch', {
+      method: 'POST',
+      headers: {
+        Origin: GOOD_ORIGIN,
+        'Content-Type': 'application/json',
+        'X-Proxy-Secret': GOOD_SECRET,
+      },
+      body: JSON.stringify({ url: 'https://example.com/anything' }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toMatch(/not allowed/i);
+  });
+});

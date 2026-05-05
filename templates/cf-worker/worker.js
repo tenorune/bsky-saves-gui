@@ -9,7 +9,7 @@ const FETCH_TIMEOUT_MS = 20_000;
 const BODY_SIZE_LIMIT = 10 * 1024 * 1024; // 10 MB
 
 /**
- * @typedef {{ ALLOWED_ORIGIN: string; SHARED_SECRET: string }} Env
+ * @typedef {{ ALLOWED_ORIGIN: string; SHARED_SECRET: string; URL_ALLOWLIST?: string }} Env
  */
 
 /**
@@ -103,6 +103,19 @@ export default {
     }
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       return jsonError('Only http and https URLs are allowed', 400, cors);
+    }
+
+    // 7b. Optional URL allowlist. If URL_ALLOWLIST is set, the request URL
+    // must start with one of the comma-separated prefixes. Empty/unset
+    // means no restriction (backward compatible for unrestricted user
+    // deployments).
+    const allowlist = (env.URL_ALLOWLIST ?? '').trim();
+    if (allowlist !== '') {
+      const prefixes = allowlist.split(',').map((p) => p.trim()).filter(Boolean);
+      const allowed = prefixes.some((p) => targetUrl.startsWith(p));
+      if (!allowed) {
+        return jsonError('url not allowed', 400, cors);
+      }
     }
 
     // 8. Fetch the upstream URL with a timeout.
