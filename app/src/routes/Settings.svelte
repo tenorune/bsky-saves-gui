@@ -7,7 +7,7 @@
   import { clearAccount } from '$lib/account-store';
   import { lastSession, clearLastSession } from '$lib/last-session';
   import { clearBeaconSent } from '$lib/beacon';
-  import { loadProxyConfig, saveProxyConfig, clearProxyConfig } from '$lib/proxy-config';
+  import { loadProxyConfig, clearProxyConfig } from '$lib/proxy-config';
   import {
     loadBackupPrefs,
     setBackupDontAsk,
@@ -42,19 +42,25 @@
   };
   let backupAdvancedOpen = false;
   let setupModalOpen = false;
-  let workerUrl = '';
-  let workerSecret = '';
+  let customProxyConfigured = false;
+
+  async function refreshCustomProxyStatus(): Promise<void> {
+    const cfg = await loadProxyConfig();
+    customProxyConfigured = cfg !== null && cfg.url !== '' && cfg.sharedSecret !== '';
+  }
+
+  async function handleSetupModalChange(): Promise<void> {
+    await refreshCustomProxyStatus();
+    detectedBackends = await detectBackends();
+    availableImageBackendDesc = await describeAvailableImageBackend();
+  }
 
   onMount(async () => {
     backupPrefs = await loadBackupPrefs();
     detectedBackends = await detectBackends();
     availableImageBackendDesc = await describeAvailableImageBackend();
     articleBackendStatus = await describeArticleBackend();
-    const cfg = await loadProxyConfig();
-    if (cfg) {
-      workerUrl = cfg.url;
-      workerSecret = cfg.sharedSecret;
-    }
+    await refreshCustomProxyStatus();
     void probeOperatorProxy();
   });
 
@@ -133,23 +139,6 @@
     const checked = (event.target as HTMLInputElement).checked;
     await setBackupDontAsk('images', checked);
     await reloadBackupPrefs();
-  }
-
-  async function handleSaveWorker() {
-    if (!workerUrl || !workerSecret) return;
-    await saveProxyConfig({ url: workerUrl, sharedSecret: workerSecret });
-    detectedBackends = await detectBackends();
-    availableImageBackendDesc = await describeAvailableImageBackend();
-    status = 'Worker config saved.';
-  }
-
-  async function handleClearWorker() {
-    await clearProxyConfig();
-    workerUrl = '';
-    workerSecret = '';
-    detectedBackends = await detectBackends();
-    availableImageBackendDesc = await describeAvailableImageBackend();
-    status = 'Worker config cleared.';
   }
 
   let articleSetupError = '';
@@ -239,8 +228,7 @@
     // Refresh local UI state so the Backup section disappears immediately.
     backupPrefs = await loadBackupPrefs();
     detectedBackends = await detectBackends();
-    workerUrl = '';
-    workerSecret = '';
+    customProxyConfigured = false;
     operatorProxyReachable = 'unknown';
     void probeOperatorProxy();
     await loadFromDb();
@@ -371,25 +359,8 @@
         </p>
 
         <button type="button" class="setup-guide-trigger" on:click={() => (setupModalOpen = true)}>
-          Setup guide
+          {customProxyConfigured ? 'Edit setup' : 'Setup guide'}
         </button>
-
-        <label>
-          Proxy URL
-          <input
-            type="url"
-            bind:value={workerUrl}
-            placeholder="https://your-worker.workers.dev"
-          />
-        </label>
-        <label>
-          Shared secret
-          <input type="password" bind:value={workerSecret} />
-        </label>
-        <div class="settings-row">
-          <button type="button" on:click={handleSaveWorker}>Save</button>
-          <button type="button" on:click={handleClearWorker}>Clear</button>
-        </div>
 
         {#if operatorProxyConfigured}
           <hr class="advanced-divider" />
@@ -430,7 +401,11 @@
     <button type="button" class="danger" on:click={clearAll}>Clear all local data</button>
   </section>
 
-  <CustomProxySetupModal open={setupModalOpen} on:close={() => (setupModalOpen = false)} />
+  <CustomProxySetupModal
+    open={setupModalOpen}
+    on:close={() => (setupModalOpen = false)}
+    on:change={handleSetupModalChange}
+  />
 </section>
 
 <style>
@@ -456,16 +431,9 @@
     font-size: 0.875rem;
     opacity: 0.8;
   }
-  /* Used by Backup → Advanced (URL/secret form). */
-  .settings-section label {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    margin-bottom: 0.5rem;
-    font-weight: 500;
-  }
-  /* Inline checkboxes for "Don't ask me" toggles: input first, then small label. */
+  /* Inline checkboxes for "Don't ask me" toggles. */
   .settings-section label.checkbox {
+    display: flex;
     flex-direction: row;
     align-items: center;
     gap: 0.5rem;
@@ -490,15 +458,6 @@
   }
   .settings-row .link-button:hover {
     opacity: 1;
-  }
-  .settings-section input[type='url'],
-  .settings-section input[type='password'] {
-    font: inherit;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid color-mix(in oklab, CanvasText 20%, transparent);
-    border-radius: 6px;
-    background: Canvas;
-    color: CanvasText;
   }
   .settings-section code {
     background: color-mix(in oklab, CanvasText 5%, Canvas);
