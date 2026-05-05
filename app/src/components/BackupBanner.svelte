@@ -9,6 +9,7 @@
   import { imageHydration } from '$lib/hydration-state';
   import { startImageBackup } from '$lib/start-image-backup';
   import { describeAvailableImageBackend } from '$lib/describe-backend';
+  import CustomProxySetupModal from './CustomProxySetupModal.svelte';
   import { imageBannerVisible } from '$lib/backup-banner-state';
 
   /** Inventory the banner observes for image content. Required. */
@@ -18,6 +19,7 @@
   let busy = false;
   let startError = '';
   let backendDesc: string | null = null;
+  let setupOpen = false;
 
   onMount(async () => {
     prefsAllow = await shouldShowBackupBanner('images');
@@ -68,7 +70,12 @@
       {#if backendDesc}
         Will use {backendDesc}.
       {:else}
-        No backup method is available — set up the local helper or a custom Cloudflare Worker first (Settings → Backup → Advanced).
+        No backup method is available.
+        <button
+          type="button"
+          class="backup-banner__inline-link"
+          on:click={() => (setupOpen = true)}
+        >Set up a backend</button>
       {/if}
     </p>
     <div class="backup-banner__actions">
@@ -84,7 +91,7 @@
         Remind me later
       </button>
       <button type="button" class="backup-banner__link" on:click={handleDontAsk}>
-        Don't ask me again
+        Hide reminder
       </button>
     </div>
     {#if startError}
@@ -92,6 +99,12 @@
     {/if}
   </div>
 {/if}
+
+<CustomProxySetupModal
+  open={setupOpen}
+  on:close={() => (setupOpen = false)}
+  on:change={async () => { backendDesc = await describeAvailableImageBackend(); }}
+/>
 
 <style>
   .backup-banner {
@@ -155,5 +168,14 @@
     margin: 0;
     color: color-mix(in oklab, red 70%, CanvasText);
     font-weight: 500;
+  }
+  .backup-banner__inline-link {
+    font: inherit;
+    background: none;
+    border: 0;
+    padding: 0;
+    color: inherit;
+    text-decoration: underline;
+    cursor: pointer;
   }
 </style>

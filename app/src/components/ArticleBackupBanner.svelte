@@ -9,6 +9,7 @@
   import { articleHydration } from '$lib/hydration-state';
   import { startArticleBackup } from '$lib/start-article-backup';
   import { describeArticleBackend } from '$lib/describe-backend';
+  import CustomProxySetupModal from './CustomProxySetupModal.svelte';
   import { imageBannerVisible } from '$lib/backup-banner-state';
 
   /** Inventory the banner observes for article content. Required. */
@@ -17,6 +18,7 @@
   let prefsAllow = false; // false until we've loaded prefs once
   let busy = false;
   let startError = '';
+  let setupOpen = false;
   let articleBackendStatus: { available: boolean; description: string } = {
     available: false,
     description: 'the local helper is not running',
@@ -66,7 +68,13 @@
       {#if articleBackendStatus.available}
         Will use {articleBackendStatus.description}.
       {:else}
-        Article backup needs the local bsky-saves helper — currently {articleBackendStatus.description}.
+        Article backup needs the local bsky-saves helper or a custom Cloudflare
+        Worker with article extraction.
+        <button
+          type="button"
+          class="article-banner__inline-link"
+          on:click={() => (setupOpen = true)}
+        >Set up a backend</button>
       {/if}
     </p>
     <div class="article-banner__actions">
@@ -82,7 +90,7 @@
         Remind me later
       </button>
       <button type="button" class="article-banner__link" on:click={handleDontAsk}>
-        Don't ask me again
+        Hide reminder
       </button>
     </div>
     {#if startError}
@@ -90,6 +98,12 @@
     {/if}
   </div>
 {/if}
+
+<CustomProxySetupModal
+  open={setupOpen}
+  on:close={() => (setupOpen = false)}
+  on:change={async () => { articleBackendStatus = await describeArticleBackend(); }}
+/>
 
 <style>
   .article-banner {
@@ -153,5 +167,14 @@
     margin: 0;
     color: color-mix(in oklab, red 70%, CanvasText);
     font-weight: 500;
+  }
+  .article-banner__inline-link {
+    font: inherit;
+    background: none;
+    border: 0;
+    padding: 0;
+    color: inherit;
+    text-decoration: underline;
+    cursor: pointer;
   }
 </style>
