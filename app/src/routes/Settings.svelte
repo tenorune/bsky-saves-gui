@@ -10,17 +10,13 @@
   import { loadProxyConfig, clearProxyConfig } from '$lib/proxy-config';
   import {
     loadBackupPrefs,
-    setBackupDontAsk,
-    setBackupEnabled,
     setOperatorProxyOptOut,
     clearBackupPrefs,
     type BackupPrefs,
   } from '$lib/backup-prefs';
   import { config } from '$lib/config';
-  import { detectBackends, type Backend } from '$lib/image-fetcher';
-  import { describeAvailableImageBackend, describeArticleBackend } from '$lib/describe-backend';
   import { cancelImageBackup } from '$lib/start-image-backup';
-  import { startArticleBackup, cancelArticleBackup } from '$lib/start-article-backup';
+  import { cancelArticleBackup } from '$lib/start-article-backup';
   import { clearImageBlobs } from '$lib/image-store';
   import { resetImageHydration, resetArticleHydration } from '$lib/hydration-state';
   import { exportJson } from '../exporters/json-exporter';
@@ -28,18 +24,13 @@
   import { parseInventory } from '../reader/inventory-shape';
   import { navigate } from '$lib/router';
   import CustomProxySetupModal from '../components/CustomProxySetupModal.svelte';
+  import BackupRow from '../components/BackupRow.svelte';
 
   let status = '';
   let error = '';
   let importInputEl: HTMLInputElement | undefined;
 
   let backupPrefs: BackupPrefs | null = null;
-  let detectedBackends: Backend[] = [];
-  let availableImageBackendDesc: string | null = null;
-  let articleBackendStatus: { available: boolean; description: string } = {
-    available: false,
-    description: 'the local helper is not running',
-  };
   let backupAdvancedOpen = false;
   let setupModalOpen = false;
   let customProxyConfigured = false;
@@ -51,16 +42,10 @@
 
   async function handleSetupModalChange(): Promise<void> {
     await refreshCustomProxyStatus();
-    detectedBackends = await detectBackends();
-    availableImageBackendDesc = await describeAvailableImageBackend();
-    articleBackendStatus = await describeArticleBackend();
   }
 
   onMount(async () => {
     backupPrefs = await loadBackupPrefs();
-    detectedBackends = await detectBackends();
-    availableImageBackendDesc = await describeAvailableImageBackend();
-    articleBackendStatus = await describeArticleBackend();
     await refreshCustomProxyStatus();
     void probeOperatorProxy();
   });
@@ -89,89 +74,10 @@
     const checked = (event.target as HTMLInputElement).checked;
     await setOperatorProxyOptOut(checked);
     await reloadBackupPrefs();
-    detectedBackends = await detectBackends();
-    availableImageBackendDesc = await describeAvailableImageBackend();
   }
-
-  $: imagesEnabled = backupPrefs?.images.enabled ?? false;
-  $: imagesDontAsk = backupPrefs?.images.dontAsk ?? false;
-  $: articlesEnabled = backupPrefs?.articles.enabled ?? false;
-  $: articlesDontAsk = backupPrefs?.articles.dontAsk ?? false;
-  $: backupSectionVisible =
-    imagesEnabled ||
-    imagesDontAsk ||
-    (backupPrefs?.images.snoozeUntil ?? null) !== null ||
-    articlesEnabled ||
-    articlesDontAsk ||
-    (backupPrefs?.articles.snoozeUntil ?? null) !== null;
-  $: helperBackend = detectedBackends.find((b) => b.kind === 'helper');
-  $: workerBackend = detectedBackends.find((b) => b.kind === 'user-worker');
-  $: imagesBackendLabel = imagesEnabled
-    ? helperBackend
-      ? `using local helper (bsky-saves ${helperBackend.version})`
-      : workerBackend
-        ? 'using your custom Cloudflare Worker'
-        : detectedBackends.find((b) => b.kind === 'operator-proxy')
-          ? "using the operator's image proxy"
-          : 'no backend reachable right now'
-    : availableImageBackendDesc !== null
-      ? `not yet enabled — would use ${availableImageBackendDesc}`
-      : 'not set up — no backend available';
-
-  $: articlesBackendLabel = articlesEnabled
-    ? helperBackend
-      ? `using local helper (bsky-saves ${helperBackend.version})`
-      : articleBackendStatus.available
-        ? `using ${articleBackendStatus.description}`
-        : 'no backend reachable right now'
-    : articleBackendStatus.available
-      ? `not yet enabled — would use ${articleBackendStatus.description}`
-      : `not set up — ${articleBackendStatus.description}`;
 
   async function reloadBackupPrefs() {
     backupPrefs = await loadBackupPrefs();
-  }
-
-  async function handleDisableImages() {
-    cancelImageBackup();
-    await setBackupEnabled('images', false);
-    await reloadBackupPrefs();
-  }
-
-  async function handleToggleDontAsk(event: Event) {
-    const checked = (event.target as HTMLInputElement).checked;
-    await setBackupDontAsk('images', checked);
-    await reloadBackupPrefs();
-  }
-
-  let articleSetupError = '';
-
-  async function handleSetUpArticles() {
-    if (backupPrefs === null) return;
-    articleSetupError = '';
-    const state = get(inventoryState);
-    if (state.status !== 'ready') {
-      articleSetupError = 'No library loaded.';
-      return;
-    }
-    const result = await startArticleBackup(state.inventory);
-    if (!result.started) {
-      articleSetupError = result.reason ?? 'Could not start article backup.';
-      return;
-    }
-    await reloadBackupPrefs();
-  }
-
-  async function handleDisableArticles() {
-    cancelArticleBackup();
-    await setBackupEnabled('articles', false);
-    await reloadBackupPrefs();
-  }
-
-  async function handleToggleArticlesDontAsk(event: Event) {
-    const checked = (event.target as HTMLInputElement).checked;
-    await setBackupDontAsk('articles', checked);
-    await reloadBackupPrefs();
   }
 
   $: libraryFetchedAt = (() => {
@@ -230,7 +136,6 @@
     resetArticleHydration();
     // Refresh local UI state so the Backup section disappears immediately.
     backupPrefs = await loadBackupPrefs();
-    detectedBackends = await detectBackends();
     customProxyConfigured = false;
     operatorProxyReachable = 'unknown';
     void probeOperatorProxy();
@@ -300,54 +205,16 @@
     </div>
   </section>
 
-  {#if backupSectionVisible}
+  {#if $inventoryState.status === 'ready'}
     <section class="settings-section">
       <h3>Backup</h3>
       <p class="help">
         Save your own copies of images and linked articles so they keep showing
-        up even if Bluesky or the source site changes. Article backup needs the
-        local bsky-saves helper.
+        up even if Bluesky or the source site changes.
       </p>
 
-      <div class="settings-row">
-        <strong>Images:</strong>
-        <span>{imagesBackendLabel}</span>
-        {#if imagesEnabled}
-          <button type="button" class="link-button" on:click={handleDisableImages}>Disable</button>
-        {/if}
-      </div>
-
-      <label class="checkbox">
-        <input
-          type="checkbox"
-          checked={imagesDontAsk}
-          on:change={handleToggleDontAsk}
-        />
-        <span>Don't ask me about image backup</span>
-      </label>
-
-      <div class="settings-row">
-        <strong>Articles:</strong>
-        <span>{articlesBackendLabel}</span>
-        {#if articlesEnabled}
-          <button type="button" class="link-button" on:click={handleDisableArticles}>Disable</button>
-        {:else}
-          <button type="button" on:click={handleSetUpArticles}>Save my own copy</button>
-        {/if}
-      </div>
-
-      {#if articleSetupError}
-        <p class="error" role="alert">{articleSetupError}</p>
-      {/if}
-
-      <label class="checkbox">
-        <input
-          type="checkbox"
-          checked={articlesDontAsk}
-          on:change={handleToggleArticlesDontAsk}
-        />
-        <span>Don't ask me about article backup</span>
-      </label>
+      <BackupRow domain="images" inventory={$inventoryState.inventory} mode="settings" />
+      <BackupRow domain="articles" inventory={$inventoryState.inventory} mode="settings" />
 
       <details
         class="advanced-toggle"
@@ -366,31 +233,31 @@
             {customProxyConfigured ? 'Edit setup' : 'Setup guide'}
           </button>
 
-        {#if operatorProxyConfigured}
-          <p class="advanced-heading advanced-heading--spaced"><strong>Operator's image proxy</strong></p>
-          <p class="help">
-            <code>{config.operatorImageProxyUrl}</code>
-            {#if operatorProxyReachable === 'ok'}
-              <span class="status-ok">· reachable</span>
-            {:else if operatorProxyReachable === 'fail'}
-              <span class="status-fail">· unreachable</span>
-            {/if}
-          </p>
-          <p class="help">
-            When set up by the site operator, this proxy is used as a fallback
-            for image backup when no local helper or custom Cloudflare Worker is
-            configured. Image bytes flow through the operator's worker; the
-            operator does not log URLs or content.
-          </p>
-          <label class="checkbox">
-            <input
-              type="checkbox"
-              checked={operatorProxyOptOut}
-              on:change={handleToggleOperatorProxyOptOut}
-            />
-            <span>Don't use the operator's proxy</span>
-          </label>
-        {/if}
+          {#if operatorProxyConfigured}
+            <p class="advanced-heading advanced-heading--spaced"><strong>Operator's image proxy</strong></p>
+            <p class="help">
+              <code>{config.operatorImageProxyUrl}</code>
+              {#if operatorProxyReachable === 'ok'}
+                <span class="status-ok">· reachable</span>
+              {:else if operatorProxyReachable === 'fail'}
+                <span class="status-fail">· unreachable</span>
+              {/if}
+            </p>
+            <p class="help">
+              When set up by the site operator, this proxy is used as a fallback
+              for image backup when no local helper or custom Cloudflare Worker is
+              configured. Image bytes flow through the operator's worker; the
+              operator does not log URLs or content.
+            </p>
+            <label class="checkbox">
+              <input
+                type="checkbox"
+                checked={operatorProxyOptOut}
+                on:change={handleToggleOperatorProxyOptOut}
+              />
+              <span>Don't use the operator's proxy</span>
+            </label>
+          {/if}
         </div>
       </details>
     </section>
@@ -444,23 +311,6 @@
     font-weight: normal;
     font-size: 0.875rem;
     opacity: 0.85;
-  }
-  /* Inline link-style button for in-row actions like "Disable". Overrides the
-     .settings-row button rule above (same specificity, declared after). */
-  .settings-row .link-button {
-    background: none;
-    border: 0;
-    padding: 0;
-    margin: 0;
-    color: inherit;
-    text-decoration: underline;
-    cursor: pointer;
-    font: inherit;
-    line-height: 1.25;
-    opacity: 0.85;
-  }
-  .settings-row .link-button:hover {
-    opacity: 1;
   }
   .settings-section code {
     background: color-mix(in oklab, CanvasText 5%, Canvas);
