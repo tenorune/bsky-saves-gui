@@ -20,7 +20,7 @@ describe('detectBackends', () => {
       })),
     );
     const { saveProxyConfig } = await import('./proxy-config');
-    await saveProxyConfig({ url: 'https://my.workers.dev', sharedSecret: 's' });
+    await saveProxyConfig({ url: 'https://my.workers.dev', sharedSecret: 's', supportsArticles: false });
     const { detectBackends } = await import('./image-fetcher');
     const backends = await detectBackends();
     expect(backends.map((b) => b.kind)).toEqual(['helper', 'user-worker']);
@@ -34,7 +34,7 @@ describe('detectBackends', () => {
       }),
     );
     const { saveProxyConfig } = await import('./proxy-config');
-    await saveProxyConfig({ url: 'https://my.workers.dev', sharedSecret: 's' });
+    await saveProxyConfig({ url: 'https://my.workers.dev', sharedSecret: 's', supportsArticles: false });
     const { detectBackends } = await import('./image-fetcher');
     const backends = await detectBackends();
     expect(backends.map((b) => b.kind)).toEqual(['user-worker']);
@@ -107,7 +107,7 @@ describe('fetchImage', () => {
       }),
     );
     const { saveProxyConfig } = await import('./proxy-config');
-    await saveProxyConfig({ url: 'https://my.workers.dev', sharedSecret: 's' });
+    await saveProxyConfig({ url: 'https://my.workers.dev', sharedSecret: 's', supportsArticles: false });
     const { fetchImage } = await import('./image-fetcher');
     const blob = await fetchImage('https://cdn.bsky.app/img/foo.jpg');
     expect(blob.type).toBe('image/png');
@@ -162,7 +162,7 @@ describe('operator-proxy backend', () => {
       },
     }));
     const { saveProxyConfig } = await import('./proxy-config');
-    await saveProxyConfig({ url: 'https://my.workers.dev', sharedSecret: 's' });
+    await saveProxyConfig({ url: 'https://my.workers.dev', sharedSecret: 's', supportsArticles: false });
     const { detectBackends } = await import('./image-fetcher');
     const backends = await detectBackends();
     expect(backends.map((b) => b.kind)).toEqual(['user-worker', 'operator-proxy']);

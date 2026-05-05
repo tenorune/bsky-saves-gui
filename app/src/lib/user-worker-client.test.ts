@@ -7,6 +7,7 @@ beforeEach(() => {
 const SAMPLE_CONFIG = {
   url: 'https://my-worker.workers.dev',
   sharedSecret: 's3cret',
+  supportsArticles: false,
 };
 
 describe('user-worker-client fetchImageViaUserWorker', () => {

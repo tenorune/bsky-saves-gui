@@ -31,7 +31,7 @@
       saveStatus = 'Both URL and shared secret are required.';
       return;
     }
-    await saveProxyConfig({ url: workerUrl, sharedSecret: workerSecret });
+    await saveProxyConfig({ url: workerUrl, sharedSecret: workerSecret, supportsArticles: false });
     saveStatus = 'Saved.';
     dispatch('change');
   }

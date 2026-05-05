@@ -37,7 +37,7 @@ describe('describeAvailableImageBackend', () => {
   it('describes the user-worker when configured and helper is offline', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
     const { saveProxyConfig } = await import('./proxy-config');
-    await saveProxyConfig({ url: 'https://my.workers.dev', sharedSecret: 's' });
+    await saveProxyConfig({ url: 'https://my.workers.dev', sharedSecret: 's', supportsArticles: false });
     const { describeAvailableImageBackend } = await import('./describe-backend');
     const result = await describeAvailableImageBackend();
     expect(result).toMatch(/custom cloudflare worker/i);

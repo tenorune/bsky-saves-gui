@@ -71,6 +71,7 @@ export async function detectBackends(): Promise<Backend[]> {
       config: {
         url: config.operatorImageProxyUrl,
         sharedSecret: config.operatorImageProxySecret,
+        supportsArticles: false,
       },
     });
   }
