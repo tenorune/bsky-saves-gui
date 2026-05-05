@@ -27,6 +27,7 @@
   import { downloadFile } from '../exporters/file-download';
   import { parseInventory } from '../reader/inventory-shape';
   import { navigate } from '$lib/router';
+  import CustomProxySetupModal from '../components/CustomProxySetupModal.svelte';
 
   let status = '';
   let error = '';
@@ -40,6 +41,7 @@
     description: 'the local helper is not running',
   };
   let backupAdvancedOpen = false;
+  let setupModalOpen = false;
   let workerUrl = '';
   let workerSecret = '';
 
@@ -368,58 +370,9 @@
           Cloudflare's free tier.
         </p>
 
-        <details class="setup-guide">
-          <summary>Setup guide</summary>
-          <ol class="setup-guide__steps">
-            <li>
-              <strong>Generate a shared secret.</strong>
-              Open your browser's DevTools (F12 → Console). Paste this and press
-              Enter:
-              <pre class="setup-guide__code">crypto.getRandomValues(new Uint8Array(32)).reduce((a,b)=&gt;a+b.toString(16).padStart(2,'0'),'')</pre>
-              You'll get a 64-character hex string. Copy it — you'll paste it
-              twice below.
-            </li>
-            <li>
-              <strong>Create the worker on Cloudflare.</strong>
-              Go to
-              <a href="https://dash.cloudflare.com" target="_blank" rel="noopener noreferrer">dash.cloudflare.com</a>
-              → Workers &amp; Pages → Create → Create Worker. Name it something
-              like <code>bsky-saves-image-proxy</code>. Click Deploy to accept
-              the placeholder.
-            </li>
-            <li>
-              <strong>Paste the worker source.</strong>
-              On the worker page click <em>Edit code</em>. In a new tab, open
-              <a
-                href="https://github.com/tenorune/bsky-saves-gui/blob/main/templates/cf-worker/worker.js"
-                target="_blank"
-                rel="noopener noreferrer"
-              >the worker source</a>, click <em>Raw</em>, copy everything. Paste
-              it over the placeholder in Cloudflare. Click Deploy.
-            </li>
-            <li>
-              <strong>Set environment variables.</strong>
-              Worker page → Settings → Variables and Secrets:
-              <ul>
-                <li>Variable <code>ALLOWED_ORIGIN</code> = <code>{typeof window !== 'undefined' ? window.location.origin : ''}</code></li>
-                <li>Secret <code>SHARED_SECRET</code> = the 64-character hex string from step 1</li>
-              </ul>
-            </li>
-            <li>
-              <strong>Copy the worker URL.</strong>
-              It's at the top of the worker page, ending in
-              <code>.workers.dev</code>. Test it by pasting
-              <code>&lt;that URL&gt;/fetch</code> into a browser tab — you should
-              see <code>{`{"error":"forbidden"}`}</code> with status 403. That
-              means the worker is reachable.
-            </li>
-            <li>
-              <strong>Paste below.</strong>
-              Put the URL into <em>Proxy URL</em> and the same hex string into
-              <em>Shared secret</em>. Click Save.
-            </li>
-          </ol>
-        </details>
+        <button type="button" class="setup-guide-trigger" on:click={() => (setupModalOpen = true)}>
+          Setup guide
+        </button>
 
         <label>
           Proxy URL
@@ -476,6 +429,8 @@
     </p>
     <button type="button" class="danger" on:click={clearAll}>Clear all local data</button>
   </section>
+
+  <CustomProxySetupModal open={setupModalOpen} on:close={() => (setupModalOpen = false)} />
 </section>
 
 <style>
@@ -596,46 +551,14 @@
     color: color-mix(in oklab, red 70%, CanvasText);
     font-weight: 500;
   }
-  .setup-guide {
-    margin: 0.5rem 0 1rem;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid color-mix(in oklab, CanvasText 12%, transparent);
+  .setup-guide-trigger {
+    font: inherit;
+    padding: 0.35rem 0.75rem;
+    border: 1px solid color-mix(in oklab, CanvasText 20%, transparent);
     border-radius: 6px;
-    background: color-mix(in oklab, CanvasText 3%, Canvas);
-  }
-  .setup-guide summary {
+    background: Canvas;
+    color: CanvasText;
     cursor: pointer;
-    font-weight: 500;
-    font-size: 0.9rem;
-  }
-  .setup-guide__steps {
-    margin: 0.75rem 0 0.25rem 1.25rem;
-    padding: 0;
-    font-size: 0.875rem;
-    line-height: 1.5;
-  }
-  .setup-guide__steps li {
-    margin-bottom: 0.85rem;
-  }
-  .setup-guide__steps li:last-child {
-    margin-bottom: 0;
-  }
-  .setup-guide__steps ul {
-    margin: 0.25rem 0 0 1rem;
-    padding: 0;
-  }
-  .setup-guide__code {
-    margin: 0.4rem 0;
-    padding: 0.5rem 0.75rem;
-    background: color-mix(in oklab, CanvasText 8%, Canvas);
-    border-radius: 4px;
-    font-size: 0.8rem;
-    overflow-x: auto;
-    white-space: pre-wrap;
-    word-break: break-all;
-  }
-  .setup-guide a {
-    color: inherit;
-    text-decoration: underline;
+    margin: 0.5rem 0;
   }
 </style>
