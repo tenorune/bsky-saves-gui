@@ -331,7 +331,7 @@
         {#if articlesEnabled}
           <button type="button" class="link-button" on:click={handleDisableArticles}>Disable</button>
         {:else}
-          <button type="button" on:click={handleSetUpArticles}>Set up article backup</button>
+          <button type="button" on:click={handleSetUpArticles}>Save my own copy</button>
         {/if}
       </div>
 

@@ -56,7 +56,7 @@
   <div class="backup-banner" role="region" aria-label="Image backup suggestion">
     <p class="backup-banner__text">
       {imageCount} of your saves include images. They'll work as long as Bluesky keeps
-      them online. Save your own copy →
+      them online. Save your own copy.
     </p>
     <p class="backup-banner__sub">
       {#if backendDesc}
@@ -72,7 +72,7 @@
         on:click={handleSave}
         disabled={busy}
       >
-        Save my own copy →
+        Save my own copy
       </button>
       <button type="button" class="backup-banner__link" on:click={handleSnooze}>
         Remind me later

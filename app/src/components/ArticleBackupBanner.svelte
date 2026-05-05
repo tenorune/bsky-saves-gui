@@ -59,7 +59,7 @@
   <div class="article-banner" role="region" aria-label="Article backup suggestion">
     <p class="article-banner__text">
       {articleCount} of your saves link to articles. Save the full article
-      text so it doesn't disappear if the source goes away. Set up backup →
+      text so it doesn't disappear if the source goes away. Save your own copy.
     </p>
     <p class="article-banner__sub">
       {#if articleBackendStatus.available}
@@ -75,7 +75,7 @@
         on:click={handleSave}
         disabled={busy}
       >
-        Set up backup →
+        Save my own copy
       </button>
       <button type="button" class="article-banner__link" on:click={handleSnooze}>
         Remind me later
