@@ -11,39 +11,36 @@ describe('buildBackupStatusLine', () => {
       backendDescription: 'the local helper (bsky-saves 0.3.0)',
     });
     expect(r.text).toBe('Not yet saved · would use the local helper (bsky-saves 0.3.0)');
-    expect(r.link).toBeNull();
   });
 
-  it('idle + no backend shows "Set up a backend" link', () => {
+  it('idle + no backend reads "no backend available" with no inline link', () => {
     const r = buildBackupStatusLine({
       domain: 'articles',
       hydration: idle,
       backendDescription: null,
     });
-    expect(r.text).toBe('Not yet saved · no backend available — Set up a backend');
-    expect(r.link).toEqual({ kind: 'setup', phrase: 'Set up a backend' });
+    expect(r.text).toBe('Not yet saved · no backend available');
   });
 
-  it('running shows "Saving X of N images…"', () => {
+  it('running appends backend info', () => {
     const r = buildBackupStatusLine({
       domain: 'images',
       hydration: { status: 'running', total: 47, fetched: 11, skipped: 1, failed: 0, failures: [] },
       backendDescription: 'the local helper',
     });
-    expect(r.text).toBe('Saving 12 of 47 images…');
-    expect(r.link).toBeNull();
+    expect(r.text).toBe('Saving 12 of 47 images… · using the local helper');
   });
 
-  it('done with no failures shows "X of N images saved"', () => {
+  it('done with no failures appends backend info', () => {
     const r = buildBackupStatusLine({
       domain: 'images',
       hydration: { status: 'done', total: 5, fetched: 5, skipped: 0, failed: 0, failures: [] },
       backendDescription: 'the local helper',
     });
-    expect(r.text).toBe('5 of 5 images saved');
+    expect(r.text).toBe('5 of 5 images saved · using the local helper');
   });
 
-  it('done with failures shows the failed count', () => {
+  it('done with failures appends backend info', () => {
     const r = buildBackupStatusLine({
       domain: 'images',
       hydration: {
@@ -52,16 +49,25 @@ describe('buildBackupStatusLine', () => {
       },
       backendDescription: 'the local helper',
     });
-    expect(r.text).toBe('3 of 5 images saved (2 failed)');
+    expect(r.text).toBe('3 of 5 images saved (2 failed) · using the local helper');
   });
 
-  it('cancelled shows "Stopped at X of N"', () => {
+  it('cancelled appends backend info', () => {
     const r = buildBackupStatusLine({
       domain: 'articles',
       hydration: { status: 'cancelled', total: 10, fetched: 4, skipped: 0, failed: 0, failures: [] },
       backendDescription: 'the local helper',
     });
-    expect(r.text).toBe('Stopped at 4 of 10 articles');
+    expect(r.text).toBe('Stopped at 4 of 10 articles · using the local helper');
+  });
+
+  it('done without backend description omits the suffix', () => {
+    const r = buildBackupStatusLine({
+      domain: 'images',
+      hydration: { status: 'done', total: 5, fetched: 5, skipped: 0, failed: 0, failures: [] },
+      backendDescription: null,
+    });
+    expect(r.text).toBe('5 of 5 images saved');
   });
 
   it('uses singular noun when total === 1', () => {
@@ -70,7 +76,7 @@ describe('buildBackupStatusLine', () => {
       hydration: { status: 'done', total: 1, fetched: 1, skipped: 0, failed: 0, failures: [] },
       backendDescription: 'the local helper',
     });
-    expect(r.text).toBe('1 of 1 image saved');
+    expect(r.text).toBe('1 of 1 image saved · using the local helper');
   });
 
   it('article noun', () => {
@@ -79,6 +85,6 @@ describe('buildBackupStatusLine', () => {
       hydration: { status: 'running', total: 3, fetched: 1, skipped: 0, failed: 0, failures: [] },
       backendDescription: 'the local helper',
     });
-    expect(r.text).toBe('Saving 1 of 3 articles…');
+    expect(r.text).toBe('Saving 1 of 3 articles… · using the local helper');
   });
 });
