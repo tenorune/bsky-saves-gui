@@ -374,8 +374,9 @@
     font-size: 0.875rem;
     opacity: 0.85;
   }
-  /* Inline link-style button for in-row actions like "Disable". */
-  .link-button {
+  /* Inline link-style button for in-row actions like "Disable". Overrides the
+     .settings-row button rule above (same specificity, declared after). */
+  .settings-row .link-button {
     background: none;
     border: 0;
     padding: 0;
@@ -384,9 +385,10 @@
     text-decoration: underline;
     cursor: pointer;
     font: inherit;
+    line-height: 1.25;
     opacity: 0.85;
   }
-  .link-button:hover {
+  .settings-row .link-button:hover {
     opacity: 1;
   }
   .settings-section input[type='url'],
