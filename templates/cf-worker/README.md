@@ -229,3 +229,42 @@ Operators should clearly document in their privacy policy:
 - The opt-out path.
 
 See `docs/privacy.md` in the GUI repo for the canonical reference.
+
+## Article extraction (optional)
+
+Two worker variants ship in this directory:
+
+- `worker.js` — image proxy only. Hand-written, ~200 lines, easy to audit.
+- `dist/worker-with-articles.bundle.js` — image proxy + article extraction
+  (`POST /extract-article`, Mozilla Readability + linkedom). Pre-built ESM bundle.
+
+Source for the bundled variant lives at `src/worker-with-articles.ts`.
+
+### Build the bundle
+
+```bash
+cd templates/cf-worker
+pnpm install
+pnpm build
+```
+
+This regenerates `dist/worker-with-articles.bundle.js`. The bundle is committed
+to the repo so users who copy-paste from the in-app Setup Guide can use it
+without running a build.
+
+### Endpoints
+
+Both variants:
+- `OPTIONS /fetch` — CORS preflight.
+- `POST /fetch` — image/raw-bytes proxy. Body: `{ "url": "https://..." }`.
+- `GET /capabilities` — returns `{ "endpoints": [...] }` for runtime detection.
+
+`worker-with-articles.bundle.js` only:
+- `POST /extract-article` — body `{ "url": "https://..." }`, returns
+  `{ url, title, text, fetched_at, note? }` matching the local helper's shape.
+
+### Notes
+- Cloudflare Workers' free plan limits CPU per request; large pages with heavy
+  Readability work may need the Standard usage model.
+- The `URL_ALLOWLIST` env var (if set) applies to both `/fetch` and
+  `/extract-article`.
