@@ -48,7 +48,7 @@ Enumerate the signed-in user's bookmarked posts (the same listing `bsky-saves fe
 }
 ```
 
-- `credentials` — required. The daemon does its own `com.atproto.server.createSession` on each call.
+- `credentials` — required. The daemon does its own `com.atproto.server.createSession` on each call. `pds` is optional and defaults to `https://bsky.social` when absent or empty (matches the `bsky-saves` CLI's default). `handle` and `app_password` are required.
 - `cursor` — optional opaque pagination token returned by a previous call. Omit / `null` for the first page.
 - `limit` — optional, default 100, max 100. Matches the underlying Bluesky API page size.
 
@@ -97,7 +97,7 @@ Enumerate the signed-in user's bookmarked posts (the same listing `bsky-saves fe
 - On request with `cursor: "<wrapped>"`, the daemon decodes, **skips the probe**, and fetches directly using `endpoint` + `upstream`.
 - **The GUI MUST round-trip the cursor byte-for-byte and never inspect it.** The format is the daemon's private contract; new versions may extend the JSON without GUI changes.
 - **Credentials are NEVER encoded in the cursor.** Cursors can land in logs, browser history, or external diagnostic surfaces; auth never leaves the request body. Per-page `createSession` is the price (fast, ~200 ms; v1 spec already accepts this).
-- **Failure fallback mid-pagination.** If the daemon decodes a cursor but the named endpoint returns a hard failure (4xx/5xx that isn't "no more results"), it re-runs `probe_bookmark_endpoints` and continues on whichever new winner emerges, then returns a cursor encoding the new endpoint. This is invisible to the GUI — it just sees a slight latency bump on that one page, no error.
+- **Failure fallback mid-pagination.** If the daemon decodes a cursor but the named endpoint returns a hard failure (4xx/5xx that isn't "no more results"), it re-runs `probe_bookmark_endpoints` **with no upstream cursor** (the four bookmark endpoints have incompatible cursor formats — e.g. `pds:listRecords` uses a record-key TID, `bookmark.getBookmarks` uses an opaque lexicon cursor — so cross-endpoint cursor reuse risks silently wrong pages). It then returns a cursor encoding the new endpoint. **This means a fallback restarts pagination from page 1 of the new endpoint**, so the GUI may receive entries it has already seen on this run; deduplicate by `uri` if downstream code can't tolerate that. This is invisible to the GUI in terms of error surface — it just sees a slight latency bump on that one page and a non-monotonic cursor chain.
 
 **Errors**:
 
@@ -166,6 +166,8 @@ Enumerate the signed-in user's bookmarked posts (the same listing `bsky-saves fe
   }
 }
 ```
+
+- `credentials.pds` is optional and defaults to `https://bsky.social` when absent or empty. `handle` and `app_password` are required.
 
 **Response** (`200 application/json`):
 
