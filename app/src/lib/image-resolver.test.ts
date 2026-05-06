@@ -71,4 +71,32 @@ describe('resolveImageSrc', () => {
     expect(r.src).toBe('https://i/not-embedded');
     expect(r.isBlob).toBe(false);
   });
+
+  it('uses a registered local path (relative URL) when present for the URL', async () => {
+    const { registerLocalImagePaths, resolveImageSrc, clearLocalImagePaths, clearEmbeddedBlobs } = await import('./image-resolver');
+    clearEmbeddedBlobs();
+    registerLocalImagePaths({
+      'https://i/local': 'images/abc.png',
+    });
+    try {
+      const r = await resolveImageSrc('https://i/local');
+      expect(r.src).toBe('images/abc.png');
+      expect(r.isBlob).toBe(false);
+    } finally {
+      clearLocalImagePaths();
+    }
+  });
+
+  it('local paths take precedence over embedded blobs', async () => {
+    const { registerLocalImagePaths, registerEmbeddedBlobs, resolveImageSrc, clearLocalImagePaths, clearEmbeddedBlobs } = await import('./image-resolver');
+    registerEmbeddedBlobs({ 'https://i/both': { mime: 'image/png', data_b64: 'aGVsbG8=' } });
+    registerLocalImagePaths({ 'https://i/both': 'images/zzz.png' });
+    try {
+      const r = await resolveImageSrc('https://i/both');
+      expect(r.src).toBe('images/zzz.png');
+    } finally {
+      clearEmbeddedBlobs();
+      clearLocalImagePaths();
+    }
+  });
 });

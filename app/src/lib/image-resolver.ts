@@ -1,10 +1,14 @@
-// Render-time lookup that bridges image-store (IDB blob cache), an in-memory
-// "embedded blob" map (used by exported archives where IDB starts empty),
-// and the remote URL. Returns the URL the GUI should hand to <img src=...>.
+// Render-time lookup that bridges (in priority order):
+//   1. A registered "local image paths" map — used by ZIP exports where each
+//      URL maps to a relative path like `images/abc.png`.
+//   2. A registered "embedded blob" map — used by single-file HTML exports
+//      where each URL maps to base64 bytes returned as a `data:` URI.
+//   3. The IDB blob cache — the live app's primary store.
+//   4. The remote URL — final fallback when nothing local exists.
 //
-// Caller owns the blob URL lifecycle: when isBlob is true, revoke the src
-// via URL.revokeObjectURL when the consumer is destroyed. Embedded data:
-// URIs don't need revoking and report isBlob: false.
+// Caller owns the blob URL lifecycle: when isBlob is true, revoke the src via
+// URL.revokeObjectURL when the consumer is destroyed. data: URIs and relative
+// paths report isBlob: false (no revoke needed).
 
 import { loadImageBlob } from './image-store';
 
@@ -19,24 +23,29 @@ interface EmbeddedBlob {
 }
 
 let embeddedBlobs: Record<string, EmbeddedBlob> = {};
+let localImagePaths: Record<string, string> = {};
 
-/**
- * Register a map of url → { mime, data_b64 } for use by `resolveImageSrc`.
- * Used by the archive bootstrap when the page is opened from an exported
- * HTML file. Subsequent calls replace the registered map (idempotent).
- */
 export function registerEmbeddedBlobs(map: Record<string, EmbeddedBlob>): void {
   embeddedBlobs = { ...map };
 }
 
-/**
- * Clear the registered embedded-blob map. Test hook.
- */
 export function clearEmbeddedBlobs(): void {
   embeddedBlobs = {};
 }
 
+export function registerLocalImagePaths(map: Record<string, string>): void {
+  localImagePaths = { ...map };
+}
+
+export function clearLocalImagePaths(): void {
+  localImagePaths = {};
+}
+
 export async function resolveImageSrc(remoteUrl: string): Promise<ResolvedImage> {
+  const localPath = localImagePaths[remoteUrl];
+  if (localPath) {
+    return { src: localPath, isBlob: false };
+  }
   const embedded = embeddedBlobs[remoteUrl];
   if (embedded) {
     return { src: `data:${embedded.mime};base64,${embedded.data_b64}`, isBlob: false };
