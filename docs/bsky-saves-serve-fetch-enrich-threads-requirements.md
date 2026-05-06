@@ -225,7 +225,7 @@ For v1 of these endpoints, **no streaming**. A single request, a single response
 
 ### 7. Concurrency
 
-Each endpoint may be called concurrently. The daemon must not serialize requests behind a single lock — that would make the GUI feel sluggish. `bsky-saves`'s existing async-httpx code is the right base.
+Each endpoint may be called concurrently. The daemon must not serialize requests behind a single lock — that would make the GUI feel sluggish. `ThreadingHTTPServer` (already the v1 baseline) handles cross-request concurrency; within a single request, fan-out (e.g., the per-thread `getPostThread` calls in `/hydrate-threads`) can use a `ThreadPoolExecutor` over the existing sync `httpx` client. No async/await refactor required.
 
 ### 8. Origin allowlist + bind
 
