@@ -1,4 +1,6 @@
+// @vitest-environment node
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import 'fake-indexeddb/auto';
 import type { Inventory } from '../reader/inventory-shape';
 
 const inv: Inventory = {
@@ -25,10 +27,15 @@ const archiveHtml = `<!doctype html>
 <script type="application/json" id="inventory">
 {"saves":[]}
 </script>
+<script type="application/json" id="image-blobs">
+{}
+</script>
 </body></html>`;
 
 describe('htmlExporter', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    const { clearImageBlobs } = await import('../lib/image-store');
+    await clearImageBlobs();
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) => {
@@ -88,5 +95,40 @@ describe('htmlExporter', () => {
     );
     const { exportHtml } = await import('./html-exporter');
     await expect(exportHtml(inv)).rejects.toThrow(/inventory script tag/);
+  });
+
+  it('injects the gathered image-blob map into the image-blobs script tag', async () => {
+    const { saveImageBlob } = await import('../lib/image-store');
+    await saveImageBlob('https://i/1', new Blob(['hi'], { type: 'image/png' }));
+
+    // Replace global fetch with one that returns the test shell containing
+    // both script tags. Match the shape used in the existing test for
+    // injecting the inventory.
+    const shellHtml = `<!doctype html>
+<html><body>
+<script type="application/json" id="inventory">
+{"saves":[]}
+</script>
+<script type="application/json" id="image-blobs">
+{}
+</script>
+</body></html>`;
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(shellHtml, { status: 200 })));
+    try {
+      const { exportHtml } = await import('./html-exporter');
+      const inv = {
+        saves: [{ uri: 'a', images: [{ url: 'https://i/1' }] }],
+      };
+      const r = await exportHtml(inv as any);
+      const text = await r.blob.text();
+      const m = /<script type="application\/json" id="image-blobs">([\s\S]*?)<\/script>/.exec(text);
+      expect(m).not.toBeNull();
+      const parsed = JSON.parse(m![1]);
+      expect(parsed['https://i/1']).toBeDefined();
+      expect(parsed['https://i/1'].mime).toBe('image/png');
+      expect(parsed['https://i/1'].data_b64).toBe('aGk=');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
