@@ -4,6 +4,7 @@
   import { parseInventory, rkeyOf, type Inventory, type Save } from '../reader/inventory-shape';
   import LibraryView from '../reader/LibraryView.svelte';
   import PostFocus from '../reader/PostFocus.svelte';
+  import { registerEmbeddedBlobs } from '$lib/image-resolver';
 
   type View =
     | { name: 'loading' }
@@ -18,6 +19,20 @@
     const el = document.getElementById('inventory');
     if (!el) throw new Error('No inline inventory script');
     return parseInventory(JSON.parse(el.textContent ?? '{}'));
+  }
+
+  function readImageBlobs(): Record<string, { mime: string; data_b64: string }> {
+    const el = document.getElementById('image-blobs');
+    if (!el) return {};
+    try {
+      const parsed = JSON.parse(el.textContent ?? '{}');
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, { mime: string; data_b64: string }>;
+      }
+    } catch {
+      // Malformed JSON: silently fall back to no embedded blobs.
+    }
+    return {};
   }
 
   function applyHash(): void {
@@ -37,6 +52,7 @@
 
   onMount(() => {
     try {
+      registerEmbeddedBlobs(readImageBlobs());
       inventory = readInline();
       applyHash();
       const handler = () => applyHash();
