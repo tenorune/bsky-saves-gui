@@ -1,13 +1,12 @@
 /**
  * Minimum required bsky-saves CLI version. The GUI surfaces an upgrade prompt
- * when the running helper reports an older version. Bumped to 0.3.1 because
- * v0.3.1 fixed a thread-hydration bug (collect_same_author_replies was
- * including replies from inside other commenters' subtrees, polluting
- * thread_replies on photo posts with dozens of reply-to-comment entries).
+ * when the running helper reports an older version. Bumped to 0.4.0 because
+ * v0.4.0 added /fetch, /enrich, and /hydrate-threads endpoints that let the
+ * GUI route those operations through the helper instead of Pyodide.
  *
- * Schema bump: thread_schema_version 3 → 4.
+ * (v0.3.1 had been the prior floor for the thread_schema_version 3 → 4 fix.)
  */
-export const MIN_HELPER_VERSION = '0.3.1';
+export const MIN_HELPER_VERSION = '0.4.0';
 
 /**
  * Compare two semver-ish version strings. Returns true if `actual` is older
