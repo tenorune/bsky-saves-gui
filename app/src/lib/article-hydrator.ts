@@ -13,6 +13,7 @@ import { saveInventory } from './inventory-store';
 import { articleHydration, type HydrationFailure } from './hydration-state';
 import { loadProxyConfig, saveProxyConfig } from './proxy-config';
 import { extractArticleViaWorker, WorkerNoArticlesError } from './user-worker-client';
+import { saveFailures } from './failure-store';
 
 function makeDefaultFetcher(signal: AbortSignal | undefined): (url: string) => Promise<ExtractedArticle> {
   // Cache the backend choice for the duration of the run. Probe lazily on first
@@ -127,6 +128,7 @@ export async function hydrateArticles(
 
   let fetched = 0;
   let failed = 0;
+  const failures: HydrationFailure[] = [];
 
   for (const url of urlsToFetch) {
     if (signal?.aborted) {
@@ -137,6 +139,7 @@ export async function hydrateArticles(
       } catch {
         // best-effort persist
       }
+      void saveFailures('articles', failures);
       return { fetched, skipped, failed, cancelled: true };
     }
 
@@ -161,6 +164,7 @@ export async function hydrateArticles(
         continue;
       }
       const failure: HydrationFailure = { url, reason: reasonOf(err) };
+      failures.push(failure);
       failed++;
       articleHydration.update((s) => ({
         ...s,
@@ -179,6 +183,7 @@ export async function hydrateArticles(
     } catch {
       // best-effort persist
     }
+    void saveFailures('articles', failures);
     return { fetched, skipped, failed, cancelled: true };
   }
 
@@ -191,5 +196,6 @@ export async function hydrateArticles(
   }
 
   articleHydration.update((s) => ({ ...s, status: 'done' }));
+  void saveFailures('articles', failures);
   return { fetched, skipped, failed, cancelled: false };
 }

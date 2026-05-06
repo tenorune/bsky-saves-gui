@@ -11,6 +11,7 @@ import { extractImageUrls } from './extract-image-urls';
 import { hasImageBlob, saveImageBlob } from './image-store';
 import { fetchImage as defaultFetchImage } from './image-fetcher';
 import { imageHydration, type HydrationFailure } from './hydration-state';
+import { saveFailures } from './failure-store';
 
 export interface HydrateResult {
   readonly fetched: number;
@@ -57,6 +58,7 @@ export async function hydrateImages(
   for (const url of urls) {
     if (signal?.aborted) {
       imageHydration.update((s) => ({ ...s, status: 'cancelled' }));
+      void saveFailures('images', failures);
       return { fetched, skipped, failed, cancelled: true };
     }
 
@@ -84,5 +86,6 @@ export async function hydrateImages(
   }
 
   imageHydration.update((s) => ({ ...s, status: 'done' }));
+  void saveFailures('images', failures);
   return { fetched, skipped, failed, cancelled: false };
 }

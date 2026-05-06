@@ -18,6 +18,7 @@
   import { cancelImageBackup } from '$lib/start-image-backup';
   import { cancelArticleBackup } from '$lib/start-article-backup';
   import { clearImageBlobs } from '$lib/image-store';
+  import { clearFailures } from '$lib/failure-store';
   import { resetImageHydration, resetArticleHydration } from '$lib/hydration-state';
   import { exportJson } from '../exporters/json-exporter';
   import { downloadFile } from '../exporters/file-download';
@@ -130,6 +131,7 @@
       clearAccount(),
       clearBackupPrefs(),
       clearImageBlobs(),
+      clearFailures(),
     ]);
     clearLastSession();
     resetImageHydration();

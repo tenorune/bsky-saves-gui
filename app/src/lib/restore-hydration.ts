@@ -4,6 +4,7 @@ import { extractArticleUrls } from './extract-article-urls';
 import { hasImageBlob } from './image-store';
 import { imageHydration, articleHydration } from './hydration-state';
 import { loadBackupPrefs } from './backup-prefs';
+import { loadFailures } from './failure-store';
 
 /**
  * On Library mount after a page reload, the hydration stores are reset to
@@ -39,13 +40,15 @@ export async function restoreHydrationFromInventory(
           if (await hasImageBlob(url)) fetched++;
         }),
       );
+      const urlSet = new Set(imageUrls);
+      const persistedFailures = (await loadFailures('images')).filter((f) => urlSet.has(f.url));
       imageHydration.set({
         status: 'done',
         total: imageUrls.length,
         fetched,
         skipped: 0,
-        failed: 0,
-        failures: [],
+        failed: persistedFailures.length,
+        failures: persistedFailures,
       });
     }
   }
@@ -74,13 +77,25 @@ export async function restoreHydrationFromInventory(
       }
     }
     if (articleTotal > 0) {
+      const articleUrlSet = new Set<string>();
+      const inv = inventory as { saves?: unknown };
+      if (Array.isArray(inv.saves)) {
+        for (const save of inv.saves) {
+          if (!save || typeof save !== 'object') continue;
+          const embed = (save as Record<string, unknown>).embed;
+          if (!embed || typeof embed !== 'object') continue;
+          const url = (embed as Record<string, unknown>).url;
+          if (typeof url === 'string' && /^https?:\/\//.test(url)) articleUrlSet.add(url);
+        }
+      }
+      const persistedFailures = (await loadFailures('articles')).filter((f) => articleUrlSet.has(f.url));
       articleHydration.set({
         status: 'done',
         total: articleTotal,
         fetched: articleFetched,
         skipped: 0,
-        failed: 0,
-        failures: [],
+        failed: persistedFailures.length,
+        failures: persistedFailures,
       });
     }
   }
