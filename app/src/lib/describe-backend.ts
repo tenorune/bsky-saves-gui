@@ -6,6 +6,15 @@
 import { detectBackends } from './image-fetcher';
 import { probeConfiguredHelper } from './helper-client';
 import { loadProxyConfig } from './proxy-config';
+import { isHelperOutdated, MIN_HELPER_VERSION } from './min-helper-version';
+
+function describeHelper(version: string): string {
+  const base = `the local helper (bsky-saves ${version})`;
+  if (isHelperOutdated(version)) {
+    return `${base} — outdated, please upgrade to ${MIN_HELPER_VERSION}+`;
+  }
+  return base;
+}
 
 /**
  * Returns a description of the highest-priority available image backend, or
@@ -16,7 +25,7 @@ export async function describeAvailableImageBackend(): Promise<string | null> {
   const backends = await detectBackends();
   if (backends.length === 0) return null;
   const b = backends[0];
-  if (b.kind === 'helper') return `the local helper (bsky-saves ${b.version})`;
+  if (b.kind === 'helper') return describeHelper(b.version);
   if (b.kind === 'user-worker') return 'your custom Cloudflare Worker';
   if (b.kind === 'operator-proxy') return "the operator's image proxy";
   return null;
@@ -44,7 +53,7 @@ export async function describeArticleBackend(): Promise<ArticleBackendStatus> {
     }
     return {
       available: true,
-      description: `the local helper (bsky-saves ${status.version})`,
+      description: describeHelper(status.version),
     };
   }
 
