@@ -49,4 +49,26 @@ describe('resolveImageSrc', () => {
     });
     vi.doUnmock('./image-store');
   });
+
+  it('uses an embedded blob (data URI) when one is registered for the URL', async () => {
+    const { registerEmbeddedBlobs, resolveImageSrc, clearEmbeddedBlobs } = await import('./image-resolver');
+    registerEmbeddedBlobs({
+      'https://i/embedded': { mime: 'image/png', data_b64: 'aGVsbG8=' },
+    });
+    try {
+      const r = await resolveImageSrc('https://i/embedded');
+      expect(r.src).toBe('data:image/png;base64,aGVsbG8=');
+      expect(r.isBlob).toBe(false);
+    } finally {
+      clearEmbeddedBlobs();
+    }
+  });
+
+  it('falls back to IDB then remote when no embedded blob is registered', async () => {
+    const { resolveImageSrc, clearEmbeddedBlobs } = await import('./image-resolver');
+    clearEmbeddedBlobs();
+    const r = await resolveImageSrc('https://i/not-embedded');
+    expect(r.src).toBe('https://i/not-embedded');
+    expect(r.isBlob).toBe(false);
+  });
 });
