@@ -1,6 +1,4 @@
 import type { Inventory } from '../reader/inventory-shape';
-import { gatherImageFiles } from '../lib/gather-image-files';
-import { renderStaticArchive } from './render-static-archive';
 
 export interface ExportResult {
   readonly blob: Blob;
@@ -12,8 +10,15 @@ export interface ExportResult {
  * a ZIP archive containing index.html + per-post pages + styles.css + images/
  * (when blobs exist). The HTML is pre-rendered static markup — no Svelte
  * runtime, no JS modules, no inventory.json.
+ *
+ * The renderer, blob-gatherer, and JSZip are dynamically imported so they
+ * only load when the user actually triggers an export.
  */
 export async function exportArchive(inventory: Inventory): Promise<ExportResult> {
+  const [{ gatherImageFiles }, { renderStaticArchive }] = await Promise.all([
+    import('../lib/gather-image-files'),
+    import('./render-static-archive'),
+  ]);
   const imageFiles = await gatherImageFiles(inventory);
   const out = renderStaticArchive({ inventory, imageFiles });
 
@@ -24,8 +29,6 @@ export async function exportArchive(inventory: Inventory): Promise<ExportResult>
     };
   }
 
-  // Dynamic import: JSZip is only needed when an export actually has blobs,
-  // so keep it out of the main app bundle and load it lazily on demand.
   const { default: JSZip } = await import('jszip');
   const zip = new JSZip();
   for (const [path, content] of out.files) {
