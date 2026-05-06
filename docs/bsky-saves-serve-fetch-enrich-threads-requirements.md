@@ -11,7 +11,7 @@ Let the GUI offload **bookmark enumeration**, **enrichment**, and **thread hydra
 Today the GUI does the following operations via Pyodide (in-browser Python):
 
 - **`fetch`** — list a user's bookmarks via the Bluesky API.
-- **`enrich`** — for each bookmark, fetch full author profile, embed metadata, quoted-post bodies.
+- **`enrich`** — for each bookmark, decode `post_created_at` from the at-URI's record-key TID. Today this is a pure-function offline step; no network or auth.
 - **`hydrate threads`** — for each bookmark, walk the reply tree to collect same-author follow-up replies (the "self-thread" pattern).
 
 It does these via the helper / cf-worker:
@@ -99,17 +99,12 @@ Enumerate the signed-in user's bookmarked posts (the same listing `bsky-saves fe
 
 ```json
 {
-  "uris": ["at://did:plc:.../app.bsky.feed.post/...", "..."],
-  "credentials": {
-    "handle": "alice.bsky.social",
-    "app_password": "xxxx-xxxx-xxxx-xxxx",
-    "pds": "https://bsky.social"
-  }
+  "uris": ["at://did:plc:.../app.bsky.feed.post/...", "..."]
 }
 ```
 
-- `uris` — at-URIs to enrich. The helper looks up the corresponding `app.bsky.feed.getPosts` records (or `app.bsky.feed.getPostThread` if richer data is needed) and returns enriched bodies.
-- `credentials` — required; the daemon does its own `com.atproto.server.createSession` once per call. Credentials are not persisted to disk.
+- `uris` — at-URIs to enrich.
+- **No `credentials` field.** Today's `bsky-saves enrich` is purely offline — it decodes `post_created_at` from each URI's record-key TID without making any network call. No `createSession`, no Bluesky API access. The endpoint inherits this; auth is not required.
 
 **Response** (`200 application/json`):
 
@@ -122,25 +117,25 @@ Enumerate the signed-in user's bookmarked posts (the same listing `bsky-saves fe
     }
   ],
   "errors": [
-    { "uri": "at://...", "reason": "post not found" }
+    { "uri": "at://...", "reason": "invalid at-uri" }
   ]
 }
 ```
 
 - `enriched` is a **sparse delta**: per-URI, only the fields enrichment populates. The caller merges these into the full save records it already received from `/fetch` (keyed by `uri`).
-- **Today, `bsky-saves enrich` populates exactly one top-level field: `post_created_at`** (the post's original creation timestamp). Most of what users might think of as "enrichment" — author display name, embed metadata, images, quoted post — is already returned by `/fetch`; enrich only fills in the createdAt that `getActorLikes` doesn't surface.
-- If `bsky-saves` extends enrich in the future to populate additional top-level fields (e.g., refreshed `display_name`, `cid`, profile data, language tags), those fields appear in `enriched` automatically — the endpoint passes through whatever the CLI's enrich step writes.
+- **Today, `bsky-saves enrich` populates exactly one top-level field: `post_created_at`** (the post's original creation timestamp, decoded offline from the rkey's TID). Most of what users might think of as "enrichment" — author display name, embed metadata, images, quoted post — is already returned by `/fetch`.
+- If `bsky-saves` extends enrich in the future to populate fields that *do* require network or auth (refreshed `display_name`, `cid`, profile data), the request body's auth contract should be re-opened then. v1 `serve` mirrors today's offline-only behavior; revisiting credentials is appropriately a major-version concern, not v1 scope creep.
 - The shape is owned by `bsky-saves`, not by this spec. The endpoint emits whatever the CLI's enrich step writes to the inventory.
-- Posts that failed to enrich appear in `errors` rather than `enriched`. This lets the caller fall back per-post without losing the rest of the batch.
+- Entries that failed to enrich (e.g., malformed at-URIs) appear in `errors` rather than `enriched`.
 - Threads are a separate endpoint (`/hydrate-threads`) — `enriched` entries do not include `thread_replies`.
 
 **Errors**:
 
-- `400` `{"error":"missing credentials"}` — required field absent.
-- `401` `{"error":"createSession failed: <message>"}` — Bluesky rejected the credentials.
-- `5xx` `{"error":"..."}` — daemon-internal failure.
+- `400 {"error":"missing uris"}` — required field absent.
+- `400 {"error":"invalid uri"}` — entries that don't parse as at-URIs land in the response's `errors` array, not as a top-level error. Reserved for the malformed-payload case.
+- `5xx {"error":"..."}` — daemon-internal failure.
 
-**Timeout**: 120 seconds per call. The daemon should batch upstream `app.bsky.feed.getPosts` calls (50 URIs at a time) to keep wall-clock low.
+**Timeout**: sub-second. The work is pure-function string parsing; nothing fans out.
 
 ### 3. `POST /hydrate-threads`
 
@@ -199,10 +194,12 @@ Older daemons (pre-0.4) won't advertise these; the GUI feature-detects per-endpo
 
 ### 5. Authentication handling
 
+Applies to `/fetch` and `/hydrate-threads` only. `/enrich` is offline and takes no credentials.
+
 - Credentials arrive in the request body. The daemon validates them by calling `com.atproto.server.createSession` and caches the resulting access JWT for the duration of the request. **The cache is in-memory and per-request; no persistence to disk, no shared cache across requests.**
-- If the GUI calls `/enrich` and `/hydrate-threads` back-to-back, each call performs its own `createSession`. Acceptable: createSession is fast, and avoiding shared state simplifies the threat model.
+- If the GUI calls `/fetch` and `/hydrate-threads` back-to-back, each call performs its own `createSession`. Acceptable: createSession is fast, and avoiding shared state simplifies the threat model.
 - The daemon never logs credentials, never echoes them in error responses.
-- If a request omits `credentials`, return `400 {"error":"missing credentials"}` rather than attempting an anonymous read (the Bluesky API requires auth for these endpoints anyway).
+- If a request omits `credentials`, return `400 {"error":"missing credentials"}` rather than attempting an anonymous read (the Bluesky API requires auth for these endpoints).
 
 ### 6. Progress reporting
 
@@ -230,9 +227,9 @@ Same rules as the v1 endpoints:
 
 ## Why these three endpoints together
 
-`fetch`, `enrich`, and `hydrate-threads` are exactly the operations that **today require Pyodide**. Adding all three to `serve` lets a helper-equipped user opt out of Pyodide entirely — including the cold-start WASM download on every fresh sign-in, which is the most painful single step in the GUI's onboarding for users with the helper installed.
+`fetch`, `enrich`, and `hydrate-threads` are the three CLI steps the GUI currently runs through Pyodide. Adding all three to `serve` lets a helper-equipped user opt out of Pyodide entirely — including the cold-start WASM download on every fresh sign-in, which is the most painful single step in the GUI's onboarding for users with the helper installed. `enrich` carries little Pyodide cost on its own (it's offline and trivial), but it's included for completeness so a helper-routed pipeline can stay end-to-end on the daemon without ever spawning the WASM worker.
 
-The eventual end state is the v1 spec's Phase 2 `POST /run` — a one-shot endpoint that does fetch + enrich + threads + image hydration + article extraction in a single round trip. The three granular endpoints in this doc are the partial step toward that: they're independently useful (the GUI can call them when the user re-runs threads, refreshes enrichment, or paginates through bookmarks) and they de-risk `/run` by proving the auth-handling, pagination, and inventory-shape patterns.
+The eventual end state is the v1 spec's Phase 2 `POST /run` — a one-shot endpoint that does fetch + enrich + threads + image hydration + article extraction in a single round trip. The three granular endpoints in this doc are the partial step toward that: they're independently useful (the GUI can call them when the user re-runs threads, refreshes enrichment, or paginates through bookmarks) and they de-risk `/run` by proving the pagination, inventory-shape, and credential-handling patterns.
 
 ## Out of scope
 
@@ -247,10 +244,10 @@ A `bsky-saves` release that closes this can be characterized by:
 
 - `/ping` returns `{"features": ["fetch-image", "extract-article", "fetch", "enrich", "hydrate-threads"]}` (order doesn't matter).
 - `POST /fetch` paginates the signed-in user's bookmarks; the GUI can walk the cursor to enumerate the entire collection without invoking Pyodide.
-- `POST /enrich` with 50 valid URIs + valid credentials returns 50 entries in `enriched`, in the same order, within 30 s on a typical residential connection.
+- `POST /enrich` with 50 valid URIs returns 50 entries in `enriched` (one `post_created_at` per URI) in well under one second. No credentials required.
 - `POST /hydrate-threads` with 100 valid URIs + valid credentials returns 100 entries in `threaded` within 60 s.
-- All three endpoints reject calls with `Origin: https://attacker.example` even when credentials are valid.
-- All three endpoints reject calls without `credentials`.
+- All three endpoints reject calls with `Origin: https://attacker.example`.
+- `/fetch` and `/hydrate-threads` reject calls without `credentials`. `/enrich` does not.
 - The GUI's `min-helper-version.ts` floor can be bumped to whatever version first ships these (likely `0.4.0`); the GUI will display "outdated, please upgrade to 0.4.0+" for older installs that lack these features.
 
 ## GUI side (already prepared)
