@@ -4,7 +4,7 @@
   import { parseInventory, rkeyOf, type Inventory, type Save } from '../reader/inventory-shape';
   import LibraryView from '../reader/LibraryView.svelte';
   import PostFocus from '../reader/PostFocus.svelte';
-  import { registerEmbeddedBlobs } from '$lib/image-resolver';
+  import { registerEmbeddedBlobs, registerLocalImagePaths } from '$lib/image-resolver';
 
   type View =
     | { name: 'loading' }
@@ -19,6 +19,24 @@
     const el = document.getElementById('inventory');
     if (!el) throw new Error('No inline inventory script');
     return parseInventory(JSON.parse(el.textContent ?? '{}'));
+  }
+
+  function readLocalImagePaths(): Record<string, string> {
+    const el = document.getElementById('local-image-paths');
+    if (!el) return {};
+    try {
+      const parsed = JSON.parse(el.textContent ?? '{}');
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const out: Record<string, string> = {};
+        for (const [k, v] of Object.entries(parsed)) {
+          if (typeof v === 'string') out[k] = v;
+        }
+        return out;
+      }
+    } catch {
+      // Malformed JSON: silently fall back to no local paths.
+    }
+    return {};
   }
 
   function readImageBlobs(): Record<string, { mime: string; data_b64: string }> {
@@ -52,6 +70,7 @@
 
   onMount(() => {
     try {
+      registerLocalImagePaths(readLocalImagePaths());
       registerEmbeddedBlobs(readImageBlobs());
       inventory = readInline();
       applyHash();
