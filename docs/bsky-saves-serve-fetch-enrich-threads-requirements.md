@@ -59,17 +59,17 @@ Enumerate the signed-in user's bookmarked posts (the same listing `bsky-saves fe
   "saves": [
     {
       "uri": "at://did:plc:.../app.bsky.feed.post/...",
-      "cid": "...",
-      "indexedAt": "2026-05-05T...Z",
-      "saved_at": "2026-05-05T...Z"
+      "indexedAt": "2026-05-05T16:28:04.123Z",
+      "saved_at": "2026-05-05T20:41:52.913Z"
     }
   ],
   "cursor": "opaque-string-or-null"
 }
 ```
 
-- `saves` is the page of bookmarks. Entries are minimal — just enough for the GUI to call `/enrich` next. No `record`, `author`, or `embed` here; that's `/enrich`'s job.
-- `cursor` is the next-page token. `null` when there are no more pages.
+- `saves` is the page of bookmarks. Entries match what `bsky-saves fetch` writes to its inventory's `saves[]` array **before** enrichment — minimum fields the helper has at this stage (`uri`, `indexedAt`, `saved_at`). Whatever pre-enrichment fields `bsky-saves` populates today, this endpoint passes through.
+- `saves` does **not** include `cid` (not currently captured by `bsky-saves`), `author`, `record`, `post_text`, `embed`, or `images`. Those come from `/enrich`.
+- `cursor` is an opaque pagination token; `null` when there are no more pages.
 
 **Errors**:
 
@@ -103,15 +103,33 @@ Enumerate the signed-in user's bookmarked posts (the same listing `bsky-saves fe
 {
   "enriched": [
     {
-      "uri": "at://...",
-      "cid": "...",
-      "author": { "did": "...", "handle": "...", "displayName": "..." },
-      "record": { "text": "...", "createdAt": "..." },
-      "embed": { "...optional embed details..." },
-      "quoted_post": { "...if applicable..." },
-      "thread_replies": null
-    },
-    "..."
+      "uri": "at://did:plc:.../app.bsky.feed.post/...",
+      "author": {
+        "did": "did:plc:...",
+        "handle": "alice.bsky.social",
+        "display_name": "Alice"
+      },
+      "post_text": "Hello world",
+      "post_created_at": "2026-05-05T16:28:04Z",
+      "indexedAt": "2026-05-05T16:28:04.123Z",
+      "embed": {
+        "type": "external",
+        "url": "https://example.com/article",
+        "title": "Article title",
+        "description": "Article description"
+      },
+      "images": [
+        { "kind": "image", "url": "https://...", "thumb": "https://...", "alt": "..." }
+      ],
+      "quoted_post": {
+        "uri": "at://...",
+        "cid": "...",
+        "author": { "did": "...", "handle": "...", "display_name": "..." },
+        "text": "...",
+        "created_at": "...",
+        "images": []
+      }
+    }
   ],
   "errors": [
     { "uri": "at://...", "reason": "post not found" }
@@ -119,9 +137,12 @@ Enumerate the signed-in user's bookmarked posts (the same listing `bsky-saves fe
 }
 ```
 
-- Each entry in `enriched` mirrors the shape `bsky-saves` already produces in its CLI inventory (top-level fields like `author`, `record`, `embed`, `quoted_post`).
+- **The shape is owned by `bsky-saves`'s `normalise_record`, not by this spec.** Whatever the CLI's `bsky-saves fetch` + enrichment writes to its inventory JSON is what this endpoint emits, byte-for-byte. The example above reflects the current CLI output (snake_case `post_text`, `post_created_at`, `display_name`; flat top-level fields rather than nested `record.text` / `record.createdAt`; normalized `embed` with `type`/`url`/`title`/`description`; `images` array with `{kind, url, thumb, alt}`).
+- `quoted_post` mirrors the same convention (snake_case `created_at`, `display_name`).
+- The `record: {text, createdAt}` shape (the *raw* Bluesky API shape) is **not** what this endpoint returns. Callers that need the raw shape should call the Bluesky API directly.
+- Fields the CLI doesn't currently populate (e.g., post `cid`) are not added by `serve` either. If `bsky-saves` later adds them, the endpoint inherits them automatically.
 - Posts that failed to enrich appear in `errors` rather than `enriched`. This lets the caller fall back per-post without losing the rest of the batch.
-- `thread_replies` is always `null` here. Threads are a separate endpoint (`/hydrate-threads`).
+- Threads are a separate endpoint (`/hydrate-threads`) — `enriched` entries do not include a `thread_replies` field.
 
 **Errors**:
 
