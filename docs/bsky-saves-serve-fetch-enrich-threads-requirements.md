@@ -201,6 +201,10 @@ Enumerate the signed-in user's bookmarked posts (the same listing `bsky-saves fe
 
 **Timeout**: 300 seconds. Thread walks fan out across hundreds of `getPostThread` calls and can be slow on large posts.
 
+**Batching**: callers SHOULD pass as many URIs per request as they have on hand (up to a few hundred) rather than splitting into many small calls. Each request performs one `createSession` against the user's PDS for credential validation (see § 6); Bluesky throttles `createSession` more aggressively than read endpoints, so a chatty caller can hit the per-account limit. One request per session-load is the intended pattern.
+
+**Note on credential use**: the daemon validates `credentials` with `com.atproto.server.createSession` (fail-fast on a bad app password), then discards the resulting JWT and reads threads from the public AppView (`https://public.api.bsky.app/xrpc/app.bsky.feed.getPostThread`) unauthenticated — matching the `bsky-saves` CLI's working pattern. See § 6 for the broader auth contract.
+
 ### 4. Capability advertisement
 
 The new endpoints are advertised via the existing **`/ping`** `features` array — gains `"fetch"`, `"enrich"`, and `"hydrate-threads"` entries when the daemon supports them.
@@ -211,10 +215,14 @@ Older daemons (pre-0.4) won't advertise these; the GUI feature-detects per-endpo
 
 Applies to `/fetch` and `/hydrate-threads` only. `/enrich` is offline and takes no credentials.
 
-- Credentials arrive in the request body. The daemon validates them by calling `com.atproto.server.createSession` and caches the resulting access JWT for the duration of the request. **The cache is in-memory and per-request; no persistence to disk, no shared cache across requests.**
-- If the GUI calls `/fetch` and `/hydrate-threads` back-to-back, each call performs its own `createSession`. Acceptable: createSession is fast, and avoiding shared state simplifies the threat model.
+- Credentials arrive in the request body. The daemon validates them by calling `com.atproto.server.createSession` once per request.
+- **Endpoint-specific use of the resulting JWT:**
+  - `/fetch` uses the JWT for the actual upstream calls (`bookmark.getBookmarks`, `getActorBookmarks`, `listRecords`) — those endpoints require auth.
+  - `/hydrate-threads` discards the JWT after validation and calls the public AppView (`public.api.bsky.app`) unauthenticated. Credentials here are **validation-only** — they confirm the caller holds a working app password but don't gate the actual read. This matches the `bsky-saves` CLI's working pattern; authenticated AppView calls hit the "OAuth tokens are meant for PDS access only" wall and aren't relevant for public thread reads.
+- The in-memory JWT lives for the duration of the request only — no persistence to disk, no shared cache across requests.
+- If the GUI calls `/fetch` and `/hydrate-threads` back-to-back, each call performs its own `createSession`. Callers should batch where possible (especially `/hydrate-threads`, which would otherwise burn the per-account `createSession` rate budget on validation roundtrips). Avoiding shared state simplifies the threat model.
 - The daemon never logs credentials, never echoes them in error responses.
-- If a request omits `credentials`, return `400 {"error":"missing credentials"}` rather than attempting an anonymous read (the Bluesky API requires auth for these endpoints).
+- If a request omits `credentials`, return `400 {"error":"missing credentials"}`. Even though `/hydrate-threads`'s upstream call is anonymous, the credential check is a deliberate gate: it confirms a real account is behind the request, complementing the origin allowlist as an abuse defense.
 
 ### 6. Progress reporting
 
