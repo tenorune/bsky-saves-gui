@@ -5,6 +5,7 @@
   import { currentRoute, navigate } from '$lib/router';
   import { slideFromRight } from '$lib/slide-transition';
   import PostFocus from '../reader/PostFocus.svelte';
+  import PostBackupOverlay from '../components/PostBackupOverlay.svelte';
   import { rkeyOf } from '../reader/inventory-shape';
 
   onMount(() => {
@@ -32,7 +33,9 @@
     <p>Post <code>{rkey}</code> not found in your inventory.</p>
     <button type="button" on:click={() => navigate('/library')}>Back to library</button>
   {:else}
-    <PostFocus {save} />
+    <PostFocus {save}>
+      <PostBackupOverlay {save} />
+    </PostFocus>
   {/if}
 </section>
 

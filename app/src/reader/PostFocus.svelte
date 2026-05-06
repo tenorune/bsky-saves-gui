@@ -3,87 +3,12 @@
   import { formatAuthor, formatDateTime, formatHandle } from './format';
   import PostBody from './PostBody.svelte';
   import HydratedImage from '../components/HydratedImage.svelte';
-  import { imageHydration, articleHydration } from '$lib/hydration-state';
-  import { getSavedImageUrls } from '$lib/image-store';
-  import { getPostBackupStatus } from '$lib/post-backup-status';
-  import BackupFailuresModal from '../components/BackupFailuresModal.svelte';
   import { bskyPostUrl } from '$lib/bsky-permalink';
-  import { describeAvailableImageBackend, describeArticleBackend } from '$lib/describe-backend';
 
   export let save: Save;
 
   $: thread = save.thread ?? [];
   $: bskyUrl = bskyPostUrl(save);
-
-  // Image URLs in this post: walk save.images and save.embed.images for http(s) entries.
-  function imageUrlsForSave(s: Save): string[] {
-    const out = new Set<string>();
-    const collect = (arr: unknown) => {
-      if (!Array.isArray(arr)) return;
-      for (const img of arr) {
-        if (!img || typeof img !== 'object') continue;
-        const url = (img as Record<string, unknown>).url;
-        if (typeof url === 'string' && /^https?:\/\//.test(url)) out.add(url);
-      }
-    };
-    collect((s as Record<string, unknown>).images);
-    const embed = (s as Record<string, unknown>).embed;
-    if (embed && typeof embed === 'object') {
-      collect((embed as Record<string, unknown>).images);
-    }
-    return [...out];
-  }
-
-  // Article URL: save.embed.url if it looks like an article link.
-  function articleUrlForSave(s: Save): string | null {
-    const embed = (s as Record<string, unknown>).embed;
-    if (!embed || typeof embed !== 'object') return null;
-    const url = (embed as Record<string, unknown>).url;
-    return typeof url === 'string' && /^https?:\/\//.test(url) ? url : null;
-  }
-
-  $: imageUrls = imageUrlsForSave(save);
-  $: articleUrl = articleUrlForSave(save);
-
-  let savedImageUrls = new Set<string>();
-
-  // Re-query IDB whenever image hydration progresses (or on mount via reactive run).
-  $: void (async () => {
-    // Reactive trigger: depend on imageUrls and the fetched count.
-    void $imageHydration.fetched;
-    savedImageUrls = await getSavedImageUrls(imageUrls);
-  })();
-
-  let setupAvailable = false;
-
-  $: void (async () => {
-    void $imageHydration.status;
-    void $articleHydration.status;
-    const img = await describeAvailableImageBackend();
-    const art = await describeArticleBackend();
-    setupAvailable = img !== null || art.available;
-  })();
-
-  $: status = getPostBackupStatus({
-    save,
-    imageUrlsInPost: imageUrls,
-    articleUrlInPost: articleUrl,
-    savedImageUrls,
-    imageHydration: $imageHydration,
-    articleHydration: $articleHydration,
-    setupAvailable,
-  });
-
-  let failuresOpen = false;
-
-  $: postScopedFailures = [
-    ...$imageHydration.failures
-      .filter((f) => imageUrls.includes(f.url))
-      .map((f) => ({ ...f, type: 'image' as const })),
-    ...$articleHydration.failures
-      .filter((f) => f.url === articleUrl)
-      .map((f) => ({ ...f, type: 'article' as const })),
-  ];
 </script>
 
 <article class="post-focus">
@@ -101,29 +26,7 @@
     <a href={bskyUrl} target="_blank" rel="noopener noreferrer">View on bsky.app</a>
   </p>
 
-  {#if status.hasAssets}
-    <footer
-      class="post-focus__backup"
-      class:post-focus__backup--failed={status.anyFailed}
-      aria-label="Backup status"
-    >
-      {#if status.anyFailed}
-        <button
-          type="button"
-          class="post-focus__backup-button"
-          on:click={() => (failuresOpen = true)}
-        >
-          {status.summary}
-        </button>
-      {:else if status.link === 'library'}
-        Not yet saved — <a class="post-focus__backup-button" href="#/library">go to Library to save</a>.
-      {:else if status.link === 'setup'}
-        Not yet saved — <a class="post-focus__backup-button" href="#/settings">set up a backend</a>.
-      {:else}
-        {status.summary}
-      {/if}
-    </footer>
-  {/if}
+  <slot />
 
   {#if thread.length > 0}
     <section class="post-focus__thread">
@@ -151,14 +54,6 @@
       </ol>
     </section>
   {/if}
-
-  <BackupFailuresModal
-    open={failuresOpen}
-    failures={postScopedFailures}
-    inventory={{ saves: [save] }}
-    title="Backup failures for this post"
-    on:close={() => (failuresOpen = false)}
-  />
 </article>
 
 <style>
@@ -244,27 +139,5 @@
     width: 100%;
     border-radius: 6px;
     object-fit: cover;
-  }
-  .post-focus__backup {
-    margin-top: 0.5rem;
-    font-size: 0.85rem;
-    opacity: 0.7;
-  }
-  .post-focus__backup--failed {
-    color: color-mix(in oklab, red 70%, CanvasText);
-    opacity: 0.95;
-  }
-  .post-focus__backup-button {
-    font: inherit;
-    color: inherit;
-    background: none;
-    border: 0;
-    padding: 0;
-    text-align: left;
-    cursor: pointer;
-    text-decoration: underline;
-  }
-  .post-focus__backup-button:hover {
-    text-decoration: none;
   }
 </style>
