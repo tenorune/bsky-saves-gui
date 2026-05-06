@@ -6,7 +6,7 @@
   import { loadAccount } from '$lib/account-store';
   import { exportJson } from '../exporters/json-exporter';
   import { exportMarkdown } from '../exporters/markdown-exporter';
-  import { exportHtml } from '../exporters/html-exporter';
+  import { exportArchive } from '../exporters/html-exporter';
   import { downloadFile } from '../exporters/file-download';
 
   let busy = false;
@@ -88,7 +88,7 @@
 
   function handleHtml() {
     return withInventory(async (inv) => {
-      const r = await exportHtml(inv);
+      const r = await exportArchive(inv);
       downloadFile(r.blob, r.filename);
     });
   }
@@ -99,7 +99,7 @@
   <div class="export-menu__panel">
     <button type="button" disabled={busy} on:click={handleJson}>JSON</button>
     <button type="button" disabled={busy} on:click={handleMarkdown}>Markdown</button>
-    <button type="button" disabled={busy} on:click={handleHtml}>HTML</button>
+    <button type="button" disabled={busy} on:click={handleHtml}>Export archive</button>
     {#if error}
       <p class="export-menu__error" role="alert">{error}</p>
     {/if}
