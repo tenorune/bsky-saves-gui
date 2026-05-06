@@ -59,16 +59,30 @@ Enumerate the signed-in user's bookmarked posts (the same listing `bsky-saves fe
   "saves": [
     {
       "uri": "at://did:plc:.../app.bsky.feed.post/...",
-      "indexedAt": "2026-05-05T16:28:04.123Z",
-      "saved_at": "2026-05-05T20:41:52.913Z"
+      "saved_at": "2026-05-05T20:41:52.913Z",
+      "author": {
+        "did": "did:plc:...",
+        "handle": "alice.bsky.social",
+        "display_name": "Alice"
+      },
+      "post_text": "Hello world",
+      "embed": null,
+      "images": [
+        { "kind": "image", "url": "https://...", "thumb": "https://...", "alt": "..." }
+      ],
+      "quoted_post": null
     }
   ],
   "cursor": "opaque-string-or-null"
 }
 ```
 
-- `saves` is the page of bookmarks. Entries match what `bsky-saves fetch` writes to its inventory's `saves[]` array **before** enrichment — minimum fields the helper has at this stage (`uri`, `indexedAt`, `saved_at`). Whatever pre-enrichment fields `bsky-saves` populates today, this endpoint passes through.
-- `saves` does **not** include `cid` (not currently captured by `bsky-saves`), `author`, `record`, `post_text`, `embed`, or `images`. Those come from `/enrich`.
+- `saves` is the page of bookmarks. Each entry matches what `bsky-saves fetch` writes to its inventory's `saves[]` array — including `author`, `post_text`, `embed`, `images`, and `quoted_post` when applicable. The Bluesky `getActorLikes` (or equivalent) endpoint returns enough data in a single round-trip that fetch already populates these.
+- `embed` is normalized: `null` if absent, otherwise `{type, url, title, description}` for external links (other types — quoted-post-only, no media — are folded into `quoted_post` / `images`).
+- `images` is normalized: `[]` if absent, otherwise `[{kind, url, thumb, alt}]`. `kind` is `image` for native attachments and `embed_thumb` for external link thumbnails.
+- `quoted_post` is `null` if absent, otherwise a nested record with the same snake_case shape (`{uri, cid, author, text, created_at, images, thread_replies}`).
+- Notable fields **not** yet populated at this stage: `post_created_at` (added by `/enrich`), `thread_replies` / `thread_schema_version` / `thread_fetched_at` (added by `/hydrate-threads`).
+- `cid` of the post itself is not currently captured by `bsky-saves`; if upstream adds it, this endpoint inherits it.
 - `cursor` is an opaque pagination token; `null` when there are no more pages.
 
 **Errors**:
@@ -104,31 +118,7 @@ Enumerate the signed-in user's bookmarked posts (the same listing `bsky-saves fe
   "enriched": [
     {
       "uri": "at://did:plc:.../app.bsky.feed.post/...",
-      "author": {
-        "did": "did:plc:...",
-        "handle": "alice.bsky.social",
-        "display_name": "Alice"
-      },
-      "post_text": "Hello world",
-      "post_created_at": "2026-05-05T16:28:04Z",
-      "indexedAt": "2026-05-05T16:28:04.123Z",
-      "embed": {
-        "type": "external",
-        "url": "https://example.com/article",
-        "title": "Article title",
-        "description": "Article description"
-      },
-      "images": [
-        { "kind": "image", "url": "https://...", "thumb": "https://...", "alt": "..." }
-      ],
-      "quoted_post": {
-        "uri": "at://...",
-        "cid": "...",
-        "author": { "did": "...", "handle": "...", "display_name": "..." },
-        "text": "...",
-        "created_at": "...",
-        "images": []
-      }
+      "post_created_at": "2026-05-05T16:28:04Z"
     }
   ],
   "errors": [
@@ -137,12 +127,12 @@ Enumerate the signed-in user's bookmarked posts (the same listing `bsky-saves fe
 }
 ```
 
-- **The shape is owned by `bsky-saves`'s `normalise_record`, not by this spec.** Whatever the CLI's `bsky-saves fetch` + enrichment writes to its inventory JSON is what this endpoint emits, byte-for-byte. The example above reflects the current CLI output (snake_case `post_text`, `post_created_at`, `display_name`; flat top-level fields rather than nested `record.text` / `record.createdAt`; normalized `embed` with `type`/`url`/`title`/`description`; `images` array with `{kind, url, thumb, alt}`).
-- `quoted_post` mirrors the same convention (snake_case `created_at`, `display_name`).
-- The `record: {text, createdAt}` shape (the *raw* Bluesky API shape) is **not** what this endpoint returns. Callers that need the raw shape should call the Bluesky API directly.
-- Fields the CLI doesn't currently populate (e.g., post `cid`) are not added by `serve` either. If `bsky-saves` later adds them, the endpoint inherits them automatically.
+- `enriched` is a **sparse delta**: per-URI, only the fields enrichment populates. The caller merges these into the full save records it already received from `/fetch` (keyed by `uri`).
+- **Today, `bsky-saves enrich` populates exactly one top-level field: `post_created_at`** (the post's original creation timestamp). Most of what users might think of as "enrichment" — author display name, embed metadata, images, quoted post — is already returned by `/fetch`; enrich only fills in the createdAt that `getActorLikes` doesn't surface.
+- If `bsky-saves` extends enrich in the future to populate additional top-level fields (e.g., refreshed `display_name`, `cid`, profile data, language tags), those fields appear in `enriched` automatically — the endpoint passes through whatever the CLI's enrich step writes.
+- The shape is owned by `bsky-saves`, not by this spec. The endpoint emits whatever the CLI's enrich step writes to the inventory.
 - Posts that failed to enrich appear in `errors` rather than `enriched`. This lets the caller fall back per-post without losing the rest of the batch.
-- Threads are a separate endpoint (`/hydrate-threads`) — `enriched` entries do not include a `thread_replies` field.
+- Threads are a separate endpoint (`/hydrate-threads`) — `enriched` entries do not include `thread_replies`.
 
 **Errors**:
 
