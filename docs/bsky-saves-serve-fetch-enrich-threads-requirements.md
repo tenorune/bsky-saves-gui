@@ -1,10 +1,10 @@
-# `bsky-saves serve` — enrich + hydrate-threads endpoints
+# `bsky-saves serve` — fetch + enrich + hydrate-threads endpoints
 
-> Extends the v1 spec at `bsky-saves-serve-requirements.md`. That spec covers `/ping`, `/fetch-image`, `/extract-article`. This doc adds `/enrich` and `/hydrate-threads` so the GUI can route those operations through a local helper instead of Pyodide.
+> Extends the v1 spec at `bsky-saves-serve-requirements.md`. That spec covers `/ping`, `/fetch-image`, `/extract-article`. This doc adds `/fetch`, `/enrich`, and `/hydrate-threads` so the GUI can route those operations through a local helper instead of Pyodide.
 
 ## Goal
 
-Let the GUI offload **enrichment** and **thread hydration** to a running `bsky-saves serve` daemon, the same way it already offloads image and article hydration. Users with the helper installed get faster, less crash-prone enrichment and thread walks; users without the helper continue to fall back to Pyodide.
+Let the GUI offload **bookmark enumeration**, **enrichment**, and **thread hydration** to a running `bsky-saves serve` daemon, the same way it already offloads image and article hydration. Together with the existing `/fetch-image` and `/extract-article` endpoints, this lets a helper-equipped user opt out of Pyodide entirely. Users without the helper continue to fall back to Pyodide.
 
 ## Background
 
@@ -30,7 +30,56 @@ If the helper is installed, all five operations could go through it. The helper 
 
 ## Requirements
 
-### 1. `POST /enrich`
+### 1. `POST /fetch`
+
+Enumerate the signed-in user's bookmarked posts (the same listing `bsky-saves fetch` produces from the CLI).
+
+**Request body** (`application/json`):
+
+```json
+{
+  "credentials": {
+    "handle": "alice.bsky.social",
+    "app_password": "xxxx-xxxx-xxxx-xxxx",
+    "pds": "https://bsky.social"
+  },
+  "cursor": null,
+  "limit": 100
+}
+```
+
+- `credentials` — required. The daemon does its own `com.atproto.server.createSession` on each call.
+- `cursor` — optional opaque pagination token returned by a previous call. Omit / `null` for the first page.
+- `limit` — optional, default 100, max 100. Matches the underlying Bluesky API page size.
+
+**Response** (`200 application/json`):
+
+```json
+{
+  "saves": [
+    {
+      "uri": "at://did:plc:.../app.bsky.feed.post/...",
+      "cid": "...",
+      "indexedAt": "2026-05-05T...Z",
+      "saved_at": "2026-05-05T...Z"
+    }
+  ],
+  "cursor": "opaque-string-or-null"
+}
+```
+
+- `saves` is the page of bookmarks. Entries are minimal — just enough for the GUI to call `/enrich` next. No `record`, `author`, or `embed` here; that's `/enrich`'s job.
+- `cursor` is the next-page token. `null` when there are no more pages.
+
+**Errors**:
+
+- `400 {"error":"missing credentials"}`.
+- `401 {"error":"createSession failed: <message>"}`.
+- `5xx {"error":"..."}`.
+
+**Timeout**: 30 seconds per page.
+
+### 2. `POST /enrich`
 
 **Request body** (`application/json`):
 
@@ -82,7 +131,7 @@ If the helper is installed, all five operations could go through it. The helper 
 
 **Timeout**: 120 seconds per call. The daemon should batch upstream `app.bsky.feed.getPosts` calls (50 URIs at a time) to keep wall-clock low.
 
-### 2. `POST /hydrate-threads`
+### 3. `POST /hydrate-threads`
 
 **Request body** (`application/json`):
 
@@ -131,55 +180,54 @@ If the helper is installed, all five operations could go through it. The helper 
 
 **Timeout**: 300 seconds. Thread walks fan out across hundreds of `getPostThread` calls and can be slow on large posts.
 
-### 3. Capability advertisement
+### 4. Capability advertisement
 
-Both new endpoints are advertised via:
+The new endpoints are advertised via:
 
-- The existing **`/ping`** `features` array — gains `"enrich"` and `"hydrate-threads"` entries when the daemon supports them.
-- The mirrored **`/capabilities`** endpoint (proposed in the distribution-requirements doc) — gains `/enrich` and `/hydrate-threads` entries.
+- The existing **`/ping`** `features` array — gains `"fetch"`, `"enrich"`, and `"hydrate-threads"` entries when the daemon supports them.
+- The mirrored **`/capabilities`** endpoint (proposed in the distribution-requirements doc) — gains `/fetch`, `/enrich`, and `/hydrate-threads` entries.
 
-Older daemons (pre-0.4) won't advertise these; the GUI feature-detects and falls back to Pyodide for any feature missing from the helper.
+Older daemons (pre-0.4) won't advertise these; the GUI feature-detects per-endpoint and falls back to Pyodide for any feature missing from the helper. Mixed support is fine — a daemon that advertises `enrich` and `hydrate-threads` but not `fetch` will see those two operations routed through the helper while `fetch` stays on Pyodide.
 
-### 4. Authentication handling
+### 5. Authentication handling
 
 - Credentials arrive in the request body. The daemon validates them by calling `com.atproto.server.createSession` and caches the resulting access JWT for the duration of the request. **The cache is in-memory and per-request; no persistence to disk, no shared cache across requests.**
 - If the GUI calls `/enrich` and `/hydrate-threads` back-to-back, each call performs its own `createSession`. Acceptable: createSession is fast, and avoiding shared state simplifies the threat model.
 - The daemon never logs credentials, never echoes them in error responses.
 - If a request omits `credentials`, return `400 {"error":"missing credentials"}` rather than attempting an anonymous read (the Bluesky API requires auth for these endpoints anyway).
 
-### 5. Progress reporting
+### 6. Progress reporting
 
 For v1 of these endpoints, **no streaming**. A single request, a single response. Acceptance:
 
 - The GUI shows a busy spinner. If the daemon takes > 60 s, that's fine.
 - Future revisions could stream partial results via SSE or chunked JSON, but only if the GUI gains a use for it. Don't over-design now.
 
-### 6. Concurrency
+### 7. Concurrency
 
 Each endpoint may be called concurrently. The daemon must not serialize requests behind a single lock — that would make the GUI feel sluggish. `bsky-saves`'s existing async-httpx code is the right base.
 
-### 7. Origin allowlist + bind
+### 8. Origin allowlist + bind
 
 Same rules as the v1 endpoints:
 
 - Bind to `127.0.0.1` only.
 - Apply the configured `--allow-origin` list. Reject browsers from other origins with the same `403 {"error":"Origin not allowed"}` shape.
 
-### 8. Backwards compatibility
+### 9. Backwards compatibility
 
 - The new endpoints are **additive**. Old GUIs (which only know `/fetch-image` and `/extract-article`) continue to work against new daemons.
 - The new GUI features (routing enrich/threads through the helper) gate on the `features` array — they only kick in when the daemon advertises support.
 - Inventory shape produced by `/enrich` and `/hydrate-threads` matches what `bsky-saves` writes when run as a CLI. The GUI's existing `parseInventory` accepts both.
 
-## Why these two endpoints, in this order
+## Why these three endpoints together
 
-`enrich` and `hydrate-threads` are the two operations that **today require Pyodide**. Adding them to `serve` lets a helper-equipped user opt out of Pyodide entirely. `fetch` itself (enumerating bookmarks via `app.bsky.feed.getActorLikes` and friends) is in scope for a follow-up — it's only run on first sign-in and on explicit "Update library" clicks, so the Pyodide cost there is amortized over many later operations.
+`fetch`, `enrich`, and `hydrate-threads` are exactly the operations that **today require Pyodide**. Adding all three to `serve` lets a helper-equipped user opt out of Pyodide entirely — including the cold-start WASM download on every fresh sign-in, which is the most painful single step in the GUI's onboarding for users with the helper installed.
 
-The eventual end state is the v1 spec's Phase 2 `POST /run` — a one-shot endpoint that does fetch + enrich + threads + image hydration + article extraction in a single round trip. `/enrich` and `/hydrate-threads` are the partial step toward that: they're independently useful (the GUI can call them when the user re-runs threads or refreshes enrichment) and they de-risk `/run` by proving the auth-handling pattern.
+The eventual end state is the v1 spec's Phase 2 `POST /run` — a one-shot endpoint that does fetch + enrich + threads + image hydration + article extraction in a single round trip. The three granular endpoints in this doc are the partial step toward that: they're independently useful (the GUI can call them when the user re-runs threads, refreshes enrichment, or paginates through bookmarks) and they de-risk `/run` by proving the auth-handling, pagination, and inventory-shape patterns.
 
 ## Out of scope
 
-- **`POST /fetch`** — bookmark enumeration. Deferred to a follow-up; Pyodide's cost there is one-time per session.
 - **Streaming responses** — single request / single response in v1.
 - **Configurable batch size** — the daemon picks sensible defaults (50 for getPosts, etc.). No flags.
 - **Disk caching of `getPostThread` responses** — the daemon is stateless. The GUI persists what it needs.
@@ -189,11 +237,12 @@ The eventual end state is the v1 spec's Phase 2 `POST /run` — a one-shot endpo
 
 A `bsky-saves` release that closes this can be characterized by:
 
-- `/ping` returns `{"features": ["fetch-image", "extract-article", "enrich", "hydrate-threads"]}` (order doesn't matter).
+- `/ping` returns `{"features": ["fetch-image", "extract-article", "fetch", "enrich", "hydrate-threads"]}` (order doesn't matter).
+- `POST /fetch` paginates the signed-in user's bookmarks; the GUI can walk the cursor to enumerate the entire collection without invoking Pyodide.
 - `POST /enrich` with 50 valid URIs + valid credentials returns 50 entries in `enriched`, in the same order, within 30 s on a typical residential connection.
 - `POST /hydrate-threads` with 100 valid URIs + valid credentials returns 100 entries in `threaded` within 60 s.
-- Both endpoints reject calls with `Origin: https://attacker.example` even when credentials are valid.
-- Both endpoints reject calls without `credentials`.
+- All three endpoints reject calls with `Origin: https://attacker.example` even when credentials are valid.
+- All three endpoints reject calls without `credentials`.
 - The GUI's `min-helper-version.ts` floor can be bumped to whatever version first ships these (likely `0.4.0`); the GUI will display "outdated, please upgrade to 0.4.0+" for older installs that lack these features.
 
 ## GUI side (already prepared)
