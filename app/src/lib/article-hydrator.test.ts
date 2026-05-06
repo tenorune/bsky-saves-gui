@@ -169,6 +169,48 @@ describe('hydrateArticles aborts in-flight fetch when signal fires', () => {
   });
 });
 
+describe('hydrateArticles writes save.article', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    const { clearInventory } = await import('./inventory-store');
+    await clearInventory();
+    const { resetArticleHydration } = await import('./hydration-state');
+    resetArticleHydration();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('also writes save.article so the renderer sees the new article text', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo) => {
+      const u = typeof input === 'string' ? input : (input as Request).url;
+      if (u.endsWith('/ping')) {
+        return {
+          ok: true,
+          json: async () => ({ name: 'bsky-saves', version: '0.3.0', features: ['extract-article'] }),
+        };
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          url: 'https://a.example/p',
+          title: 'Hello',
+          text: 'body text',
+          fetched_at: '2026-05-05T00:00:00Z',
+        }),
+      };
+    }));
+    const inv = { saves: [{ uri: 'a', embed: { url: 'https://a.example/p' } } as Record<string, unknown>] };
+    const { hydrateArticles } = await import('./article-hydrator');
+    await hydrateArticles(inv);
+    const save = inv.saves[0];
+    expect(save.article_text).toBe('body text');
+    expect(save.article).toEqual({ url: 'https://a.example/p', text: 'body text', title: 'Hello' });
+    vi.unstubAllGlobals();
+  });
+});
+
 describe('hydrateArticles default backend selection', () => {
   beforeEach(async () => {
     vi.resetModules();

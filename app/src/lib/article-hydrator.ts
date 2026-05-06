@@ -146,6 +146,11 @@ export async function hydrateArticles(
       if (save) {
         save.article_text = result.text;
         if (result.title) save.article_title = result.title;
+        save.article = {
+          url: result.url,
+          text: result.text,
+          ...(result.title ? { title: result.title } : {}),
+        };
       }
       fetched++;
       articleHydration.update((s) => ({ ...s, fetched: s.fetched + 1 }));
