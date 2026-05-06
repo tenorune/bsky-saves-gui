@@ -48,7 +48,13 @@ Enumerate the signed-in user's bookmarked posts (the same listing `bsky-saves fe
 }
 ```
 
-- `credentials` — required. The daemon does its own `com.atproto.server.createSession` on each call. `pds` is optional and defaults to `https://bsky.social` when absent or empty (matches the `bsky-saves` CLI's default). `handle` and `app_password` are required.
+- `credentials` — required. Two accepted shapes (the daemon detects by which fields are present):
+  - **App-password shape** (above): `{handle, app_password, pds?}`. The daemon does its own `com.atproto.server.createSession` on each call.
+  - **JWT-pair shape** (added in `bsky-saves` v0.4.1, for clients that already have a session): `{access_jwt, refresh_jwt, did, pds?}`. The daemon skips `createSession` and uses the tokens directly. See § 5 for refresh-on-expiry semantics and the `rotated_credentials` response field.
+
+  In both shapes, `pds` is optional and defaults to `https://bsky.social` when absent or empty (matches the `bsky-saves` CLI's default). The `did` field in the JWT-pair shape is treated as an opaque string by the daemon — no JWT decoding, no `sub`-claim verification. Mismatched `did`/`access_jwt` pairs fail at the upstream PDS, not at the helper.
+
+  If neither `app_password` nor `access_jwt` is present, the daemon returns `400 {"error":"missing credentials"}`.
 - `cursor` — optional opaque pagination token returned by a previous call. Omit / `null` for the first page.
 - `limit` — optional, default 100, max 100. Matches the underlying Bluesky API page size.
 
@@ -84,6 +90,19 @@ Enumerate the signed-in user's bookmarked posts (the same listing `bsky-saves fe
 - Notable fields **not** yet populated at this stage: `post_created_at` (added by `/enrich`), `thread_replies` / `thread_schema_version` / `thread_fetched_at` (added by `/hydrate-threads`).
 - `cid` of the post itself is not currently captured by `bsky-saves`; if upstream adds it, this endpoint inherits it.
 - `cursor` is an opaque pagination token; `null` when there are no more pages.
+- `rotated_credentials` (optional, JWT-pair path only — added in `bsky-saves` v0.4.1) — present **only** when the daemon refreshed the session mid-request because the supplied `access_jwt` had expired. Shape:
+
+  ```json
+  {
+    "rotated_credentials": {
+      "access_jwt": "<new>",
+      "refresh_jwt": "<new>",
+      "did": "did:plc:..."
+    }
+  }
+  ```
+
+  When present, the GUI **MUST** replace its stored JWT pair with these values **synchronously, before issuing the next request** (AT Protocol invalidates the old `refresh_jwt` once it's been used to mint a new pair; failing to persist the rotation leaves the GUI's stored `refresh_jwt` silently dead, and the next refresh will fail with `auth refresh failed`). Absent on responses that didn't trigger a refresh, and always absent under the app-password path.
 
 **Cursor encoding (daemon-side detail; the GUI MUST treat the cursor as fully opaque):**
 
@@ -103,10 +122,16 @@ Enumerate the signed-in user's bookmarked posts (the same listing `bsky-saves fe
 
 - `400 {"error":"missing credentials"}`.
 - `400 {"error":"invalid cursor"}` — cursor failed to decode (corrupted, mangled by an intermediary, or signed by a daemon-version-incompatible schema). The GUI should retry with `cursor: null` to start a fresh session.
-- `401 {"error":"createSession failed: <message>"}`.
+- `401 {"error":"createSession failed: <message>"}` — app-password path only.
+- `401 {"error":"auth refresh failed", "code":"refresh_failed"|"upstream_rejected_after_refresh"}` — JWT-pair path only (added in v0.4.1). The `error` string is the GUI-facing contract and is identical for both refresh failure modes; `code` is informational/diagnostic. The GUI handles both cases identically: discard the stored JWT pair and re-prompt for an app password.
 - `5xx {"error":"..."}`.
 
 **Timeout**: 30 seconds per page.
+
+**GUI-side obligations under the JWT-pair path** (v0.4.1+):
+
+- **Persist `rotated_credentials` synchronously.** If a `/fetch` response includes `rotated_credentials`, the GUI must update its stored JWT pair *before* issuing the next request. Async or fire-and-forget persistence risks losing the rotation if the page reloads or a subsequent request races ahead.
+- **Serialize `/fetch` calls per session.** Two concurrent `/fetch` calls can both trigger refresh; AT Protocol invalidates the loser's `refresh_jwt`, so one of the calls will fail. Pagination is naturally sequential, so this is satisfied by simply not parallelizing pagination requests.
 
 ### 2. `POST /enrich`
 
@@ -167,7 +192,8 @@ Enumerate the signed-in user's bookmarked posts (the same listing `bsky-saves fe
 }
 ```
 
-- `credentials.pds` is optional and defaults to `https://bsky.social` when absent or empty. `handle` and `app_password` are required.
+- `credentials` accepts the same two shapes as `/fetch` (app-password or JWT-pair; see § 1). Under the JWT-pair path, the daemon does **not** validate the JWT before responding — see "Note on credential use" below.
+- Under the app-password path: `pds` is optional and defaults to `https://bsky.social`; `handle` and `app_password` are required.
 
 **Response** (`200 application/json`):
 
@@ -205,7 +231,12 @@ Enumerate the signed-in user's bookmarked posts (the same listing `bsky-saves fe
 
 **Batching**: callers SHOULD pass as many URIs per request as they have on hand (up to a few hundred) rather than splitting into many small calls. Each request performs one `createSession` against the user's PDS for credential validation (see § 6); Bluesky throttles `createSession` more aggressively than read endpoints, so a chatty caller can hit the per-account limit. One request per session-load is the intended pattern.
 
-**Note on credential use**: the daemon validates `credentials` with `com.atproto.server.createSession` (fail-fast on a bad app password), then discards the resulting JWT and reads threads from the public AppView (`https://public.api.bsky.app/xrpc/app.bsky.feed.getPostThread`) unauthenticated — matching the `bsky-saves` CLI's working pattern. See § 6 for the broader auth contract.
+**Note on credential use**:
+
+- **App-password path**: the daemon validates `credentials` with `com.atproto.server.createSession` (fail-fast on a bad app password), then discards the resulting JWT and reads threads from the public AppView (`https://public.api.bsky.app/xrpc/app.bsky.feed.getPostThread`) unauthenticated — matching the `bsky-saves` CLI's working pattern.
+- **JWT-pair path** (v0.4.1+): the daemon does **not** validate the supplied JWT. The endpoint's upstream call is to the public AppView, which accepts unauthenticated requests; the JWT is unused. Security on this endpoint is the origin allowlist plus 127.0.0.1 binding (same as `/enrich`). No `rotated_credentials` ever appears on `/hydrate-threads` responses — there's no upstream call that could trigger refresh.
+
+See § 5 for the broader auth contract.
 
 ### 4. Capability advertisement
 
@@ -215,16 +246,33 @@ Older daemons (pre-0.4) won't advertise these; the GUI feature-detects per-endpo
 
 ### 5. Authentication handling
 
-Applies to `/fetch` and `/hydrate-threads` only. `/enrich` is offline and takes no credentials.
+Applies to `/fetch` and `/hydrate-threads`. `/enrich` is offline and takes no credentials.
 
-- Credentials arrive in the request body. The daemon validates them by calling `com.atproto.server.createSession` once per request.
-- **Endpoint-specific use of the resulting JWT:**
-  - `/fetch` uses the JWT for the actual upstream calls (`bookmark.getBookmarks`, `getActorBookmarks`, `listRecords`) — those endpoints require auth.
-  - `/hydrate-threads` discards the JWT after validation and calls the public AppView (`public.api.bsky.app`) unauthenticated. Credentials here are **validation-only** — they confirm the caller holds a working app password but don't gate the actual read. This matches the `bsky-saves` CLI's working pattern; authenticated AppView calls hit the "OAuth tokens are meant for PDS access only" wall and aren't relevant for public thread reads.
-- The in-memory JWT lives for the duration of the request only — no persistence to disk, no shared cache across requests.
-- If the GUI calls `/fetch` and `/hydrate-threads` back-to-back, each call performs its own `createSession`. Callers should batch where possible (especially `/hydrate-threads`, which would otherwise burn the per-account `createSession` rate budget on validation roundtrips). Avoiding shared state simplifies the threat model.
+The daemon accepts two credential shapes per request, distinguished by which fields are present:
+
+#### App-password path (v0.4.0+)
+
+`{handle, app_password, pds?}`. The daemon calls `com.atproto.server.createSession` once per request:
+
+- `/fetch` uses the resulting JWT for the actual upstream calls (`bookmark.getBookmarks`, `getActorBookmarks`, `listRecords`) — those endpoints require auth. On bad credentials: `401 {"error":"createSession failed: <message>"}`.
+- `/hydrate-threads` discards the JWT after validation and calls the public AppView (`public.api.bsky.app`) unauthenticated. Credentials here are **validation-only** — they confirm the caller holds a working app password but don't gate the actual read.
+
+The in-memory JWT lives for the duration of the request only — no persistence to disk, no shared cache across requests.
+
+#### JWT-pair path (v0.4.1+)
+
+`{access_jwt, refresh_jwt, did, pds?}`. The daemon skips `createSession`:
+
+- `/fetch` uses the supplied `access_jwt` for upstream calls. On 401 from upstream, the daemon calls `com.atproto.server.refreshSession` with `refresh_jwt`, retries the upstream call with the new `access_jwt`, and returns the rotated JWT pair to the GUI in the response's `rotated_credentials` field (see § 1). On refresh failure or persistent 401 after refresh, the daemon returns `401 {"error":"auth refresh failed", "code":"refresh_failed"|"upstream_rejected_after_refresh"}`. The GUI treats both `code` values identically (re-prompt for an app password); the split exists only for daemon-side diagnostics.
+- `/hydrate-threads` does **not** use the JWT for any upstream call (the endpoint reads the public AppView anonymously). The JWT is accepted but unused. No validation, no refresh logic, no `rotated_credentials` in the response.
+- `did` is treated as an opaque string — the daemon does not decode the JWT or cross-check `did` against the JWT's `sub` claim. Mismatched `did`/`access_jwt` pairs fail at the upstream PDS during `/fetch`'s next call.
+
+#### Common rules (both paths)
+
 - The daemon never logs credentials, never echoes them in error responses.
-- If a request omits `credentials`, return `400 {"error":"missing credentials"}`. Even though `/hydrate-threads`'s upstream call is anonymous, the credential check is a deliberate gate: it confirms a real account is behind the request, complementing the origin allowlist as an abuse defense.
+- If a request omits both `app_password` and `access_jwt`, return `400 {"error":"missing credentials"}`. Even though `/hydrate-threads`'s upstream call is anonymous, the credential check is a deliberate gate.
+- If the GUI calls `/fetch` and `/hydrate-threads` back-to-back under the app-password path, each call performs its own `createSession`. Callers should batch where possible (especially `/hydrate-threads`, which would otherwise burn the per-account `createSession` rate budget on validation roundtrips). Under the JWT-pair path, no `createSession` happens at all on `/hydrate-threads`, so this concern is moot.
+- Origin allowlist + 127.0.0.1 binding is the helper's primary auth surface; the per-request credential checks are defense-in-depth.
 
 ### 6. Progress reporting
 
