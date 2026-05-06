@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { fade } from 'svelte/transition';
   import { extractArticleUrls } from '$lib/extract-article-urls';
   import {
     shouldShowBackupBanner,
@@ -59,7 +60,12 @@
 </script>
 
 {#if visible}
-  <div class="article-banner" role="region" aria-label="Article backup suggestion">
+  <div
+    class="article-banner"
+    role="region"
+    aria-label="Article backup suggestion"
+    transition:fade={{ duration: 200 }}
+  >
     <p class="article-banner__text">
       {articleCount} of your saves link to articles. Save the full article
       text so it doesn't disappear if the source goes away.

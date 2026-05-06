@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
+  import { fade } from 'svelte/transition';
   import { extractImageUrls } from '$lib/extract-image-urls';
   import {
     shouldShowBackupBanner,
@@ -61,7 +62,12 @@
 </script>
 
 {#if visible}
-  <div class="backup-banner" role="region" aria-label="Image backup suggestion">
+  <div
+    class="backup-banner"
+    role="region"
+    aria-label="Image backup suggestion"
+    transition:fade={{ duration: 200 }}
+  >
     <p class="backup-banner__text">
       {imageCount} of your saves include images. They'll work as long as Bluesky keeps
       them online. Save your own copy.
