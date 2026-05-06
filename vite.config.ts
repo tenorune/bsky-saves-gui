@@ -26,7 +26,6 @@ export default defineConfig(({ mode }) => {
       outDir: 'dist',
       emptyOutDir: true,
       sourcemap: true,
-      chunkSizeWarningLimit: 600,
       rollupOptions: {
         input: {
           main: resolve(projectRoot, 'index.html'),

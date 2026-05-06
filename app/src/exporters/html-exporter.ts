@@ -1,4 +1,3 @@
-import JSZip from 'jszip';
 import type { Inventory } from '../reader/inventory-shape';
 import { gatherImageFiles, type GatheredImageFile } from '../lib/gather-image-files';
 
@@ -59,6 +58,9 @@ export async function exportArchive(inventory: Inventory): Promise<ExportResult>
   html = injectScript(LOCAL_PATHS_RE, html, localPathsMap(files), 'local-image-paths');
   html = injectScript(IMAGE_BLOBS_RE, html, {}, 'image-blobs');
 
+  // Dynamic import: JSZip is only needed when an export actually has blobs,
+  // so keep it out of the main app bundle and load it lazily on demand.
+  const { default: JSZip } = await import('jszip');
   const zip = new JSZip();
   zip.file('index.html', html);
   zip.file('inventory.json', JSON.stringify(inventory));
