@@ -2,11 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   escapeHtml,
   renderStaticArchive,
-  renderPostCardSummary,
-  renderPostFocusContent,
   renderQuotedPost,
   renderArticleDetails,
-  renderPostBody,
   renderThread,
   splitParagraphs,
   STYLES,
@@ -271,8 +268,6 @@ describe('image src resolution', () => {
     const out = renderStaticArchive({ inventory: inv, imageFiles });
     if (out.kind !== 'files') throw new Error('Expected files');
 
-    const indexHtml = out.files.get('index.html')!;
-    // index.html images are at images/ level (no prefix needed for index)
     const postHtml = out.files.get('posts/3testrkeyabc.html')!;
     // posts/*.html images are at ../images/ level
     expect(postHtml).toContain('src="../images/deadbeef.jpg"');

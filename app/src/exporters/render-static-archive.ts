@@ -229,7 +229,8 @@ export function renderPostBody(
     ? `<p class="post-body__text">${escapeHtml(text)}</p>`
     : '';
 
-  // Resolve images: prefer local_images if present, then embed.images
+  // Resolve images: prefer local_images if present, then embed.images,
+  // then top-level images array (bsky-saves raw shape).
   const localImgs: ImageRef[] = (save.local_images ?? []).map((li) => ({
     url: li.path,
     alt: '',
@@ -244,8 +245,24 @@ export function renderPostBody(
       }))
       .filter((img) => img.url);
   })();
+  // bsky-saves raw shape: top-level `images: [{url, alt}]`
+  const topLevelImages = (() => {
+    const raw = (save as unknown as { images?: unknown[] }).images;
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map((img) => {
+        const i = img as { url?: string; alt?: string };
+        return { url: i.url ?? '', alt: i.alt ?? '' };
+      })
+      .filter((img) => img.url);
+  })();
 
-  const imageRefs = localImgs.length > 0 ? localImgs : embedImages;
+  const imageRefs =
+    localImgs.length > 0
+      ? localImgs
+      : embedImages.length > 0
+        ? embedImages
+        : topLevelImages;
   const imagesHtml = renderImages(imageRefs, pathMap, prefix);
 
   const quotedPost = (save as unknown as { quoted_post?: unknown }).quoted_post ?? null;
@@ -327,7 +344,7 @@ ${threadHtml}
 
 export function renderPostCardSummary(
   save: Save,
-  pathMap: ReadonlyMap<string, string>,
+  _pathMap: ReadonlyMap<string, string>,
   hrefPrefix: string,
 ): string {
   const rkey = rkeyOf(save.uri);
@@ -638,7 +655,6 @@ export function renderPostPage(
   save: Save,
   pathMap: ReadonlyMap<string, string>,
 ): string {
-  const rkey = rkeyOf(save.uri);
   const author = formatAuthor(save.author);
   const title = `${author} — Bluesky Saves Archive`;
   // posts/ pages are one level deep: styles.css and images/ are at ../
