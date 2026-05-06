@@ -38,11 +38,11 @@ The full configuration table lives in the design spec: [Configuration section](d
 
 ## The helper
 
-A separate Python package (`bsky-saves-gui-helper`, working name) handles article hydration. It runs locally on `127.0.0.1:7878` and lets the browser fetch arbitrary article URLs that would otherwise be blocked by CORS. To be implemented in Plan 5; see `helper/README.md` once available.
+The published [`bsky-saves`](https://pypi.org/project/bsky-saves/) Python package provides the `bsky-saves serve` command — a loopback HTTP daemon on `127.0.0.1:47826` that fetches images and extracts article text on the browser's behalf (working around CORS). Install with `pipx install bsky-saves` and run `bsky-saves serve`.
 
 ## The proxy template
 
-A one-file Cloudflare Worker template at `templates/cf-worker/` provides the same capability without installing Python — the user deploys it to their own Cloudflare account. To be implemented in Plan 6; see `templates/cf-worker/README.md` once available.
+A Cloudflare Worker template at `templates/cf-worker/` provides the same capability without installing Python — the user deploys it to their own Cloudflare account. See `templates/cf-worker/README.md` for deployment instructions.
 
 ## Development
 
@@ -63,8 +63,7 @@ pnpm format       # prettier
 .
 ├── app/                  # Svelte + Vite source
 ├── tools/                # build-time helpers (e.g. CNAME plugin)
-├── helper/               # Python helper package (Plan 5)
-├── templates/cf-worker/  # Cloudflare Worker template (Plan 6)
+├── templates/cf-worker/  # Cloudflare Worker template
 ├── docs/
 │   ├── superpowers/
 │   │   ├── specs/        # design specs
