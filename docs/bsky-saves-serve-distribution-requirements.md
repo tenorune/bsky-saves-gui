@@ -65,13 +65,9 @@ A downloadable single binary (no installer) for users who want curl-pipe-bash or
 
 ### 5. Capability probe for the in-browser GUI
 
-Mirror the cf-worker's `GET /capabilities` endpoint on the local helper. The GUI already understands this shape:
+Already covered by the existing `/ping` endpoint, which returns `{name, version, features[]}`. The GUI uses `features[]` to feature-detect (e.g., a daemon compiled without Trafilatura would advertise `["fetch-image"]` and omit `"extract-article"`).
 
-```json
-{ "endpoints": ["/fetch-image", "/extract-article"] }
-```
-
-This lets the GUI detect partially-featured deployments (e.g., a helper compiled without Trafilatura) without parsing `/ping`'s `features` array. The v1 spec covers `/ping` already; `/capabilities` would be a small additive endpoint.
+The cf-worker template uses a separate `/capabilities` endpoint because it doesn't have a `/ping`-like surface. The local helper already does, so a `/capabilities` endpoint here would be redundant. **Out of scope** — keep `/ping` as the single capability advertisement.
 
 ### 6. Stable + documented API contract
 
@@ -127,7 +123,7 @@ Each channel pins to the same release artifacts so the version reported by `/pin
   5. Refresh saves.lightseed.net and see "the local helper (bsky-saves X.Y.Z)" detected in Settings → Backup.
 - The same user can quit the app and restart it without re-doing setup.
 - The same user can upgrade to the next patch by downloading a new installer; existing settings (port, auto-start, allow-origins) survive.
-- `/ping`, `/fetch-image`, `/extract-article`, `/capabilities` are documented in an OpenAPI schema published alongside the release.
+- `/ping`, `/fetch-image`, `/extract-article` (and any added in the fetch/enrich/threads doc) are documented in an OpenAPI schema published alongside the release.
 - The CLI path (`pipx install bsky-saves && bsky-saves serve`) keeps working for power users who don't want the GUI launcher.
 - Total disk install size ≤ 80 MB compressed (for an embedded Python runtime + Trafilatura + httpx).
 
@@ -145,5 +141,5 @@ Each channel pins to the same release artifacts so the version reported by `/pin
 - Probes `/ping` at startup; surfaces helper version + features in Settings → Backup.
 - Min-version warning (`min-helper-version.ts`) — currently set to 0.3.1.
 - Setup Guide modal can grow per-OS download links once the installers exist.
-- Capability detection already used for the cf-worker; mirroring `/capabilities` to the local helper is a one-liner.
+- Capability detection via `/ping`'s `features` array is already wired; new daemon features (`fetch`, `enrich`, `hydrate-threads`, etc.) appear in that array and the GUI feature-detects per-feature.
 - No GUI-side blockers — the GUI is ready for the installers when they ship.

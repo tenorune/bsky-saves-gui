@@ -193,10 +193,7 @@ Enumerate the signed-in user's bookmarked posts (the same listing `bsky-saves fe
 
 ### 4. Capability advertisement
 
-The new endpoints are advertised via:
-
-- The existing **`/ping`** `features` array — gains `"fetch"`, `"enrich"`, and `"hydrate-threads"` entries when the daemon supports them.
-- The mirrored **`/capabilities`** endpoint (proposed in the distribution-requirements doc) — gains `/fetch`, `/enrich`, and `/hydrate-threads` entries.
+The new endpoints are advertised via the existing **`/ping`** `features` array — gains `"fetch"`, `"enrich"`, and `"hydrate-threads"` entries when the daemon supports them.
 
 Older daemons (pre-0.4) won't advertise these; the GUI feature-detects per-endpoint and falls back to Pyodide for any feature missing from the helper. Mixed support is fine — a daemon that advertises `enrich` and `hydrate-threads` but not `fetch` will see those two operations routed through the helper while `fetch` stays on Pyodide.
 
