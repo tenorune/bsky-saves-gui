@@ -85,9 +85,24 @@ Enumerate the signed-in user's bookmarked posts (the same listing `bsky-saves fe
 - `cid` of the post itself is not currently captured by `bsky-saves`; if upstream adds it, this endpoint inherits it.
 - `cursor` is an opaque pagination token; `null` when there are no more pages.
 
+**Cursor encoding (daemon-side detail; the GUI MUST treat the cursor as fully opaque):**
+
+`bsky-saves`'s `probe_bookmark_endpoints` walks four candidate endpoints in fallback order (`pds:bookmark.getBookmarks` → `appview:bookmark.getBookmarks` → `appview:getActorBookmarks` → `pds:listRecords`) until one succeeds. We need to remember which one succeeded across paginated calls — otherwise we re-probe each page. The daemon stays stateless by encoding the choice **inside the cursor it returns**:
+
+- The returned cursor is `urlsafe-base64(JSON({ v, endpoint, upstream }))` where:
+  - `v` — schema version, integer, currently `1`. Future schema changes branch on this.
+  - `endpoint` — the probe winner identifier (e.g., `"pds:bookmark.getBookmarks"`, `"appview:listRecords"`).
+  - `upstream` — whatever cursor the chosen endpoint returned for next-page lookup.
+- On request with `cursor: null`, the daemon runs the probe, fetches the first page, and emits a freshly-encoded cursor for page 2.
+- On request with `cursor: "<wrapped>"`, the daemon decodes, **skips the probe**, and fetches directly using `endpoint` + `upstream`.
+- **The GUI MUST round-trip the cursor byte-for-byte and never inspect it.** The format is the daemon's private contract; new versions may extend the JSON without GUI changes.
+- **Credentials are NEVER encoded in the cursor.** Cursors can land in logs, browser history, or external diagnostic surfaces; auth never leaves the request body. Per-page `createSession` is the price (fast, ~200 ms; v1 spec already accepts this).
+- **Failure fallback mid-pagination.** If the daemon decodes a cursor but the named endpoint returns a hard failure (4xx/5xx that isn't "no more results"), it re-runs `probe_bookmark_endpoints` and continues on whichever new winner emerges, then returns a cursor encoding the new endpoint. This is invisible to the GUI — it just sees a slight latency bump on that one page, no error.
+
 **Errors**:
 
 - `400 {"error":"missing credentials"}`.
+- `400 {"error":"invalid cursor"}` — cursor failed to decode (corrupted, mangled by an intermediary, or signed by a daemon-version-incompatible schema). The GUI should retry with `cursor: null` to start a fresh session.
 - `401 {"error":"createSession failed: <message>"}`.
 - `5xx {"error":"..."}`.
 
