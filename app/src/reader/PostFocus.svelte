@@ -7,9 +7,7 @@
   import { getSavedImageUrls } from '$lib/image-store';
   import { getPostBackupStatus } from '$lib/post-backup-status';
   import BackupFailuresModal from '../components/BackupFailuresModal.svelte';
-  import CustomProxySetupModal from '../components/CustomProxySetupModal.svelte';
   import { bskyPostUrl } from '$lib/bsky-permalink';
-  import { navigate } from '$lib/router';
   import { describeAvailableImageBackend, describeArticleBackend } from '$lib/describe-backend';
 
   export let save: Save;
@@ -77,7 +75,6 @@
   });
 
   let failuresOpen = false;
-  let setupOpen = false;
 
   $: postScopedFailures = [
     ...$imageHydration.failures
@@ -119,9 +116,9 @@
           {status.summary}
         </button>
       {:else if status.link === 'library'}
-        Not yet saved — <button type="button" class="post-focus__backup-button" on:click={() => navigate('/library')}>go to Library to save</button>.
+        Not yet saved — <a class="post-focus__backup-button" href="#/library">go to Library to save</a>.
       {:else if status.link === 'setup'}
-        Not yet saved — <button type="button" class="post-focus__backup-button" on:click={() => (setupOpen = true)}>set up a backend</button>.
+        Not yet saved — <a class="post-focus__backup-button" href="#/settings">set up a backend</a>.
       {:else}
         {status.summary}
       {/if}
@@ -161,10 +158,6 @@
     inventory={{ saves: [save] }}
     title="Backup failures for this post"
     on:close={() => (failuresOpen = false)}
-  />
-  <CustomProxySetupModal
-    open={setupOpen}
-    on:close={() => (setupOpen = false)}
   />
 </article>
 
