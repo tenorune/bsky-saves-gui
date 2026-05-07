@@ -43,3 +43,21 @@ export const articleHydration: Writable<HydrationProgress> = writable(INITIAL);
 export function resetArticleHydration(): void {
   articleHydration.set(INITIAL);
 }
+
+export const fetchProgress: Writable<HydrationProgress> = writable(INITIAL);
+
+export function resetFetchProgress(): void {
+  fetchProgress.set(INITIAL);
+}
+
+export const enrichProgress: Writable<HydrationProgress> = writable(INITIAL);
+
+export function resetEnrichProgress(): void {
+  enrichProgress.set(INITIAL);
+}
+
+export const threadProgress: Writable<HydrationProgress> = writable(INITIAL);
+
+export function resetThreadProgress(): void {
+  threadProgress.set(INITIAL);
+}

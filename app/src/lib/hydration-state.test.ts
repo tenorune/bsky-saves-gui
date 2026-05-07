@@ -93,3 +93,30 @@ describe('hydration-state', () => {
     expect(get(imageHydration).status).toBe('running');
   });
 });
+
+describe('fetchProgress', () => {
+  it('initializes idle', async () => {
+    const { fetchProgress } = await import('./hydration-state');
+    expect(get(fetchProgress).status).toBe('idle');
+  });
+  it('reset clears state', async () => {
+    const { fetchProgress, resetFetchProgress } = await import('./hydration-state');
+    fetchProgress.set({ status: 'running', total: 10, fetched: 3, skipped: 0, failed: 0, failures: [] });
+    resetFetchProgress();
+    expect(get(fetchProgress).status).toBe('idle');
+  });
+});
+
+describe('enrichProgress', () => {
+  it('initializes idle', async () => {
+    const { enrichProgress } = await import('./hydration-state');
+    expect(get(enrichProgress).status).toBe('idle');
+  });
+});
+
+describe('threadProgress', () => {
+  it('initializes idle', async () => {
+    const { threadProgress } = await import('./hydration-state');
+    expect(get(threadProgress).status).toBe('idle');
+  });
+});
