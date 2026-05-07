@@ -207,6 +207,49 @@
     gap: 0.35rem;
     align-items: center;
   }
+
+  /* Banner shapes for warnings, setup CTAs, failure surfacing */
+  .inline-warning {
+    margin: 0 0 0.6rem;
+    padding: 0.5rem 0.7rem;
+    border-radius: 6px;
+    background: color-mix(in oklab, gold 18%, Canvas);
+    border: 1px solid color-mix(in oklab, gold 40%, transparent);
+    font-size: 0.875rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+  }
+  .inline-warning .actions { margin-left: auto; }
+  .inline-error {
+    color: color-mix(in oklab, red 75%, CanvasText);
+  }
+  .inline-error-bg {
+    margin: 0 0 0.6rem;
+    padding: 0.5rem 0.7rem;
+    border-radius: 6px;
+    background: color-mix(in oklab, red 12%, Canvas);
+    border: 1px solid color-mix(in oklab, red 35%, transparent);
+    font-size: 0.875rem;
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+  .needs-setup {
+    color: color-mix(in oklab, CanvasText 65%, Canvas);
+    font-style: italic;
+  }
+  .header-section {
+    max-width: 56rem;
+    margin: 3rem auto 0.75rem;
+    padding: 0 0.5rem;
+  }
+  .header-section h2 {
+    font-size: 1.15rem;
+    margin: 0 0 0.25rem;
+  }
+  .header-section p { margin: 0; opacity: 0.75; font-size: 0.9rem; }
 </style>
 </head>
 <body>
@@ -220,6 +263,290 @@
      Some variants include hydrate-now controls.</p>
   <p class="muted">Throwaway. Will be deleted from <code>app/public/mockups/</code>
      once we settle on a layout.</p>
+</div>
+
+<div class="header-section">
+  <h2>C-baseline — state explorations</h2>
+  <p>Variant C from the original brainstorm picked as the baseline:
+     post count in the page header, three asset rows beneath, backend per-row
+     only when it differs from the dominant one.
+     Below: states for active fetch, hydration in flight, hydration failures,
+     missing backends with inline "set up" calls to action, and an outdated-helper
+     warning. Compose; mix; pick.</p>
+</div>
+
+<!-- ───────────────────────────────────────────────────── C-active fetch -->
+<section class="variant">
+  <h2>C1 — active fetch (with progress bar)</h2>
+  <p class="desc">Posts row gets a progress bar while pagination is in flight.
+     Asset rows stay visible but show "queued" — the hydrators wait for fetch
+     to finish before they have URIs to work on.</p>
+
+  <div class="library">
+    <div class="library__header">
+      <h3>Library — <span class="muted" style="font-weight:400">120 of 247…</span></h3>
+      <span class="backend" style="margin-right:0.5rem">via local helper</span>
+      <button class="button" disabled>Refreshing…</button>
+    </div>
+    <div class="library__status">
+      <div class="row">
+        <span class="label">Posts</span><span>120 of 247…</span>
+        <div class="progress-bar"><span style="width:48%"></span></div>
+      </div>
+      <div class="row"><span class="label">Threads</span><span class="badge badge--on">on</span><span class="muted">queued</span></div>
+      <div class="row"><span class="label">Images</span><span class="badge badge--on">on</span><span class="muted">queued</span><span class="backend">via your worker proxy</span></div>
+      <div class="row"><span class="label">Articles</span><span class="badge badge--off">off</span><span class="muted">disabled in Settings</span></div>
+    </div>
+    <div class="library__body">
+      <div class="save-card"></div><div class="save-card"></div><div class="save-card"></div>
+      <div class="save-card"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────────────────────────────────── C-hydrating -->
+<section class="variant">
+  <h2>C2 — fetch done, assets hydrating in parallel</h2>
+  <p class="desc">Once fetch finishes, threads + images + articles can run
+     concurrently (each in its own hydrator). Each row that's active shows a
+     progress bar.</p>
+
+  <div class="library">
+    <div class="library__header">
+      <h3>Library — <span class="muted" style="font-weight:400">247 posts</span></h3>
+      <span class="backend" style="margin-right:0.5rem">via local helper</span>
+      <button class="button" disabled>Refreshing…</button>
+    </div>
+    <div class="library__status">
+      <div class="row">
+        <span class="label">Threads</span><span class="badge badge--on">on</span>
+        <span>14 of 247…</span>
+        <div class="progress-bar"><span style="width:6%"></span></div>
+      </div>
+      <div class="row">
+        <span class="label">Images</span><span class="badge badge--on">on</span>
+        <span>89 of 247…</span><span class="backend">via your worker proxy</span>
+        <div class="progress-bar"><span style="width:36%"></span></div>
+      </div>
+      <div class="row">
+        <span class="label">Articles</span><span class="badge badge--on">on</span>
+        <span>2 of 14…</span>
+        <div class="progress-bar"><span style="width:14%"></span></div>
+      </div>
+    </div>
+    <div class="library__body">
+      <div class="save-card"></div><div class="save-card"></div><div class="save-card"></div>
+      <div class="save-card"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────────────────────────────────── C-failures -->
+<section class="variant">
+  <h2>C3 — hydration with failures</h2>
+  <p class="desc">When a hydrator finishes with some failures, the row shows
+     a count and an inline "View" link to a failures detail (modal or panel).
+     Failures don't block the rest; they're informational.</p>
+
+  <div class="library">
+    <div class="library__header">
+      <h3>Library — <span class="muted" style="font-weight:400">247 posts</span></h3>
+      <span class="backend" style="margin-right:0.5rem">via local helper</span>
+      <button class="button">Refresh</button>
+    </div>
+    <div class="library__status">
+      <div class="row"><span class="label">Threads</span><span class="badge badge--on">on</span><span>247 of 247</span></div>
+      <div class="row">
+        <span class="label">Images</span><span class="badge badge--on">on</span>
+        <span>86 of 247</span>
+        <span class="inline-error">3 failed</span>
+        <button class="action-link">view</button>
+        <span class="backend">via your worker proxy</span>
+      </div>
+      <div class="row">
+        <span class="label">Articles</span><span class="badge badge--on">on</span>
+        <span>10 of 14</span>
+        <span class="inline-error">2 failed</span>
+        <span class="muted">2 paywalled</span>
+        <button class="action-link">view</button>
+      </div>
+    </div>
+    <div class="library__body">
+      <div class="save-card"></div><div class="save-card"></div><div class="save-card"></div>
+      <div class="save-card"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────────────────────────────────── C-needs-setup-articles -->
+<section class="variant">
+  <h2>C4 — articles need a backend (inline "Set up")</h2>
+  <p class="desc">No helper, no user worker proxy → can't hydrate articles.
+     Row shows the gap with an inline "Set up" affordance, matching the article
+     reminder banner UX. Same pattern would apply to images if neither helper
+     nor any worker proxy is available.</p>
+
+  <div class="library">
+    <div class="library__header">
+      <h3>Library — <span class="muted" style="font-weight:400">247 posts</span></h3>
+      <span class="backend" style="margin-right:0.5rem">via Pyodide</span>
+      <button class="button">Refresh</button>
+    </div>
+    <div class="library__status">
+      <div class="row"><span class="label">Threads</span><span class="badge badge--on">on</span><span>247 of 247</span></div>
+      <div class="row">
+        <span class="label">Images</span><span class="badge badge--on">on</span>
+        <span>89 of 247</span>
+        <span class="backend">via operator's worker proxy</span>
+      </div>
+      <div class="row">
+        <span class="label">Articles</span><span class="badge badge--on">on</span>
+        <span class="needs-setup">no backend available</span>
+        <span class="actions"><button class="button button--small">Set up</button></span>
+      </div>
+    </div>
+    <div class="library__body">
+      <div class="save-card"></div><div class="save-card"></div><div class="save-card"></div>
+      <div class="save-card"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────────────────────────────────── C-needs-setup-both -->
+<section class="variant">
+  <h2>C5 — both images and articles need a backend</h2>
+  <p class="desc">Pyodide-only user, no operator proxy configured.
+     Two "Set up" rows. Posts and threads still work because Pyodide handles
+     them.</p>
+
+  <div class="library">
+    <div class="library__header">
+      <h3>Library — <span class="muted" style="font-weight:400">247 posts</span></h3>
+      <span class="backend" style="margin-right:0.5rem">via Pyodide</span>
+      <button class="button">Refresh</button>
+    </div>
+    <div class="library__status">
+      <div class="row"><span class="label">Threads</span><span class="badge badge--on">on</span><span>247 of 247</span></div>
+      <div class="row">
+        <span class="label">Images</span><span class="badge badge--on">on</span>
+        <span class="needs-setup">no backend available</span>
+        <span class="actions"><button class="button button--small">Set up</button></span>
+      </div>
+      <div class="row">
+        <span class="label">Articles</span><span class="badge badge--on">on</span>
+        <span class="needs-setup">no backend available</span>
+        <span class="actions"><button class="button button--small">Set up</button></span>
+      </div>
+    </div>
+    <div class="library__body">
+      <div class="save-card"></div><div class="save-card"></div><div class="save-card"></div>
+      <div class="save-card"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────────────────────────────────── C-outdated-helper -->
+<section class="variant">
+  <h2>C6 — outdated helper warning</h2>
+  <p class="desc">Helper is detected but its version is below
+     <code>MIN_HELPER_VERSION</code>. A small warning banner above the status
+     rows; status rows continue to show whatever the older helper can do.</p>
+
+  <div class="library">
+    <div class="library__header">
+      <h3>Library — <span class="muted" style="font-weight:400">247 posts</span></h3>
+      <span class="backend" style="margin-right:0.5rem">via local helper · 0.3.1</span>
+      <button class="button">Refresh</button>
+    </div>
+    <div class="library__status">
+      <div class="inline-warning">
+        <span>Your helper is outdated (0.3.1). Upgrade to 0.4.1 for faster fetch and the JWT-pair auth path.</span>
+        <span class="actions"><button class="action-link">How to upgrade</button></span>
+      </div>
+      <div class="row"><span class="label">Threads</span><span class="badge badge--on">on</span><span>247 of 247</span></div>
+      <div class="row"><span class="label">Images</span><span class="badge badge--on">on</span><span>89 of 247</span></div>
+      <div class="row"><span class="label">Articles</span><span class="badge badge--on">on</span><span>12 of 14</span></div>
+    </div>
+    <div class="library__body">
+      <div class="save-card"></div><div class="save-card"></div><div class="save-card"></div>
+      <div class="save-card"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────────────────────────────────── C-busy-mixed -->
+<section class="variant">
+  <h2>C7 — busy mixed state (active + failed + needs setup, all at once)</h2>
+  <p class="desc">Realistic worst-case: fetch just finished, threads still
+     running, images partially failed (worker proxy returning 502 on some),
+     articles need a backend. Tests how the layout holds up when every kind
+     of signal is competing for attention.</p>
+
+  <div class="library">
+    <div class="library__header">
+      <h3>Library — <span class="muted" style="font-weight:400">247 posts</span></h3>
+      <span class="backend" style="margin-right:0.5rem">via local helper</span>
+      <button class="button" disabled>Refreshing…</button>
+    </div>
+    <div class="library__status">
+      <div class="row">
+        <span class="label">Threads</span><span class="badge badge--on">on</span>
+        <span>14 of 247…</span>
+        <div class="progress-bar"><span style="width:6%"></span></div>
+      </div>
+      <div class="row">
+        <span class="label">Images</span><span class="badge badge--on">on</span>
+        <span>86 of 247</span>
+        <span class="inline-error">3 failed</span>
+        <button class="action-link">view</button>
+        <span class="backend">via your worker proxy</span>
+      </div>
+      <div class="row">
+        <span class="label">Articles</span><span class="badge badge--on">on</span>
+        <span class="needs-setup">no backend available</span>
+        <span class="actions"><button class="button button--small">Set up</button></span>
+      </div>
+    </div>
+    <div class="library__body">
+      <div class="save-card"></div><div class="save-card"></div><div class="save-card"></div>
+      <div class="save-card"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────────────────────────────────── C-fetch-error -->
+<section class="variant">
+  <h2>C8 — fetch failed (auth error, with retry)</h2>
+  <p class="desc">A persistent failure (e.g. <code>auth refresh failed</code>
+     from the helper, or bad app password) surfaces a banner with a clear
+     action. No partial progress; the run aborted before any saves came back.</p>
+
+  <div class="library">
+    <div class="library__header">
+      <h3>Library — <span class="muted" style="font-weight:400">247 posts</span></h3>
+      <span class="backend" style="margin-right:0.5rem">via local helper</span>
+      <button class="button">Refresh</button>
+    </div>
+    <div class="library__status">
+      <div class="inline-error-bg">
+        <span><strong>Couldn't refresh.</strong> Your sign-in expired. Please sign in again to continue.</span>
+        <span class="actions"><button class="button button--small">Sign in</button></span>
+      </div>
+      <div class="row"><span class="label">Threads</span><span class="badge badge--on">on</span><span>247 of 247 <span class="muted">(last refresh)</span></span></div>
+      <div class="row"><span class="label">Images</span><span class="badge badge--on">on</span><span>89 of 247</span></div>
+      <div class="row"><span class="label">Articles</span><span class="badge badge--on">on</span><span>12 of 14</span></div>
+    </div>
+    <div class="library__body">
+      <div class="save-card"></div><div class="save-card"></div><div class="save-card"></div>
+      <div class="save-card"></div>
+    </div>
+  </div>
+</section>
+
+<div class="header-section">
+  <h2>Original variants (reference)</h2>
+  <p>The first six layout candidates from the earlier brainstorm. Kept here
+     for comparison.</p>
 </div>
 
 <!-- ───────────────────────────────────────────────────────────── A -->
