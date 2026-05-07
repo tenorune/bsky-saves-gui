@@ -22,6 +22,25 @@ interface FetchInput {
   readonly preauthSession?: PreauthSession;
 }
 
+interface FetchOnlyInput {
+  readonly handle: string;
+  readonly appPassword: string;
+  readonly pds: string;
+  readonly preauthSession?: PreauthSession;
+}
+
+interface EnrichOnlyInput {
+  readonly inventory: unknown;
+}
+
+interface ThreadsOnlyInput {
+  readonly inventory: unknown;
+  readonly handle: string;
+  readonly appPassword: string;
+  readonly pds: string;
+  readonly preauthSession?: PreauthSession;
+}
+
 interface InitMessage {
   readonly type: 'init';
   readonly pyodideVersion: string;
@@ -30,7 +49,12 @@ interface FetchMessage {
   readonly type: 'fetch';
   readonly input: FetchInput;
 }
-type Inbound = InitMessage | FetchMessage;
+type Inbound =
+  | InitMessage
+  | FetchMessage
+  | { type: 'fetchOnly'; input: FetchOnlyInput }
+  | { type: 'enrichOnly'; input: EnrichOnlyInput }
+  | { type: 'threadsOnly'; input: ThreadsOnlyInput };
 
 interface InitReadyMessage {
   readonly type: 'init-ready';
@@ -43,12 +67,16 @@ interface FetchResultMessage {
   readonly type: 'fetch-result';
   readonly inventory: unknown;
 }
+interface ResultMessage {
+  readonly type: 'result';
+  readonly payload: unknown;
+}
 interface ErrorMessage {
   readonly type: 'error';
   readonly message: string;
   readonly name: string;
 }
-type Outbound = InitReadyMessage | LogMessage | FetchResultMessage | ErrorMessage;
+type Outbound = InitReadyMessage | LogMessage | FetchResultMessage | ResultMessage | ErrorMessage;
 
 interface PyodideLike {
   runPythonAsync(code: string): Promise<unknown>;
@@ -293,6 +321,117 @@ print(f'bsky-saves: thread hydration done — {hydrated} hydrated, {skipped} ski
   return JSON.parse(raw);
 }
 
+async function runFetchOnly(input: FetchOnlyInput): Promise<unknown> {
+  if (!pyodide) throw new Error('Worker not initialised');
+
+  if (input.preauthSession) {
+    const sessionJson = JSON.stringify(input.preauthSession);
+    await pyodide.runPythonAsync(`
+import bsky_saves.auth as _bsky_auth
+import bsky_saves.fetch as _bsky_fetch
+import json as _json
+_preauth = _json.loads(${JSON.stringify(sessionJson)})
+def _patched_create_session(pds_base, handle, app_password):
+    return _preauth
+_bsky_auth.create_session = _patched_create_session
+_bsky_fetch.create_session = _patched_create_session
+print('reusing pre-authenticated session from main thread')
+`);
+  }
+
+  await pyodide.runPythonAsync(`
+import os
+os.environ['BSKY_HANDLE'] = ${JSON.stringify(input.handle)}
+os.environ['BSKY_APP_PASSWORD'] = ${JSON.stringify(input.appPassword)}
+os.environ['BSKY_PDS'] = ${JSON.stringify(input.pds)}
+`);
+
+  log('Fetching saves…');
+  await pyodide.runPythonAsync(`
+from pathlib import Path
+import bsky_saves.fetch as _bsky_fetch
+import os
+_bsky_fetch.fetch_to_inventory(
+    Path('${INVENTORY_PATH}'),
+    handle=os.environ['BSKY_HANDLE'],
+    app_password=os.environ['BSKY_APP_PASSWORD'],
+    pds_base=os.environ['BSKY_PDS'],
+)
+`);
+
+  log('Reading inventory…');
+  const raw = pyodide.FS.readFile(INVENTORY_PATH, { encoding: 'utf8' });
+  log('Done.');
+  return JSON.parse(raw);
+}
+
+async function runEnrichOnly(input: EnrichOnlyInput): Promise<unknown> {
+  if (!pyodide) throw new Error('Worker not initialised');
+
+  const invJson = JSON.stringify(input.inventory);
+  await pyodide.runPythonAsync(`
+with open('${INVENTORY_PATH}', 'w') as _f:
+    _f.write(${JSON.stringify(invJson)})
+`);
+
+  log('Enriching…');
+  await pyodide.runPythonAsync(`
+from pathlib import Path
+import bsky_saves.enrich as _bsky_enrich
+_bsky_enrich.enrich_inventory(Path('${INVENTORY_PATH}'))
+`);
+
+  log('Reading inventory…');
+  const raw = pyodide.FS.readFile(INVENTORY_PATH, { encoding: 'utf8' });
+  log('Done.');
+  return JSON.parse(raw);
+}
+
+async function runThreadsOnly(input: ThreadsOnlyInput): Promise<unknown> {
+  if (!pyodide) throw new Error('Worker not initialised');
+
+  if (input.preauthSession) {
+    const sessionJson = JSON.stringify(input.preauthSession);
+    await pyodide.runPythonAsync(`
+import bsky_saves.auth as _bsky_auth
+import bsky_saves.fetch as _bsky_fetch
+import json as _json
+_preauth = _json.loads(${JSON.stringify(sessionJson)})
+def _patched_create_session(pds_base, handle, app_password):
+    return _preauth
+_bsky_auth.create_session = _patched_create_session
+_bsky_fetch.create_session = _patched_create_session
+print('reusing pre-authenticated session from main thread')
+`);
+  }
+
+  await pyodide.runPythonAsync(`
+import os
+os.environ['BSKY_HANDLE'] = ${JSON.stringify(input.handle)}
+os.environ['BSKY_APP_PASSWORD'] = ${JSON.stringify(input.appPassword)}
+os.environ['BSKY_PDS'] = ${JSON.stringify(input.pds)}
+`);
+
+  const invJson = JSON.stringify(input.inventory);
+  await pyodide.runPythonAsync(`
+with open('${INVENTORY_PATH}', 'w') as _f:
+    _f.write(${JSON.stringify(invJson)})
+`);
+
+  log('Hydrating threads…');
+  await pyodide.runPythonAsync(`
+from pathlib import Path
+import bsky_saves.threads as _bsky_threads
+hydrated, skipped = _bsky_threads.hydrate_threads(Path('${INVENTORY_PATH}'))
+print(f'bsky-saves: thread hydration done — {hydrated} hydrated, {skipped} skipped')
+`);
+
+  log('Reading inventory…');
+  const raw = pyodide.FS.readFile(INVENTORY_PATH, { encoding: 'utf8' });
+  log('Done.');
+  return JSON.parse(raw);
+}
+
 ctx.addEventListener('message', async (event: MessageEvent<Inbound>) => {
   try {
     const msg = event.data;
@@ -302,6 +441,15 @@ ctx.addEventListener('message', async (event: MessageEvent<Inbound>) => {
     } else if (msg.type === 'fetch') {
       const inventory = await runFetch(msg.input);
       post({ type: 'fetch-result', inventory });
+    } else if (msg.type === 'fetchOnly') {
+      const payload = await runFetchOnly(msg.input);
+      post({ type: 'result', payload });
+    } else if (msg.type === 'enrichOnly') {
+      const payload = await runEnrichOnly(msg.input);
+      post({ type: 'result', payload });
+    } else if (msg.type === 'threadsOnly') {
+      const payload = await runThreadsOnly(msg.input);
+      post({ type: 'result', payload });
     }
   } catch (err) {
     post({
