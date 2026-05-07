@@ -47,8 +47,10 @@
   $: threadsFailed = $threadProgress.failed;
   $: threadsRunning = $threadProgress.status === 'running';
   $: threadsProgress =
-    threadsRunning && threadsTotal
+    threadsRunning && threadsTotal && (threadsFetched ?? 0) > 0
       ? Math.min(1, ($threadProgress.fetched ?? 0) / threadsTotal)
+      : threadsRunning
+      ? 'indeterminate' as const
       : null;
 
   // Images
@@ -57,8 +59,10 @@
   $: imagesFailed = $imageHydration.failed;
   $: imagesRunning = $imageHydration.status === 'running';
   $: imagesProgressFrac =
-    imagesRunning && imagesTotal
+    imagesRunning && imagesTotal && (imagesFetched ?? 0) > 0
       ? Math.min(1, ($imageHydration.fetched ?? 0) / imagesTotal)
+      : imagesRunning
+      ? 'indeterminate' as const
       : null;
 
   // Articles
@@ -68,8 +72,10 @@
   $: articlesFailed = $articleHydration.failed;
   $: articlesRunning = $articleHydration.status === 'running';
   $: articlesProgressFrac =
-    articlesRunning && articlesTotal
+    articlesRunning && articlesTotal && (articlesFetched ?? 0) > 0
       ? Math.min(1, ($articleHydration.fetched ?? 0) / articlesTotal)
+      : articlesRunning
+      ? 'indeterminate' as const
       : null;
 
   $: refreshState = $libraryRefreshState;

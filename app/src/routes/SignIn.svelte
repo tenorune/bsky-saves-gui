@@ -7,7 +7,7 @@
   import { hasCredentials, loadCredentials } from '$lib/credentials-store';
   import { DecryptError } from '$lib/crypto';
   import { startLibraryRefresh } from '$lib/library-refresh';
-  import { assetToggles, loadAssetToggles } from '$lib/asset-toggles';
+  import { assetToggles, setAssetToggle, loadAssetToggles } from '$lib/asset-toggles';
   import { createSession, InvalidCredentialsError } from '$lib/atproto';
   import { setLastSession } from '$lib/last-session';
 
@@ -51,7 +51,6 @@
   let saveInventory = true;
   let saveCredentials = false;
   let passphrase = '';
-  let threads = false;
   let error = '';
 
   async function submit() {
@@ -92,7 +91,7 @@
       appPassword,
       pds,
       fetch: true,
-      threads,
+      threads: get(assetToggles).threads,
       saveInventory,
       saveCredentials,
       passphrase,
@@ -200,7 +199,11 @@
         </p>
 
         <label class="checkbox">
-          <input type="checkbox" bind:checked={threads} />
+          <input
+            type="checkbox"
+            checked={$assetToggles.threads}
+            on:change={(e) => setAssetToggle('threads', e.currentTarget.checked)}
+          />
           <span>Include same-author replies</span>
         </label>
         <p class="help">

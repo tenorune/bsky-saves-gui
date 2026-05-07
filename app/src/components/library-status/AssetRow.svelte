@@ -11,8 +11,8 @@
   export let fetched: number | null = null;
   export let total: number | null = null;
   export let failed: number | null = null;
-  /** Optional progress fraction 0..1 for the active phase. null = no progress bar. */
-  export let progress: number | null = null;
+  /** Optional progress fraction 0..1 for the active phase, or 'indeterminate' for an animated bar. null = no progress bar. */
+  export let progress: number | 'indeterminate' | null = null;
   /** Set up callback shown when on && !backendAvailable. */
   export let onSetup: (() => void) | null = null;
   /** View failures callback shown when failed > 0. */
@@ -41,7 +41,9 @@
     {#if backendLabel}
       <span class="backend">via {backendLabel}</span>
     {/if}
-    {#if progress !== null}
+    {#if progress === 'indeterminate'}
+      <div class="progress-bar progress-bar--indeterminate"><span></span></div>
+    {:else if progress !== null}
       <div class="progress-bar"><span style="width: {Math.round(progress * 100)}%"></span></div>
     {/if}
   {/if}
@@ -75,12 +77,23 @@
     background: color-mix(in oklab, CanvasText 12%, transparent);
     border-radius: 999px;
     overflow: hidden;
+    position: relative;
   }
   .progress-bar > span {
     display: block;
     height: 100%;
     background: color-mix(in oklab, royalblue 60%, CanvasText);
     border-radius: 999px;
+    position: relative;
+  }
+  .progress-bar--indeterminate > span {
+    width: 30%;
+    animation: indeterminate 1.6s ease-in-out infinite;
+  }
+  @keyframes indeterminate {
+    0%   { transform: translateX(-100%); }
+    50%  { transform: translateX(200%); }
+    100% { transform: translateX(-100%); }
   }
   .backend { font-size: 0.8rem; opacity: 0.7; }
   .needs-setup {

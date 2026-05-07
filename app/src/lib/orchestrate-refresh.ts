@@ -17,6 +17,7 @@ export interface OrchestrateRefreshDeps {
   readonly fetchHydrator?:  { start: typeof defaultFetchHydrator.start };
   readonly enrichHydrator?: { start: typeof defaultEnrichHydrator.start };
   readonly threadHydrator?: { start: typeof defaultThreadHydrator.start };
+  readonly onAfterEnrich?: (inv: unknown) => Promise<void> | void;
 }
 
 export async function orchestrateRefresh(
@@ -39,6 +40,10 @@ export async function orchestrateRefresh(
     origin: input.origin,
     inventory: inv,
   }) as typeof inv;
+
+  if (deps.onAfterEnrich) {
+    await deps.onAfterEnrich(inv);
+  }
 
   if (input.includeThreads) {
     inv = await threadH.start({

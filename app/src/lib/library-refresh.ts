@@ -47,6 +47,12 @@ export async function startLibraryRefresh(
       snapshot: get(capabilitySnapshot),
       origin: config.helperOrigin,
       preauthSession: input.preauthSession,
+    }, {
+      onAfterEnrich: async (partialInv) => {
+        if (_cancelled) return;
+        await saveInventory(partialInv);
+        await loadFromDb();
+      },
     });
     if (_cancelled) return;
     await saveInventory(inv);
