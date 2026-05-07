@@ -3,6 +3,7 @@ import { hydrateThreads as defaultHydrateThreads, type FetchSavesCredentials, ty
 import { getSharedDriver } from './pyodide-worker-driver';
 import type { PyodideWorkerDriver } from './pyodide-worker-driver';
 import { config } from './config';
+import type { PreauthSession } from './preauth-session';
 
 export type ThreadBackend = { kind: 'helper' } | { kind: 'pyodide' };
 
@@ -11,6 +12,7 @@ export interface ThreadHydratorInput {
   readonly origin: string;
   readonly inventory: { readonly saves: readonly { readonly uri: string }[] };
   readonly credentials: FetchSavesCredentials;
+  readonly preauthSession?: PreauthSession;
 }
 
 export interface ThreadHydratorDeps {
@@ -43,6 +45,7 @@ export const threadHydrator = {
         handle: input.credentials.handle,
         appPassword: input.credentials.appPassword,
         pds: input.credentials.pds,
+        preauthSession: input.preauthSession,
       });
       threadProgress.update((p) => ({ ...p, status: 'done' }));
       return out;

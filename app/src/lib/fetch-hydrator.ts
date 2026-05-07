@@ -9,6 +9,7 @@ import { setLastSession as defaultSetLastSession, lastSession } from './last-ses
 import { getSharedDriver } from './pyodide-worker-driver';
 import type { PyodideWorkerDriver } from './pyodide-worker-driver';
 import { config } from './config';
+import type { PreauthSession } from './preauth-session';
 
 export type FetchBackend = { kind: 'helper' } | { kind: 'pyodide' };
 
@@ -16,6 +17,7 @@ export interface FetchHydratorInput {
   readonly backend: FetchBackend;
   readonly origin: string;        // helper origin; ignored for pyodide
   readonly credentials: FetchSavesCredentials;
+  readonly preauthSession?: PreauthSession;
 }
 
 export interface FetchHydratorDeps {
@@ -76,6 +78,7 @@ async function runPyodidePath(
     handle: input.credentials.handle,
     appPassword: input.credentials.appPassword,
     pds: input.credentials.pds,
+    preauthSession: input.preauthSession,
   });
   fetchProgress.update((p) => ({ ...p, status: 'done' }));
   return inv;

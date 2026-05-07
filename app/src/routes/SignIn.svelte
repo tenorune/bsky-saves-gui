@@ -8,6 +8,8 @@
   import { DecryptError } from '$lib/crypto';
   import { startLibraryRefresh } from '$lib/library-refresh';
   import { assetToggles, loadAssetToggles } from '$lib/asset-toggles';
+  import { createSession, InvalidCredentialsError } from '$lib/atproto';
+  import { setLastSession } from '$lib/last-session';
 
   let savedPresent = false;
   let useDifferentAccount = false;
@@ -52,7 +54,7 @@
   let threads = false;
   let error = '';
 
-  function submit() {
+  async function submit() {
     error = '';
     if (!handle) {
       error = 'Handle is required.';
@@ -66,6 +68,25 @@
       error = 'Passphrase must be at least 8 characters to save credentials.';
       return;
     }
+
+    let session;
+    try {
+      session = await createSession({ pds, identifier: handle, password: appPassword });
+    } catch (e) {
+      error = e instanceof InvalidCredentialsError
+        ? 'Wrong handle or app password.'
+        : e instanceof Error ? e.message : String(e);
+      return;
+    }
+
+    setLastSession({
+      pds,
+      accessJwt: session.accessJwt,
+      refreshJwt: session.refreshJwt,
+      did: session.did,
+      handle: session.handle,
+    });
+
     signInDraft.set({
       handle,
       appPassword,
@@ -80,6 +101,12 @@
     startLibraryRefresh({
       credentials: { handle, appPassword, pds },
       includeThreads: get(assetToggles).threads,
+      preauthSession: {
+        accessJwt: session.accessJwt,
+        refreshJwt: session.refreshJwt,
+        did: session.did,
+        handle: session.handle,
+      },
     });
 
     navigate('/library');

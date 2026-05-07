@@ -5,6 +5,9 @@ import { loadFromDb as defaultLoadFromDb } from './inventory-loader';
 import { capabilitySnapshot } from './capability-snapshot';
 import { config } from './config';
 import type { FetchSavesCredentials } from './helper-client';
+import type { PreauthSession } from './preauth-session';
+
+export type { PreauthSession };
 
 export type LibraryRefreshState =
   | { readonly status: 'idle' }
@@ -19,6 +22,7 @@ let _cancelled = false;
 export interface StartLibraryRefreshInput {
   readonly credentials: FetchSavesCredentials;
   readonly includeThreads: boolean;
+  readonly preauthSession?: PreauthSession;
 }
 
 export interface StartLibraryRefreshDeps {
@@ -42,6 +46,7 @@ export async function startLibraryRefresh(
       includeThreads: input.includeThreads,
       snapshot: get(capabilitySnapshot),
       origin: config.helperOrigin,
+      preauthSession: input.preauthSession,
     });
     if (_cancelled) return;
     await saveInventory(inv);

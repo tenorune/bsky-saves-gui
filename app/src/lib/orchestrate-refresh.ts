@@ -1,5 +1,6 @@
 import type { CapabilitySnapshot } from './capability-snapshot';
 import type { FetchSavesCredentials } from './helper-client';
+import type { PreauthSession } from './preauth-session';
 import { fetchHydrator as defaultFetchHydrator } from './fetch-hydrator';
 import { enrichHydrator as defaultEnrichHydrator } from './enrich-hydrator';
 import { threadHydrator as defaultThreadHydrator } from './thread-hydrator';
@@ -9,6 +10,7 @@ export interface OrchestrateRefreshInput {
   readonly includeThreads: boolean;
   readonly snapshot: CapabilitySnapshot;
   readonly origin: string;
+  readonly preauthSession?: PreauthSession;
 }
 
 export interface OrchestrateRefreshDeps {
@@ -29,6 +31,7 @@ export async function orchestrateRefresh(
     backend: input.snapshot.fetch,
     origin: input.origin,
     credentials: input.credentials,
+    preauthSession: input.preauthSession,
   }) as { saves: readonly { uri: string }[] };
 
   inv = await enrichH.start({
@@ -43,6 +46,7 @@ export async function orchestrateRefresh(
       origin: input.origin,
       inventory: inv,
       credentials: input.credentials,
+      preauthSession: input.preauthSession,
     }) as typeof inv;
   }
 
