@@ -71,27 +71,29 @@
 </script>
 
 <section class="route route--library" use:slideFromRight>
-  <header class="route__header">
-    <h2 class="route__title">
-      Library
-      {#if $inventoryState.status === 'ready'}
-        <span class="route__count">— {postCount} posts</span>
+  <div class="library-hub">
+    <header class="route__header">
+      <h2 class="route__title">
+        Library
+        {#if $inventoryState.status === 'ready'}
+          <span class="route__count">— {postCount} posts</span>
+        {/if}
+      </h2>
+      {#if dominantBackend}
+        <span class="route__backend">via {dominantBackend}</span>
       {/if}
-    </h2>
-    {#if dominantBackend}
-      <span class="route__backend">via {dominantBackend}</span>
-    {/if}
-    {#if refreshing}
-      <button type="button" class="route__refresh" on:click={stop}>Stop</button>
-    {:else}
-      <button type="button" class="route__refresh" on:click={refresh}>Refresh</button>
-    {/if}
-  </header>
+      {#if refreshing}
+        <button type="button" class="route__refresh" on:click={stop}>Stop</button>
+      {:else}
+        <button type="button" class="route__refresh" on:click={refresh}>Refresh</button>
+      {/if}
+    </header>
 
-  <LibraryStatusPanel
-    onSetupImages={() => (setupOpen = true)}
-    onSetupArticles={() => (setupOpen = true)}
-  />
+    <LibraryStatusPanel
+      onSetupImages={() => (setupOpen = true)}
+      onSetupArticles={() => (setupOpen = true)}
+    />
+  </div>
 
   {#if $inventoryState.status === 'loading'}
     <p class="route__msg">Loading inventory…</p>
@@ -108,6 +110,11 @@
 
 <style>
   .route--library { display: flex; flex-direction: column; }
+  .library-hub {
+    max-width: 44rem;
+    margin: 0 auto;
+    padding-bottom: 1.5rem;
+  }
   .route__header {
     display: flex;
     gap: 1rem;
@@ -130,5 +137,7 @@
   }
   .route__msg {
     padding: 1rem;
+    max-width: 44rem;
+    margin: 0 auto;
   }
 </style>

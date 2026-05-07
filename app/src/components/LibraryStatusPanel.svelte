@@ -127,7 +127,6 @@
   .status-panel {
     padding: 0.6rem 1rem;
     background: color-mix(in oklab, CanvasText 4%, Canvas);
-    border-bottom: 1px solid color-mix(in oklab, CanvasText 12%, transparent);
     font-size: 0.875rem;
     display: flex;
     flex-direction: column;
