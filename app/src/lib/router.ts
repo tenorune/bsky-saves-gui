@@ -9,7 +9,14 @@ export interface ActiveRoute {
 }
 
 function parsePath(path: string): ActiveRoute {
-  const normalized = path.length === 0 || path === '/' ? '/' : path;
+  let normalized = path.length === 0 || path === '/' ? '/' : path;
+  // Legacy redirects: /run and /refresh were replaced by the Library hub.
+  if (normalized === '/run' || normalized === '/refresh') {
+    normalized = '/library';
+    if (typeof window !== 'undefined') {
+      window.location.hash = '#/library';
+    }
+  }
   for (const def of routes) {
     const match = def.pattern.exec(normalized);
     if (match) {
