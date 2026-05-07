@@ -55,3 +55,22 @@ describe('fetchHydrator (helper path)', () => {
     expect(get(fetchProgress).status).toBe('cancelled');
   });
 });
+
+import type { PyodideWorkerDriver } from './pyodide-worker-driver';
+
+describe('fetchHydrator (pyodide path)', () => {
+  it('delegates to driver.runFetchOnly() and returns its inventory', async () => {
+    const fakeDriver = {
+      runFetchOnly: vi.fn().mockResolvedValue({ saves: [{ uri: 'at://x' }] }),
+    } as unknown as PyodideWorkerDriver;
+
+    const inv = await fetchHydrator.start({
+      backend: { kind: 'pyodide' },
+      origin: '',
+      credentials: { handle: 'a', appPassword: 'b', pds: 'c' },
+    }, { driver: fakeDriver });
+
+    expect(fakeDriver.runFetchOnly).toHaveBeenCalledWith({ handle: 'a', appPassword: 'b', pds: 'c' });
+    expect(inv).toEqual({ saves: [{ uri: 'at://x' }] });
+  });
+});

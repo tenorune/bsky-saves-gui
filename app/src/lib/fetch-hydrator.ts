@@ -6,6 +6,7 @@ import {
   type FetchSavesResponse,
 } from './helper-client';
 import { setLastSession as defaultSetLastSession, lastSession } from './last-session';
+import type { PyodideWorkerDriver } from './pyodide-worker-driver';
 
 export type FetchBackend = { kind: 'helper' } | { kind: 'pyodide' };
 
@@ -18,6 +19,7 @@ export interface FetchHydratorInput {
 export interface FetchHydratorDeps {
   readonly fetchSaves?: (origin: string, req: { credentials: FetchSavesCredentials; cursor: string | null; limit: number; }) => Promise<FetchSavesResponse>;
   readonly setLastSession?: typeof defaultSetLastSession;
+  readonly driver?: PyodideWorkerDriver;
 }
 
 async function runHelperPath(
@@ -57,16 +59,32 @@ async function runHelperPath(
   return { saves };
 }
 
+async function runPyodidePath(
+  input: FetchHydratorInput,
+  deps: FetchHydratorDeps,
+): Promise<unknown> {
+  if (!deps.driver) throw new Error('PyodideWorkerDriver not provided');
+  resetFetchProgress();
+  fetchProgress.set({ status: 'running', total: 0, fetched: 0, skipped: 0, failed: 0, failures: [] });
+  if (!('appPassword' in input.credentials)) {
+    throw new Error('Pyodide path requires app-password credentials');
+  }
+  const inv = await deps.driver.runFetchOnly({
+    handle: input.credentials.handle,
+    appPassword: input.credentials.appPassword,
+    pds: input.credentials.pds,
+  });
+  fetchProgress.update((p) => ({ ...p, status: 'done' }));
+  return inv;
+}
+
 export const fetchHydrator = {
   async start(input: FetchHydratorInput, deps: FetchHydratorDeps = {}): Promise<unknown> {
     if (input.backend.kind === 'helper') {
-      try {
-        return await runHelperPath(input, deps);
-      } catch (e) {
-        fetchProgress.update((p) => ({ ...p, status: 'cancelled' }));
-        throw e;
-      }
+      try { return await runHelperPath(input, deps); }
+      catch (e) { fetchProgress.update((p) => ({ ...p, status: 'cancelled' })); throw e; }
     }
-    throw new Error('Pyodide path not yet implemented');
+    try { return await runPyodidePath(input, deps); }
+    catch (e) { fetchProgress.update((p) => ({ ...p, status: 'cancelled' })); throw e; }
   },
 };
