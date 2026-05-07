@@ -16,6 +16,7 @@
   export let onSetupArticles: (() => void) | null = null;
   export let onViewImageFailures: (() => void) | null = null;
   export let onViewArticleFailures: (() => void) | null = null;
+  export let onViewThreadFailures: (() => void) | null = null;
 
   $: snap = $capabilitySnapshot;
   $: toggles = $assetToggles;
@@ -98,6 +99,7 @@
     total={threadsTotal}
     failed={threadsFailed}
     progress={threadsProgress}
+    onViewFailures={onViewThreadFailures}
   />
   <AssetRow
     label="Images"

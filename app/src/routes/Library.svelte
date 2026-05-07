@@ -22,7 +22,7 @@
   import { restoreHydrationFromInventory } from '$lib/restore-hydration';
 
   let setupOpen = false;
-  let failuresOpen: 'images' | 'articles' | null = null;
+  let failuresOpen: 'images' | 'articles' | 'threads' | null = null;
 
   onMount(async () => {
     if (get(inventoryState).status === 'loading') {
@@ -112,7 +112,16 @@
     ? $imageHydration.failures.map((f) => ({ ...f, type: 'image' as const }))
     : failuresOpen === 'articles'
       ? $articleHydration.failures.map((f) => ({ ...f, type: 'article' as const }))
-      : [];
+      : failuresOpen === 'threads'
+        ? $threadProgress.failures.map((f) => ({ ...f, type: 'thread' as const }))
+        : [];
+
+  $: failuresTitle =
+    failuresOpen === 'images'
+      ? 'Image backup failures'
+      : failuresOpen === 'articles'
+        ? 'Article backup failures'
+        : 'Thread hydration failures';
 
   $: failuresInventory = $inventoryState.status === 'ready' ? $inventoryState.inventory : null;
 </script>
@@ -141,6 +150,7 @@
       onSetupArticles={() => (setupOpen = true)}
       onViewImageFailures={() => (failuresOpen = 'images')}
       onViewArticleFailures={() => (failuresOpen = 'articles')}
+      onViewThreadFailures={() => (failuresOpen = 'threads')}
     />
   </div>
 
@@ -161,7 +171,7 @@
   open={failuresOpen !== null}
   failures={failureRows}
   inventory={failuresInventory}
-  title={failuresOpen === 'images' ? 'Image backup failures' : 'Article backup failures'}
+  title={failuresTitle}
   on:close={() => (failuresOpen = null)}
 />
 

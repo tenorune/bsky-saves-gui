@@ -6,7 +6,7 @@
   type FailureRow = {
     readonly url: string;
     readonly reason: string;
-    readonly type: 'image' | 'article';
+    readonly type: 'image' | 'article' | 'thread';
   };
 
   export let open = false;
@@ -28,10 +28,27 @@
     if (open && event.key === 'Escape') close();
   }
 
-  function permalinkFor(url: string): string | null {
-    const save = findSaveByAssetUrl(inventory, url);
+  function permalinkFor(row: FailureRow): string | null {
+    if (row.type === 'thread') {
+      // Thread failures key by the post's at:// URI directly. Find that save
+      // in the inventory and build the bsky.app permalink from it.
+      if (!inventory || typeof inventory !== 'object') return null;
+      const saves = (inventory as { saves?: unknown }).saves;
+      if (!Array.isArray(saves)) return null;
+      const save = saves.find((s) => s && typeof s === 'object' && (s as { uri?: unknown }).uri === row.url);
+      if (!save) return null;
+      return bskyPostUrl(save as never);
+    }
+    // Image/article failures key by asset URL; resolve back to the parent save.
+    const save = findSaveByAssetUrl(inventory, row.url);
     if (!save) return null;
     return bskyPostUrl(save);
+  }
+
+  function typeLabel(t: FailureRow['type']): string {
+    if (t === 'image') return 'IMG';
+    if (t === 'article') return 'ARTICLE';
+    return 'THREAD';
   }
 </script>
 
@@ -61,14 +78,14 @@
           {#each failures as f (f.url + ':' + f.type)}
             <li class="failmodal__row">
               <div class="failmodal__row-head">
-                <span class="failmodal__type failmodal__type--{f.type}">{f.type === 'image' ? 'IMG' : 'ARTICLE'}</span>
+                <span class="failmodal__type failmodal__type--{f.type}">{typeLabel(f.type)}</span>
                 <span class="failmodal__reason">{f.reason}</span>
               </div>
               <div class="failmodal__url" title={f.url}>{f.url}</div>
-              {#if permalinkFor(f.url)}
+              {#if permalinkFor(f)}
                 <a
                   class="failmodal__permalink"
-                  href={permalinkFor(f.url)}
+                  href={permalinkFor(f)}
                   target="_blank"
                   rel="noopener noreferrer"
                 >View source post</a>
