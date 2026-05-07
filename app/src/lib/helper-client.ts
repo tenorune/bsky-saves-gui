@@ -136,3 +136,75 @@ export async function extractArticleViaHelper(
   }
   return body;
 }
+
+export type AppPasswordCredentials = {
+  readonly handle: string;
+  readonly appPassword: string;
+  readonly pds: string;
+};
+
+export type JwtPairCredentials = {
+  readonly accessJwt: string;
+  readonly refreshJwt: string;
+  readonly did: string;
+  readonly pds?: string;
+};
+
+export type FetchSavesCredentials = AppPasswordCredentials | JwtPairCredentials;
+
+export interface FetchSavesRequest {
+  readonly credentials: FetchSavesCredentials;
+  readonly cursor: string | null;
+  readonly limit: number;
+}
+
+export interface FetchSavesResponse {
+  readonly saves: readonly unknown[];
+  readonly cursor: string | null;
+  readonly rotated_credentials?: {
+    readonly access_jwt: string;
+    readonly refresh_jwt: string;
+    readonly did: string;
+  };
+}
+
+function isAppPassword(c: FetchSavesCredentials): c is AppPasswordCredentials {
+  return 'appPassword' in c;
+}
+
+function serialiseCredentials(c: FetchSavesCredentials): Record<string, string> {
+  if (isAppPassword(c)) {
+    return { handle: c.handle, app_password: c.appPassword, pds: c.pds };
+  }
+  return {
+    access_jwt: c.accessJwt,
+    refresh_jwt: c.refreshJwt,
+    did: c.did,
+    ...(c.pds ? { pds: c.pds } : {}),
+  };
+}
+
+export async function fetchSaves(
+  origin: string,
+  req: FetchSavesRequest,
+): Promise<FetchSavesResponse> {
+  const base = origin.replace(/\/+$/, '');
+  const res = await fetch(`${base}/fetch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      credentials: serialiseCredentials(req.credentials),
+      cursor: req.cursor,
+      limit: req.limit,
+    }),
+  });
+  if (!res.ok) {
+    let msg = `helper /fetch returned ${res.status}`;
+    try {
+      const body = await res.json() as { error?: string };
+      if (body.error) msg = body.error;
+    } catch { /* keep default */ }
+    throw new Error(msg);
+  }
+  return await res.json() as FetchSavesResponse;
+}

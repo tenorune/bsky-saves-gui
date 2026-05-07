@@ -203,3 +203,70 @@ describe('helper-client extractArticleViaHelper', () => {
     ).rejects.toThrow();
   });
 });
+
+describe('fetchSaves (app-password)', () => {
+  it('POSTs to /fetch with the app-password credential shape', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ saves: [], cursor: null }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { fetchSaves } = await import('./helper-client');
+    const out = await fetchSaves('http://localhost:47826', {
+      credentials: { handle: 'a.bsky.social', appPassword: 'pw', pds: 'https://bsky.social' },
+      cursor: null,
+      limit: 100,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:47826/fetch',
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          credentials: { handle: 'a.bsky.social', app_password: 'pw', pds: 'https://bsky.social' },
+          cursor: null,
+          limit: 100,
+        }),
+      }),
+    );
+    expect(out).toEqual({ saves: [], cursor: null });
+    vi.unstubAllGlobals();
+  });
+
+  it('throws on 400 missing credentials', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: 'missing credentials' }), { status: 400 }),
+    ));
+    const { fetchSaves } = await import('./helper-client');
+    await expect(fetchSaves('http://x', {
+      credentials: { handle: '', appPassword: '', pds: '' },
+      cursor: null, limit: 100,
+    })).rejects.toThrow(/missing credentials/);
+    vi.unstubAllGlobals();
+  });
+
+  it('throws on 401 createSession failed', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: 'createSession failed: bad pw' }), { status: 401 }),
+    ));
+    const { fetchSaves } = await import('./helper-client');
+    await expect(fetchSaves('http://x', {
+      credentials: { handle: 'a', appPassword: 'b', pds: 'c' },
+      cursor: null, limit: 100,
+    })).rejects.toThrow(/createSession failed/);
+    vi.unstubAllGlobals();
+  });
+
+  it('throws on 400 invalid cursor', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: 'invalid cursor' }), { status: 400 }),
+    ));
+    const { fetchSaves } = await import('./helper-client');
+    await expect(fetchSaves('http://x', {
+      credentials: { handle: 'a', appPassword: 'b', pds: 'c' },
+      cursor: 'corrupt', limit: 100,
+    })).rejects.toThrow(/invalid cursor/);
+    vi.unstubAllGlobals();
+  });
+});
