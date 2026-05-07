@@ -26,6 +26,8 @@
   import { navigate } from '$lib/router';
   import CustomProxySetupModal from '../components/CustomProxySetupModal.svelte';
   import BackupRow from '../components/BackupRow.svelte';
+  import { assetToggles, setAssetToggle, loadAssetToggles } from '$lib/asset-toggles';
+  import { installHintDismissed, restoreInstallHint, loadInstallHintPref } from '$lib/install-hint-pref';
 
   let status = '';
   let error = '';
@@ -49,6 +51,8 @@
     backupPrefs = await loadBackupPrefs();
     await refreshCustomProxyStatus();
     void probeOperatorProxy();
+    await loadAssetToggles();
+    await loadInstallHintPref();
   });
 
   let operatorProxyReachable: 'unknown' | 'ok' | 'fail' = 'unknown';
@@ -79,6 +83,13 @@
 
   async function reloadBackupPrefs() {
     backupPrefs = await loadBackupPrefs();
+  }
+
+  $: toggles = $assetToggles;
+
+  function handleToggleChange(key: 'threads' | 'images' | 'articles', event: Event): void {
+    const checked = (event.currentTarget as HTMLInputElement).checked;
+    void setAssetToggle(key, checked);
   }
 
   $: libraryFetchedAt = (() => {
@@ -207,6 +218,44 @@
     </div>
   </section>
 
+  <section class="settings-section">
+    <h3>Backups</h3>
+    <p class="help">Choose which kinds of backups Library should keep up to date.</p>
+    <label class="checkbox">
+      <input
+        type="checkbox"
+        checked={toggles.threads}
+        on:change={(e) => handleToggleChange('threads', e)}
+      />
+      <span>Back up threads</span>
+    </label>
+    <label class="checkbox">
+      <input
+        type="checkbox"
+        checked={toggles.images}
+        on:change={(e) => handleToggleChange('images', e)}
+      />
+      <span>Back up images</span>
+    </label>
+    <label class="checkbox">
+      <input
+        type="checkbox"
+        checked={toggles.articles}
+        on:change={(e) => handleToggleChange('articles', e)}
+      />
+      <span>Back up articles</span>
+    </label>
+  </section>
+
+  {#if $installHintDismissed}
+    <section class="settings-section">
+      <h3>Library hints</h3>
+      <button type="button" on:click={restoreInstallHint}>
+        Show install-helper hint again
+      </button>
+    </section>
+  {/if}
+
   {#if $inventoryState.status === 'ready'}
     <section class="settings-section">
       <h3>Backup</h3>
@@ -325,7 +374,8 @@
     gap: 0.5rem;
     flex-wrap: wrap;
   }
-  .settings-row button {
+  .settings-row button,
+  .settings-section > button {
     font: inherit;
     line-height: 1.25;
     padding: 0.5rem 0.75rem;
