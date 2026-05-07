@@ -13,6 +13,16 @@
   let error = '';
   let menuEl: HTMLDetailsElement | undefined;
 
+  // Reactive: when any save has local image blobs, the HTML export becomes
+  // a ZIP archive (HTML + images/). When there are none, it's a single
+  // flat HTML file. Surface that distinction in the button label.
+  $: htmlIncludesImages =
+    $inventoryState.status === 'ready' &&
+    $inventoryState.inventory.saves.some(
+      (s) => Array.isArray(s.local_images) && s.local_images.length > 0,
+    );
+  $: htmlButtonLabel = htmlIncludesImages ? 'HTML Archive' : 'HTML';
+
   function handleOutsideClick(e: MouseEvent) {
     if (menuEl?.open && !menuEl.contains(e.target as Node)) {
       menuEl.open = false;
@@ -99,7 +109,7 @@
   <div class="export-menu__panel">
     <button type="button" disabled={busy} on:click={handleJson}>JSON</button>
     <button type="button" disabled={busy} on:click={handleMarkdown}>Markdown</button>
-    <button type="button" disabled={busy} on:click={handleHtml}>Export archive</button>
+    <button type="button" disabled={busy} on:click={handleHtml}>{htmlButtonLabel}</button>
     {#if error}
       <p class="export-menu__error" role="alert">{error}</p>
     {/if}

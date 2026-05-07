@@ -13,7 +13,7 @@
   import { assetToggles } from '$lib/asset-toggles';
   import { capabilitySnapshot } from '$lib/capability-snapshot';
   import { computeDominantBackend } from '$lib/dominant-backend';
-  import { imageHydration, articleHydration, threadProgress } from '$lib/hydration-state';
+  import { imageHydration, articleHydration, threadProgress, fetchProgress } from '$lib/hydration-state';
   import LibraryView from '../reader/LibraryView.svelte';
   import LibraryStatusPanel from '../components/LibraryStatusPanel.svelte';
   import CustomProxySetupModal from '../components/CustomProxySetupModal.svelte';
@@ -120,20 +120,29 @@
       ? 'Image backup failures'
       : failuresOpen === 'articles'
         ? 'Article backup failures'
-        : 'Thread hydration failures';
+        : 'Thread backup failures';
 
   $: failuresInventory = $inventoryState.status === 'ready' ? $inventoryState.inventory : null;
+
+  // Posts progress sub-line under the Library title while fetch is in flight.
+  $: fetchRunning = $fetchProgress.status === 'running';
+  $: fetchedSoFar = $fetchProgress.fetched;
 </script>
 
 <section class="route route--library" use:slideFromRight>
   <div class="library-hub">
     <header class="route__header">
-      <h2 class="route__title">
-        Library
-        {#if $inventoryState.status === 'ready'}
-          <span class="route__count">— {postCount} posts</span>
+      <div class="route__title-block">
+        <h2 class="route__title">
+          Library
+          {#if $inventoryState.status === 'ready'}
+            <span class="route__count">— {postCount} posts</span>
+          {/if}
+        </h2>
+        {#if fetchRunning}
+          <p class="route__sub">Fetching posts… {fetchedSoFar}</p>
         {/if}
-      </h2>
+      </div>
       {#if dominantBackend}
         <span class="route__backend">via {dominantBackend}</span>
       {/if}
@@ -191,7 +200,13 @@
     padding: 0.75rem 1rem;
     border-bottom: 1px solid color-mix(in oklab, CanvasText 12%, transparent);
   }
-  .route__title { margin: 0; flex: 1; }
+  .route__title-block { flex: 1; display: flex; flex-direction: column; gap: 0.15rem; }
+  .route__title { margin: 0; }
+  .route__sub {
+    margin: 0;
+    font-size: 0.8rem;
+    opacity: 0.7;
+  }
   .route__count { font-weight: 400; opacity: 0.7; }
   .route__backend { font-size: 0.8rem; opacity: 0.7; margin-right: 0.5rem; }
   .route__refresh {
