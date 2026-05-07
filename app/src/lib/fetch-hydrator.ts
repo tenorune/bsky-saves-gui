@@ -36,10 +36,29 @@ async function runHelperPath(
   resetFetchProgress();
   fetchProgress.set({ status: 'running', total: 0, fetched: 0, skipped: 0, failed: 0, failures: [] });
 
+  // When we have a preauthSession (from SignIn's main-thread createSession or
+  // from a session-restore), use the JWT-pair credential shape so the helper
+  // skips its per-request createSession against the user's PDS. Without this,
+  // each /fetch page (and /hydrate-threads call) would do another createSession
+  // — some PDSes rate-limit aggressively (eurosky.social returns 429 after a
+  // few). The helper's v0.4.1 jwt-credentials path validates once and reuses
+  // the JWTs across the whole pipeline.
+  const pdsFromCreds = 'pds' in input.credentials && input.credentials.pds
+    ? input.credentials.pds
+    : undefined;
+  const credentials: FetchSavesCredentials = input.preauthSession
+    ? {
+        accessJwt: input.preauthSession.accessJwt,
+        refreshJwt: input.preauthSession.refreshJwt,
+        did: input.preauthSession.did,
+        ...(pdsFromCreds ? { pds: pdsFromCreds } : {}),
+      }
+    : input.credentials;
+
   const saves: unknown[] = [];
   let cursor: string | null = null;
   while (true) {
-    const res = await fetchSaves(input.origin, { credentials: input.credentials, cursor, limit: 100 });
+    const res = await fetchSaves(input.origin, { credentials, cursor, limit: 100 });
     saves.push(...res.saves);
     fetchProgress.update((p) => ({ ...p, fetched: p.fetched + res.saves.length, total: p.fetched + res.saves.length }));
     if (res.rotated_credentials) {

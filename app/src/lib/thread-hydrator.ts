@@ -28,7 +28,21 @@ export const threadHydrator = {
       if (input.backend.kind === 'helper') {
         const ht = deps.hydrateThreads ?? defaultHydrateThreads;
         const uris = input.inventory.saves.map((s) => s.uri);
-        const res = await ht(input.origin, { uris, credentials: input.credentials });
+        // Prefer JWT-pair credentials when available so the helper skips
+        // its createSession validation step. See fetch-hydrator for the
+        // full rationale (eurosky.social etc. rate-limit createSession).
+        const pdsFromCreds = 'pds' in input.credentials && input.credentials.pds
+          ? input.credentials.pds
+          : undefined;
+        const credentials: FetchSavesCredentials = input.preauthSession
+          ? {
+              accessJwt: input.preauthSession.accessJwt,
+              refreshJwt: input.preauthSession.refreshJwt,
+              did: input.preauthSession.did,
+              ...(pdsFromCreds ? { pds: pdsFromCreds } : {}),
+            }
+          : input.credentials;
+        const res = await ht(input.origin, { uris, credentials });
         const byUri = new Map(res.threaded.map((e) => [e.uri, e]));
         const merged = input.inventory.saves.map((s) => {
           const t = byUri.get(s.uri);
