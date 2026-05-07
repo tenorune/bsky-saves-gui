@@ -131,11 +131,15 @@ A thin `orchestrate-refresh.ts` module replaces the current `engine.ts`. Its onl
 
 A "Stop" action sets a cancel flag observed by each hydrator's loop; in-flight requests complete, no new requests are issued, and each hydrator's progress-store moves to `cancelled`.
 
-## 8. Inventory shape (`parseInventory` update)
+## 8. Inventory shape (`parseInventory`)
 
-Today `parseInventory` only accepts the inventory-file shape that `bsky-saves` writes from CLI / Pyodide (camelCase nested `record: {text, createdAt, ...}`). It must also accept the helper `/fetch` response's `saves[]` shape (snake_case top-level fields like `post_text`, `saved_at`, `post_created_at` from `/enrich`). Strategy: extend `parseInventory` to normalize either input into the existing internal `Save` shape (defined in `app/src/reader/inventory-shape.ts`). The internal shape does not change. New tests cover both inputs; existing tests continue to cover the Pyodide-shape input unchanged.
+`parseInventory` already accepts the snake_case per-save shape that `bsky-saves`'s `normalise_record` emits — both via the CLI's inventory file (Pyodide path) and via the helper's `/fetch` response. See `app/src/reader/inventory-shape.ts:101-118`. No shape translation is required.
 
-The helper-routed pipeline assembles an inventory client-side by concatenating `/fetch` pages, merging `/enrich` deltas keyed by `uri`, and merging `/hydrate-threads` deltas keyed by `uri`. The resulting object is the value persisted to IndexedDB.
+What does change: the orchestrator (helper-routed path) accumulates `/fetch` pages into an in-memory inventory object before persisting it via `inventory-store`. The orchestrator synthesizes the same top-level `{fetched_at, saves}` wrapper that the CLI produces (`fetched_at = new Date().toISOString()` set when the last page returns), so the persisted shape matches what Pyodide writes today. `parseInventory` then sees identical inputs from either path.
+
+Validated against `bsky-saves`'s own `docs/serve-fetch-response.md` (Appendix: CLI inventory vs `/fetch` response — "At the per-entry level — identical").
+
+No new test surface beyond what already exists; existing parser tests continue to apply.
 
 ## 9. Auth and credential handling
 
@@ -180,7 +184,7 @@ Files to keep but modify:
 - `app/src/worker/pyodide-worker.ts` — small additions to emit progress events; existing functionality preserved.
 - `app/src/lib/helper-client.ts` — adds `fetch()`, `enrich()`, `hydrateThreads()` exports with cursor / rotated_credentials handling.
 - `app/src/lib/last-session.ts` — already has `setLastSession`; orchestrator calls it on rotated credentials.
-- `app/src/lib/min-helper-version.ts` — unchanged; `MIN_HELPER_VERSION` stays at `0.4.0` (or bumps to 0.4.1 once that ships).
+- `app/src/lib/min-helper-version.ts` — bump `MIN_HELPER_VERSION` to `0.4.1` (the JWT-pair credentials path is required by §5's routing rules).
 - `app/src/reader/inventory-shape.ts` — `parseInventory` accepts both shapes.
 - `app/src/routes/Library.svelte` — adopts the status panel and the refresh affordance.
 - `app/src/routes/SignIn.svelte` — submits to orchestrator; redirects to Library.
@@ -228,7 +232,6 @@ Files to add:
 
 ## 16. Open risks
 
-- **Inventory-shape divergence:** `parseInventory` accepting two input shapes adds maintenance surface; the test matrix is the primary mitigation.
 - **Concurrent `/fetch` calls during pagination:** an accidental parallel call would invalidate the loser's refresh token. Pagination is naturally sequential, but a stop-and-restart sequence must serialize via a small in-orchestrator mutex.
 - **Pyodide path vs helper path drift:** a future bsky-saves change that affects inventory shape on the helper but not in Pyodide (or vice versa) creates a divergence. Mitigated by `parseInventory` normalizing into a single internal shape.
 - **First-fetch on slow connection:** the user lands on Library with no saves and a "First fetch in progress" indicator; if fetch takes minutes, the empty state must remain reassuring. UX cost is small but real.
