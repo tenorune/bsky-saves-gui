@@ -42,13 +42,41 @@ export const threadHydrator = {
               ...(pdsFromCreds ? { pds: pdsFromCreds } : {}),
             }
           : input.credentials;
-        const res = await ht(input.origin, { uris, credentials });
-        const byUri = new Map(res.threaded.map((e) => [e.uri, e]));
+
+        // Chunk the URIs and call /hydrate-threads per chunk so the progress
+        // bar moves in real time. Under JWT path, /hydrate-threads skips
+        // createSession entirely and the upstream call is to the public
+        // AppView, so chunking is essentially free per request (vs. the
+        // app-password path where each chunk would trigger another PDS
+        // createSession). Tune this if a daemon's per-request overhead
+        // changes; smaller chunks = smoother progress, more requests.
+        const CHUNK_SIZE = 25;
+        const allThreaded: HydrateThreadsResponse['threaded'][number][] = [];
+        const allErrors: HydrateThreadsResponse['errors'][number][] = [];
+        for (let i = 0; i < uris.length; i += CHUNK_SIZE) {
+          const chunk = uris.slice(i, i + CHUNK_SIZE);
+          const res = await ht(input.origin, { uris: chunk, credentials });
+          allThreaded.push(...res.threaded);
+          allErrors.push(...res.errors);
+          threadProgress.update((p) => ({
+            ...p,
+            fetched: Math.min(p.total, allThreaded.length + allErrors.length),
+            failed: allErrors.length,
+            failures: allErrors.map((e) => ({ url: e.uri, reason: e.reason })),
+          }));
+        }
+        const byUri = new Map(allThreaded.map((e) => [e.uri, e]));
         const merged = input.inventory.saves.map((s) => {
           const t = byUri.get(s.uri);
           return t ? { ...s, thread_replies: t.thread_replies, thread_schema_version: t.thread_schema_version, thread_fetched_at: t.thread_fetched_at } : s;
         });
-        threadProgress.update((p) => ({ ...p, status: 'done', fetched: res.threaded.length, failed: res.errors.length, failures: res.errors.map((e) => ({ url: e.uri, reason: e.reason })) }));
+        threadProgress.update((p) => ({
+          ...p,
+          status: 'done',
+          fetched: allThreaded.length,
+          failed: allErrors.length,
+          failures: allErrors.map((e) => ({ url: e.uri, reason: e.reason })),
+        }));
         return { ...input.inventory, saves: merged };
       }
       const driver = deps.driver ?? getSharedDriver();

@@ -144,7 +144,10 @@
 
 <style>
   .route--library { display: flex; flex-direction: column; }
+  /* width: 100% so flex column stretches us to the route's full width;
+     max-width caps; margin auto centers within the cap. */
   .library-hub {
+    width: 100%;
     max-width: 44rem;
     margin: 0 auto;
     padding-bottom: 1.5rem;
