@@ -127,4 +127,14 @@ describe('capabilitySnapshot store', () => {
     const snap = get(capabilitySnapshot);
     expect(snap.helper.detected).toBe(false);
   });
+
+  it('initCapabilitySnapshot tolerates loadUserWorker rejection', async () => {
+    const fakeProbe = async () => helperWith(['fetch-image']);
+    const fakeUserWorker = async () => { throw new Error('worker'); };
+    await initCapabilitySnapshot({ probe: fakeProbe, loadUserWorker: fakeUserWorker });
+    const snap = get(capabilitySnapshot);
+    expect(snap.helper.detected).toBe(true);
+    expect(snap.images.kind).toBe('helper');
+    expect(snap.articles.kind).toBe('none');
+  });
 });
