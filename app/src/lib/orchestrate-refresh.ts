@@ -1,0 +1,50 @@
+import type { CapabilitySnapshot } from './capability-snapshot';
+import type { FetchSavesCredentials } from './helper-client';
+import { fetchHydrator as defaultFetchHydrator } from './fetch-hydrator';
+import { enrichHydrator as defaultEnrichHydrator } from './enrich-hydrator';
+import { threadHydrator as defaultThreadHydrator } from './thread-hydrator';
+
+export interface OrchestrateRefreshInput {
+  readonly credentials: FetchSavesCredentials;
+  readonly includeThreads: boolean;
+  readonly snapshot: CapabilitySnapshot;
+  readonly origin: string;
+}
+
+export interface OrchestrateRefreshDeps {
+  readonly fetchHydrator?:  { start: typeof defaultFetchHydrator.start };
+  readonly enrichHydrator?: { start: typeof defaultEnrichHydrator.start };
+  readonly threadHydrator?: { start: typeof defaultThreadHydrator.start };
+}
+
+export async function orchestrateRefresh(
+  input: OrchestrateRefreshInput,
+  deps: OrchestrateRefreshDeps = {},
+): Promise<unknown> {
+  const fetchH  = deps.fetchHydrator  ?? defaultFetchHydrator;
+  const enrichH = deps.enrichHydrator ?? defaultEnrichHydrator;
+  const threadH = deps.threadHydrator ?? defaultThreadHydrator;
+
+  let inv = await fetchH.start({
+    backend: input.snapshot.fetch,
+    origin: input.origin,
+    credentials: input.credentials,
+  }) as { saves: readonly { uri: string }[] };
+
+  inv = await enrichH.start({
+    backend: input.snapshot.enrich,
+    origin: input.origin,
+    inventory: inv,
+  }) as typeof inv;
+
+  if (input.includeThreads) {
+    inv = await threadH.start({
+      backend: input.snapshot.threads,
+      origin: input.origin,
+      inventory: inv,
+      credentials: input.credentials,
+    }) as typeof inv;
+  }
+
+  return inv;
+}
