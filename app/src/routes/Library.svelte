@@ -2,15 +2,22 @@
   import { onMount } from 'svelte';
   import { get } from 'svelte/store';
   import { inventoryState, loadFromDb } from '$lib/inventory-loader';
+  import { lastSession } from '$lib/last-session';
+  import { signInDraft } from '$lib/sign-in-draft';
   import { navigate } from '$lib/router';
   import { slideFromRight } from '$lib/slide-transition';
+  import { startLibraryRefresh, stopLibraryRefresh, libraryRefreshState } from '$lib/library-refresh';
+  import { assetToggles } from '$lib/asset-toggles';
+  import { capabilitySnapshot } from '$lib/capability-snapshot';
+  import { computeDominantBackend } from '$lib/dominant-backend';
   import LibraryView from '../reader/LibraryView.svelte';
-  import BackupBanner from '../components/BackupBanner.svelte';
-  import ArticleBackupBanner from '../components/ArticleBackupBanner.svelte';
-  import BackupStatusRow from '../components/BackupStatusRow.svelte';
+  import LibraryStatusPanel from '../components/LibraryStatusPanel.svelte';
+  import CustomProxySetupModal from '../components/CustomProxySetupModal.svelte';
   import { rkeyOf } from '../reader/inventory-shape';
   import type { Save } from '../reader/inventory-shape';
   import { restoreHydrationFromInventory } from '$lib/restore-hydration';
+
+  let setupOpen = false;
 
   onMount(async () => {
     if (get(inventoryState).status === 'loading') {
@@ -27,66 +34,101 @@
   }
 
   function refresh(): void {
-    navigate('/refresh');
+    const draft = get(signInDraft);
+    const session = get(lastSession);
+    const toggles = get(assetToggles);
+
+    if (draft && draft.appPassword) {
+      // Password mode (fresh sign-in)
+      startLibraryRefresh({
+        credentials: { handle: draft.handle, appPassword: draft.appPassword, pds: draft.pds },
+        includeThreads: toggles.threads,
+      });
+    } else if (session) {
+      // Session mode (JWT-pair restore)
+      startLibraryRefresh({
+        credentials: {
+          accessJwt: session.accessJwt,
+          refreshJwt: session.refreshJwt,
+          did: session.did,
+          pds: session.pds,
+        },
+        includeThreads: toggles.threads,
+      });
+    } else {
+      navigate('/');
+    }
   }
+
+  function stop(): void {
+    stopLibraryRefresh();
+  }
+
+  $: snap = $capabilitySnapshot;
+  $: dominantBackend = computeDominantBackend(snap);
+  $: postCount = $inventoryState.status === 'ready' ? $inventoryState.inventory.saves.length : 0;
+  $: refreshing = $libraryRefreshState.status === 'running';
 </script>
 
 <section class="route route--library" use:slideFromRight>
   <header class="route__header">
-    <h2 class="route__title">Library</h2>
-    {#if $inventoryState.status === 'ready'}
-      <button type="button" class="route__refresh" on:click={refresh} title="Update library">
-        Update
-      </button>
+    <h2 class="route__title">
+      Library
+      {#if $inventoryState.status === 'ready'}
+        <span class="route__count">— {postCount} posts</span>
+      {/if}
+    </h2>
+    {#if dominantBackend}
+      <span class="route__backend">via {dominantBackend}</span>
+    {/if}
+    {#if refreshing}
+      <button type="button" class="route__refresh" on:click={stop}>Stop</button>
+    {:else}
+      <button type="button" class="route__refresh" on:click={refresh}>Refresh</button>
     {/if}
   </header>
 
+  <LibraryStatusPanel
+    onSetupImages={() => (setupOpen = true)}
+    onSetupArticles={() => (setupOpen = true)}
+  />
+
   {#if $inventoryState.status === 'loading'}
-    <p>Loading inventory…</p>
+    <p class="route__msg">Loading inventory…</p>
   {:else if $inventoryState.status === 'empty'}
-    <p>
-      No inventory yet. <a href="#/">Sign in</a> to fetch your saves.
-    </p>
+    <p class="route__msg">First fetch in progress…</p>
   {:else if $inventoryState.status === 'error'}
-    <p class="error">Failed to load inventory: {$inventoryState.message}</p>
-    <button type="button" on:click={() => loadFromDb()}>Retry</button>
+    <p class="route__msg">Failed to load inventory: {$inventoryState.message}</p>
   {:else}
-    <BackupBanner inventory={$inventoryState.inventory} />
-    <ArticleBackupBanner inventory={$inventoryState.inventory} />
-    <BackupStatusRow inventory={$inventoryState.inventory} />
     <LibraryView inventory={$inventoryState.inventory} onSelectPost={open} />
   {/if}
 </section>
 
+<CustomProxySetupModal open={setupOpen} on:close={() => (setupOpen = false)} />
+
 <style>
-  .route--library {
-    max-width: 44rem;
-    margin: 0 auto;
-  }
+  .route--library { display: flex; flex-direction: column; }
   .route__header {
     display: flex;
-    align-items: baseline;
-    justify-content: space-between;
     gap: 1rem;
-    margin-bottom: 1.5rem;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid color-mix(in oklab, CanvasText 12%, transparent);
   }
-  .route__title {
-    margin: 0;
-  }
+  .route__title { margin: 0; font-size: 1rem; flex: 1; }
+  .route__count { font-weight: 400; opacity: 0.7; }
+  .route__backend { font-size: 0.8rem; opacity: 0.7; margin-right: 0.5rem; }
   .route__refresh {
     font: inherit;
+    font-size: 0.875rem;
     padding: 0.35rem 0.75rem;
     border: 1px solid color-mix(in oklab, CanvasText 25%, transparent);
     border-radius: 6px;
-    background: color-mix(in oklab, CanvasText 6%, Canvas);
-    color: inherit;
+    background: Canvas;
+    color: CanvasText;
     cursor: pointer;
-    font-weight: 600;
   }
-  .route__refresh:hover {
-    background: color-mix(in oklab, CanvasText 12%, Canvas);
-  }
-  .error {
-    color: color-mix(in oklab, red 70%, CanvasText);
+  .route__msg {
+    padding: 1rem;
   }
 </style>
