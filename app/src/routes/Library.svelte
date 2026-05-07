@@ -124,9 +124,10 @@
 
   $: failuresInventory = $inventoryState.status === 'ready' ? $inventoryState.inventory : null;
 
-  // Posts progress sub-line under the Library title while fetch is in flight.
+  // Indeterminate progress bar under the Library title while fetch is in
+  // flight. We don't know the post total in advance — pages stream in via the
+  // helper's cursor — so an oscillating bar is more honest than a count.
   $: fetchRunning = $fetchProgress.status === 'running';
-  $: fetchedSoFar = $fetchProgress.fetched;
 </script>
 
 <section class="route route--library" use:slideFromRight>
@@ -140,7 +141,7 @@
           {/if}
         </h2>
         {#if fetchRunning}
-          <p class="route__sub">Fetching posts… {fetchedSoFar}</p>
+          <div class="progress-bar progress-bar--indeterminate" aria-label="Fetching posts" role="progressbar"><span></span></div>
         {/if}
       </div>
       {#if dominantBackend}
@@ -200,14 +201,33 @@
     padding: 0.75rem 1rem;
     border-bottom: 1px solid color-mix(in oklab, CanvasText 12%, transparent);
   }
-  .route__title-block { flex: 1; display: flex; flex-direction: column; gap: 0.15rem; }
+  .route__title-block { flex: 1; display: flex; flex-direction: column; gap: 0.4rem; }
   .route__title { margin: 0; }
-  .route__sub {
-    margin: 0;
-    font-size: 0.8rem;
-    opacity: 0.7;
-  }
   .route__count { font-weight: 400; opacity: 0.7; }
+  /* Indeterminate progress bar for posts fetch — same shape as AssetRow's. */
+  .progress-bar {
+    height: 4px;
+    background: color-mix(in oklab, CanvasText 12%, transparent);
+    border-radius: 999px;
+    overflow: hidden;
+    position: relative;
+  }
+  .progress-bar > span {
+    display: block;
+    height: 100%;
+    background: color-mix(in oklab, royalblue 60%, CanvasText);
+    border-radius: 999px;
+    position: relative;
+  }
+  .progress-bar--indeterminate > span {
+    width: 30%;
+    animation: indeterminate 1.6s ease-in-out infinite;
+  }
+  @keyframes indeterminate {
+    0%   { transform: translateX(-100%); }
+    50%  { transform: translateX(200%); }
+    100% { transform: translateX(-100%); }
+  }
   .route__backend { font-size: 0.8rem; opacity: 0.7; margin-right: 0.5rem; }
   .route__refresh {
     font: inherit;

@@ -338,9 +338,7 @@
     </details>
   </section>
 
-  <section class="settings-section">
-    <InstallHelperHint showDismiss={false} />
-  </section>
+  <InstallHelperHint showDismiss={false} />
 
   <section class="settings-section">
     <h3>Reset</h3>
