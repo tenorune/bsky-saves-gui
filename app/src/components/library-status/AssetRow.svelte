@@ -34,7 +34,9 @@
       <span>
         {fetched} of {total}
         {#if failed && failed > 0}
-          <span class="muted">(<span class="inline-error">{failed} failed</span>{#if onViewFailures} <span class="muted">·</span> <button type="button" class="action-link" on:click={onViewFailures}>view</button>{/if})</span>
+          <span class="muted">
+            (<span class="inline-error">{failed} failed</span>{#if onViewFailures}{' · '}<button type="button" class="action-link" on:click={onViewFailures}>view</button>{/if})
+          </span>
         {/if}
       </span>
     {/if}
