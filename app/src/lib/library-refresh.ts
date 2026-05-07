@@ -53,7 +53,7 @@ export async function startLibraryRefresh(
     const msg = e instanceof Error ? e.message : String(e);
     // Log so the browser console shows the actual error when the auth-error banner renders.
     // eslint-disable-next-line no-console
-    console.error('[library-refresh] orchestrate failed:', e);
+    console.error('[library-refresh] orchestrate failed:', msg, e);
     store.set({ status: 'error', error: msg });
   }
 }

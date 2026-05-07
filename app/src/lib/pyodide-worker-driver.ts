@@ -75,7 +75,13 @@ export class PyodideWorkerDriver {
         } else if ('data' in e && (e as MessageEvent).data?.type === 'error') {
           this.worker.removeEventListener('message', onMessage);
           this.worker.removeEventListener('error', onMessage);
-          reject(new Error((e as MessageEvent).data.message ?? 'pyodide worker error'));
+          const data = (e as MessageEvent).data as { message?: string; name?: string };
+          const msg = data.message && data.message.length > 0
+            ? data.message
+            : 'pyodide worker error';
+          const err = new Error(msg);
+          if (data.name) err.name = data.name;
+          reject(err);
         } else if (!('data' in e)) {
           this.worker.removeEventListener('message', onMessage);
           this.worker.removeEventListener('error', onMessage);
