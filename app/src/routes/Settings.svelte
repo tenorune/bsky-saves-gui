@@ -15,8 +15,8 @@
     type BackupPrefs,
   } from '$lib/backup-prefs';
   import { config } from '$lib/config';
-  import { cancelImageBackup } from '$lib/start-image-backup';
-  import { cancelArticleBackup } from '$lib/start-article-backup';
+  import { startImageBackup, cancelImageBackup } from '$lib/start-image-backup';
+  import { startArticleBackup, cancelArticleBackup } from '$lib/start-article-backup';
   import { clearImageBlobs } from '$lib/image-store';
   import { clearFailures } from '$lib/failure-store';
   import { resetImageHydration, resetArticleHydration } from '$lib/hydration-state';
@@ -25,7 +25,6 @@
   import { parseInventory } from '../reader/inventory-shape';
   import { navigate } from '$lib/router';
   import CustomProxySetupModal from '../components/CustomProxySetupModal.svelte';
-  import BackupRow from '../components/BackupRow.svelte';
   import { assetToggles, setAssetToggle, loadAssetToggles } from '$lib/asset-toggles';
   import { installHintDismissed, restoreInstallHint, loadInstallHintPref } from '$lib/install-hint-pref';
   import { threadHydrator } from '$lib/thread-hydrator';
@@ -91,9 +90,14 @@
 
   $: toggles = $assetToggles;
 
-  function handleToggleChange(key: 'images' | 'articles', event: Event): void {
+  function handleImagesToggleChange(event: Event): void {
     const checked = (event.currentTarget as HTMLInputElement).checked;
-    void setAssetToggle(key, checked);
+    void setAssetToggle('images', checked, { onImagesToggleOn: triggerImageHydration });
+  }
+
+  function handleArticlesToggleChange(event: Event): void {
+    const checked = (event.currentTarget as HTMLInputElement).checked;
+    void setAssetToggle('articles', checked, { onArticlesToggleOn: triggerArticleHydration });
   }
 
   function handleThreadsToggleChange(event: Event): void {
@@ -119,6 +123,18 @@
       credentials,
     });
     await saveInventory(out);
+  }
+
+  async function triggerImageHydration(): Promise<void> {
+    const inv = await loadInventory();
+    if (!inv) return;
+    void startImageBackup(inv);
+  }
+
+  async function triggerArticleHydration(): Promise<void> {
+    const inv = await loadInventory();
+    if (!inv) return;
+    void startArticleBackup(inv);
   }
 
   $: libraryFetchedAt = (() => {
@@ -262,7 +278,7 @@
       <input
         type="checkbox"
         checked={toggles.images}
-        on:change={(e) => handleToggleChange('images', e)}
+        on:change={handleImagesToggleChange}
       />
       <span>Back up images</span>
     </label>
@@ -270,10 +286,55 @@
       <input
         type="checkbox"
         checked={toggles.articles}
-        on:change={(e) => handleToggleChange('articles', e)}
+        on:change={handleArticlesToggleChange}
       />
       <span>Back up articles</span>
     </label>
+
+    <details
+      class="advanced-toggle"
+      bind:open={backupAdvancedOpen}
+    >
+      <summary>Advanced backup options</summary>
+
+      <div class="card advanced">
+        <p class="advanced-heading"><strong>Custom Cloudflare Worker proxy</strong></p>
+        <p class="help">
+          Used as a fallback when no local helper is running. The setup is
+          one-time, takes about 10 minutes, and runs on Cloudflare's free tier.
+        </p>
+
+        <button type="button" class="setup-guide-trigger" on:click={() => (setupModalOpen = true)}>
+          {customProxyConfigured ? 'Edit setup' : 'Setup guide'}
+        </button>
+
+        {#if operatorProxyConfigured}
+          <p class="advanced-heading advanced-heading--spaced"><strong>Operator's image proxy</strong></p>
+          <p class="help">
+            <code>{config.operatorImageProxyUrl}</code>
+            {#if operatorProxyReachable === 'ok'}
+              <span class="status-ok">· reachable</span>
+            {:else if operatorProxyReachable === 'fail'}
+              <span class="status-fail">· unreachable</span>
+            {/if}
+          </p>
+          <p class="help">
+            When set up by the site operator, this proxy is used as a fallback
+            for image backup when no local helper or custom Cloudflare Worker is
+            configured. Image bytes flow through the operator's worker; the
+            operator does not log URLs or content.
+          </p>
+          <label class="checkbox">
+            <input
+              type="checkbox"
+              checked={operatorProxyOptOut}
+              on:change={handleToggleOperatorProxyOptOut}
+            />
+            <span>Don't use the operator's proxy</span>
+          </label>
+        {/if}
+      </div>
+    </details>
   </section>
 
   {#if $installHintDismissed}
@@ -282,64 +343,6 @@
       <button type="button" on:click={restoreInstallHint}>
         Show install-helper hint again
       </button>
-    </section>
-  {/if}
-
-  {#if $inventoryState.status === 'ready'}
-    <section class="settings-section">
-      <h3>Backup</h3>
-      <p class="help">
-        Save your own copies of images and linked articles so they keep showing
-        up even if Bluesky or the source site changes.
-      </p>
-
-      <BackupRow domain="images" inventory={$inventoryState.inventory} mode="settings" />
-      <BackupRow domain="articles" inventory={$inventoryState.inventory} mode="settings" />
-
-      <details
-        class="advanced-toggle"
-        bind:open={backupAdvancedOpen}
-      >
-        <summary>Advanced backup options</summary>
-
-        <div class="card advanced">
-          <p class="advanced-heading"><strong>Custom Cloudflare Worker proxy</strong></p>
-          <p class="help">
-            Used as a fallback when no local helper is running. The setup is
-            one-time, takes about 10 minutes, and runs on Cloudflare's free tier.
-          </p>
-
-          <button type="button" class="setup-guide-trigger" on:click={() => (setupModalOpen = true)}>
-            {customProxyConfigured ? 'Edit setup' : 'Setup guide'}
-          </button>
-
-          {#if operatorProxyConfigured}
-            <p class="advanced-heading advanced-heading--spaced"><strong>Operator's image proxy</strong></p>
-            <p class="help">
-              <code>{config.operatorImageProxyUrl}</code>
-              {#if operatorProxyReachable === 'ok'}
-                <span class="status-ok">· reachable</span>
-              {:else if operatorProxyReachable === 'fail'}
-                <span class="status-fail">· unreachable</span>
-              {/if}
-            </p>
-            <p class="help">
-              When set up by the site operator, this proxy is used as a fallback
-              for image backup when no local helper or custom Cloudflare Worker is
-              configured. Image bytes flow through the operator's worker; the
-              operator does not log URLs or content.
-            </p>
-            <label class="checkbox">
-              <input
-                type="checkbox"
-                checked={operatorProxyOptOut}
-                on:change={handleToggleOperatorProxyOptOut}
-              />
-              <span>Don't use the operator's proxy</span>
-            </label>
-          {/if}
-        </div>
-      </details>
     </section>
   {/if}
 

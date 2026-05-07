@@ -1,9 +1,12 @@
 import { get, writable, type Readable } from 'svelte/store';
 import { orchestrateRefresh as defaultOrchestrate } from './orchestrate-refresh';
-import { saveInventory as defaultSaveInventory } from './inventory-store';
+import { saveInventory as defaultSaveInventory, loadInventory as defaultLoadInventory } from './inventory-store';
 import { loadFromDb as defaultLoadFromDb } from './inventory-loader';
 import { capabilitySnapshot } from './capability-snapshot';
 import { config } from './config';
+import { assetToggles } from './asset-toggles';
+import { startImageBackup as defaultStartImageBackup } from './start-image-backup';
+import { startArticleBackup as defaultStartArticleBackup } from './start-article-backup';
 import type { FetchSavesCredentials } from './helper-client';
 import type { PreauthSession } from './preauth-session';
 
@@ -29,6 +32,9 @@ export interface StartLibraryRefreshDeps {
   readonly orchestrate?: typeof defaultOrchestrate;
   readonly saveInventory?: typeof defaultSaveInventory;
   readonly loadFromDb?: typeof defaultLoadFromDb;
+  readonly loadInventory?: typeof defaultLoadInventory;
+  readonly startImageBackup?: typeof defaultStartImageBackup;
+  readonly startArticleBackup?: typeof defaultStartArticleBackup;
 }
 
 export async function startLibraryRefresh(
@@ -38,6 +44,7 @@ export async function startLibraryRefresh(
   const orchestrate = deps.orchestrate ?? defaultOrchestrate;
   const saveInventory = deps.saveInventory ?? defaultSaveInventory;
   const loadFromDb = deps.loadFromDb ?? defaultLoadFromDb;
+  const loadInventory = deps.loadInventory ?? defaultLoadInventory;
   _cancelled = false;
   store.set({ status: 'running' });
   try {
@@ -59,6 +66,19 @@ export async function startLibraryRefresh(
     // Refresh the in-memory inventory store so Library re-renders with the new saves.
     await loadFromDb();
     store.set({ status: 'idle' });
+    // Fire-and-forget: kick off image/article hydration in the background if their
+    // toggles are on. Hydrators skip already-hydrated entries internally.
+    const finalInv = await loadInventory();
+    const toggles = get(assetToggles);
+    const startImageBackup = deps.startImageBackup ?? defaultStartImageBackup;
+    const startArticleBackup = deps.startArticleBackup ?? defaultStartArticleBackup;
+
+    if (finalInv && toggles.images) {
+      void startImageBackup(finalInv);
+    }
+    if (finalInv && toggles.articles) {
+      void startArticleBackup(finalInv);
+    }
   } catch (e) {
     if (_cancelled) return;
     const msg = e instanceof Error ? e.message : String(e);

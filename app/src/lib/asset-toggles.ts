@@ -27,6 +27,8 @@ export async function loadAssetToggles(): Promise<void> {
 
 export interface SetAssetToggleDeps {
   readonly onThreadsToggleOn?: () => void;
+  readonly onImagesToggleOn?: () => void;
+  readonly onArticlesToggleOn?: () => void;
 }
 
 export async function setAssetToggle(
@@ -40,8 +42,10 @@ export async function setAssetToggle(
   let snapshot: AssetTogglesShape = DEFAULTS;
   store.subscribe((v) => { snapshot = v; })();
   await idbSet(KEY, snapshot);
-  if (key === 'threads' && value && !prev) {
-    deps.onThreadsToggleOn?.();
+  if (value && !prev) {
+    if (key === 'threads') deps.onThreadsToggleOn?.();
+    if (key === 'images') deps.onImagesToggleOn?.();
+    if (key === 'articles') deps.onArticlesToggleOn?.();
   }
 }
 

@@ -62,3 +62,47 @@ describe('threads-toggle-on triggers thread hydration', () => {
     expect(onThreadsToggleOn).not.toHaveBeenCalled();
   });
 });
+
+describe('images-toggle-on triggers image hydration', () => {
+  beforeEach(async () => {
+    await clear();
+    _resetAssetTogglesForTests();
+  });
+
+  it('calls onImagesToggleOn when images flips off→on', async () => {
+    const onImagesToggleOn = vi.fn();
+    await setAssetToggle('images', false, { onImagesToggleOn });
+    expect(onImagesToggleOn).not.toHaveBeenCalled();
+    await setAssetToggle('images', true, { onImagesToggleOn });
+    expect(onImagesToggleOn).toHaveBeenCalled();
+  });
+
+  it('does not call onImagesToggleOn for other keys', async () => {
+    const onImagesToggleOn = vi.fn();
+    await setAssetToggle('threads', false, { onImagesToggleOn });
+    await setAssetToggle('threads', true, { onImagesToggleOn });
+    expect(onImagesToggleOn).not.toHaveBeenCalled();
+  });
+});
+
+describe('articles-toggle-on triggers article hydration', () => {
+  beforeEach(async () => {
+    await clear();
+    _resetAssetTogglesForTests();
+  });
+
+  it('calls onArticlesToggleOn when articles flips off→on', async () => {
+    const onArticlesToggleOn = vi.fn();
+    await setAssetToggle('articles', false, { onArticlesToggleOn });
+    expect(onArticlesToggleOn).not.toHaveBeenCalled();
+    await setAssetToggle('articles', true, { onArticlesToggleOn });
+    expect(onArticlesToggleOn).toHaveBeenCalled();
+  });
+
+  it('does not call onArticlesToggleOn for other keys', async () => {
+    const onArticlesToggleOn = vi.fn();
+    await setAssetToggle('images', false, { onArticlesToggleOn });
+    await setAssetToggle('images', true, { onArticlesToggleOn });
+    expect(onArticlesToggleOn).not.toHaveBeenCalled();
+  });
+});

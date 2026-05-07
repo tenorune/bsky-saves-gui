@@ -1,9 +1,14 @@
+import 'fake-indexeddb/auto';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { get } from 'svelte/store';
 import { libraryRefreshState, startLibraryRefresh, stopLibraryRefresh, _resetLibraryRefreshForTests } from './library-refresh';
+import { _resetAssetTogglesForTests } from './asset-toggles';
 
 describe('startLibraryRefresh', () => {
-  beforeEach(() => _resetLibraryRefreshForTests());
+  beforeEach(() => {
+    _resetLibraryRefreshForTests();
+    _resetAssetTogglesForTests();
+  });
 
   it('transitions idle → running → idle on success', async () => {
     const orchestrate = vi.fn().mockResolvedValue({ saves: [] });
@@ -48,6 +53,23 @@ describe('startLibraryRefresh', () => {
       { orchestrate, saveInventory, loadFromDb },
     );
     expect(loadFromDb).toHaveBeenCalled();
+  });
+
+  it('kicks off image and article hydration after a successful refresh when toggles are on', async () => {
+    // Asset toggles default to all-on, so no extra setup needed.
+    const inv = { saves: [{ uri: 'at://x' }] };
+    const orchestrate = vi.fn().mockResolvedValue(inv);
+    const saveInventory = vi.fn().mockResolvedValue(undefined);
+    const loadFromDb = vi.fn().mockResolvedValue(undefined);
+    const loadInventory = vi.fn().mockResolvedValue(inv);
+    const startImageBackup = vi.fn().mockResolvedValue({ started: true });
+    const startArticleBackup = vi.fn().mockResolvedValue({ started: true });
+    await startLibraryRefresh(
+      { credentials: { handle: 'a', appPassword: 'b', pds: 'c' }, includeThreads: false },
+      { orchestrate, saveInventory, loadFromDb, loadInventory, startImageBackup, startArticleBackup },
+    );
+    expect(startImageBackup).toHaveBeenCalledWith(inv);
+    expect(startArticleBackup).toHaveBeenCalledWith(inv);
   });
 });
 
