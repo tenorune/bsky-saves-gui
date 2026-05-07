@@ -6,66 +6,31 @@ beforeEach(() => {
   if (typeof sessionStorage !== 'undefined') sessionStorage.clear();
 });
 
-describe('runJob', () => {
-  it('password mode: calls createSession, runs Pyodide fetch, persists inventory', async () => {
-    const session = { accessJwt: 'a', refreshJwt: 'r', handle: 'h', did: 'd' };
-    const inventory = { saves: [{ uri: 'x' }] };
-
-    const createSession = vi.fn().mockResolvedValue(session);
-    const initialise = vi.fn().mockResolvedValue(undefined);
-    const runFetch = vi.fn().mockResolvedValue(inventory);
-    const onLog = vi.fn();
-
-    const fakeRunner = { initialise, runFetch, onLog: () => () => {} };
+describe('runJob (orchestrator-shim)', () => {
+  it('delegates to orchestrateRefresh and returns session+inventory', async () => {
+    const orchestrate = vi.fn().mockResolvedValue({ saves: [{ uri: 'at://x' }] });
+    const createSession = vi.fn().mockResolvedValue({ accessJwt: 'A', refreshJwt: 'R', did: 'did:plc:1', handle: 'a.bsky.social' });
 
     const { runJob } = await import('./engine');
-    const { loadInventory } = await import('./inventory-store');
 
-    const result = await runJob(
-      {
-        mode: 'password',
-        handle: 'alice.bsky.social',
-        appPassword: 'pw',
-        pds: 'https://bsky.social',
-        fetch: true,
-        threads: false,
-      },
-      { createSession, runner: fakeRunner, onLog },
-    );
-
-    expect(createSession).toHaveBeenCalledWith({
+    const out = await runJob({
+      mode: 'password',
       pds: 'https://bsky.social',
-      identifier: 'alice.bsky.social',
-      password: 'pw',
-    });
-    expect(initialise).toHaveBeenCalled();
-    expect(runFetch).toHaveBeenCalledWith({
-      handle: 'h',
+      handle: 'a.bsky.social',
       appPassword: 'pw',
-      pds: 'https://bsky.social',
       fetch: true,
-      threads: false,
+      threads: true,
+    }, { createSession, orchestrate });
 
-      existingInventory: undefined,
-      preauthSession: {
-        accessJwt: session.accessJwt,
-        refreshJwt: session.refreshJwt,
-        did: session.did,
-        handle: session.handle,
-      },
-    });
-    expect(result.session).toEqual(session);
-    expect(result.inventory).toEqual(inventory);
-    expect(await loadInventory()).toEqual(inventory);
+    expect(orchestrate).toHaveBeenCalled();
+    expect(out.inventory).toEqual({ saves: [{ uri: 'at://x' }] });
+    expect(out.session.handle).toBe('a.bsky.social');
   });
 
   it('session mode: skips createSession and reuses the provided session', async () => {
     const session = { accessJwt: 'a', refreshJwt: 'r', handle: 'h', did: 'd' };
-    const inventory = { saves: [] };
-
+    const orchestrate = vi.fn().mockResolvedValue({ saves: [] });
     const createSession = vi.fn();
-    const initialise = vi.fn().mockResolvedValue(undefined);
-    const runFetch = vi.fn().mockResolvedValue(inventory);
 
     const { runJob } = await import('./engine');
     const result = await runJob(
@@ -76,34 +41,19 @@ describe('runJob', () => {
         fetch: true,
         threads: true,
       },
-      { createSession, runner: { initialise, runFetch, onLog: () => () => {} } },
+      { createSession, orchestrate },
     );
 
     expect(createSession).not.toHaveBeenCalled();
-    expect(runFetch).toHaveBeenCalledWith({
-      handle: 'h',
-      appPassword: '',
-      pds: 'https://bsky.social',
-      fetch: true,
-      threads: true,
-
-      existingInventory: undefined,
-      preauthSession: {
-        accessJwt: session.accessJwt,
-        refreshJwt: session.refreshJwt,
-        did: session.did,
-        handle: session.handle,
-      },
-    });
+    expect(orchestrate).toHaveBeenCalled();
     expect(result.session).toEqual(session);
-    expect(result.inventory).toEqual(inventory);
+    expect(result.inventory).toEqual({ saves: [] });
   });
 
-  it('does not initialise Pyodide if sign-in fails', async () => {
+  it('does not call orchestrate if sign-in fails', async () => {
     const { InvalidCredentialsError } = await import('./atproto');
     const createSession = vi.fn().mockRejectedValue(new InvalidCredentialsError());
-    const initialise = vi.fn();
-    const runFetch = vi.fn();
+    const orchestrate = vi.fn();
 
     const { runJob } = await import('./engine');
     await expect(
@@ -116,13 +66,9 @@ describe('runJob', () => {
           fetch: true,
           threads: false,
         },
-        {
-          createSession,
-          runner: { initialise, runFetch, onLog: () => () => {} },
-          onLog: () => {},
-        },
+        { createSession, orchestrate, onLog: () => {} },
       ),
     ).rejects.toBeInstanceOf(InvalidCredentialsError);
-    expect(initialise).not.toHaveBeenCalled();
+    expect(orchestrate).not.toHaveBeenCalled();
   });
 });
