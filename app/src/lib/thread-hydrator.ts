@@ -3,6 +3,7 @@ import { hydrateThreads as defaultHydrateThreads, type FetchSavesCredentials, ty
 import { getSharedDriver } from './pyodide-worker-driver';
 import type { PyodideWorkerDriver } from './pyodide-worker-driver';
 import { config } from './config';
+import { saveFailures } from './failure-store';
 import type { PreauthSession } from './preauth-session';
 
 export type ThreadBackend = { kind: 'helper' } | { kind: 'pyodide' };
@@ -95,12 +96,14 @@ export const threadHydrator = {
           }));
         }
         const merged = mergeThreaded(input.inventory, allThreaded);
+        const failuresOut = allErrors.map((e) => ({ url: e.uri, reason: e.reason }));
+        await saveFailures('threads', failuresOut);
         threadProgress.update((p) => ({
           ...p,
           status: 'done',
           fetched: allThreaded.length,
           failed: allErrors.length,
-          failures: allErrors.map((e) => ({ url: e.uri, reason: e.reason })),
+          failures: failuresOut,
         }));
         return merged;
       }

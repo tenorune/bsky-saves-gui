@@ -2,9 +2,10 @@ import { get } from 'svelte/store';
 import { extractImageUrls } from './extract-image-urls';
 import { extractArticleUrls } from './extract-article-urls';
 import { hasImageBlob } from './image-store';
-import { imageHydration, articleHydration } from './hydration-state';
+import { imageHydration, articleHydration, threadProgress } from './hydration-state';
 import { loadBackupPrefs } from './backup-prefs';
 import { loadFailures } from './failure-store';
+import { assetToggles } from './asset-toggles';
 
 /**
  * On Library mount after a page reload, the hydration stores are reset to
@@ -102,4 +103,37 @@ export async function restoreHydrationFromInventory(
 
   // Reference extractArticleUrls so future refactors notice it; intentional no-op.
   void extractArticleUrls;
+
+  // Threads: count saves with thread_replies populated as 'fetched',
+  // restore the persisted failure list. Only restore when threads-toggle
+  // is on AND the in-memory store hasn't already been touched this session.
+  const togglesNow = get(assetToggles);
+  const currentThread = get(threadProgress);
+  const threadStoreIsInitial = currentThread.status === 'idle' && currentThread.total === 0;
+  if (togglesNow.threads && threadStoreIsInitial) {
+    let threadTotal = 0;
+    let threadFetched = 0;
+    if (inventory && typeof inventory === 'object') {
+      const inv = inventory as { saves?: unknown };
+      if (Array.isArray(inv.saves)) {
+        for (const save of inv.saves) {
+          if (!save || typeof save !== 'object') continue;
+          threadTotal++;
+          const tr = (save as Record<string, unknown>).thread_replies;
+          if (Array.isArray(tr)) threadFetched++;
+        }
+      }
+    }
+    if (threadTotal > 0) {
+      const persistedFailures = await loadFailures('threads');
+      threadProgress.set({
+        status: 'done',
+        total: threadTotal,
+        fetched: threadFetched,
+        skipped: 0,
+        failed: persistedFailures.length,
+        failures: persistedFailures,
+      });
+    }
+  }
 }

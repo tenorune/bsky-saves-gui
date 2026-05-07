@@ -5,7 +5,7 @@
   export let showDismiss: boolean = true;
 </script>
 
-<div class="install-hint">
+<div class="install-hint" class:install-hint--compact={!showDismiss}>
   <span>
     Tip: install <code>bsky-saves</code> locally for faster fetch and built-in image &amp; article backup.
   </span>
@@ -27,6 +27,13 @@
     flex-wrap: wrap;
     gap: 0.5rem;
     align-items: baseline;
+  }
+  /* Compact variant for Settings: tighter top spacing since the parent
+     section already provides a divider and breathing room. */
+  .install-hint--compact {
+    margin-top: 0.25rem;
+    padding-top: 0;
+    border-top: 0;
   }
   .install-hint__link, .install-hint__dismiss {
     font: inherit;

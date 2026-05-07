@@ -1,3 +1,4 @@
+import 'fake-indexeddb/auto';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { get } from 'svelte/store';
 import { threadHydrator } from './thread-hydrator';

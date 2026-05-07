@@ -43,11 +43,13 @@
     {#if backendLabel}
       <span class="backend">via {backendLabel}</span>
     {/if}
-    {#if progress === 'indeterminate'}
-      <div class="progress-bar progress-bar--indeterminate"><span></span></div>
-    {:else if progress !== null}
-      <div class="progress-bar"><span style="width: {Math.round(progress * 100)}%"></span></div>
-    {/if}
+    <!-- Always-rendered slot so the row's height is constant whether or not
+         a progress bar is showing. Track + fill are transparent when idle. -->
+    <div
+      class="progress-bar"
+      class:progress-bar--indeterminate={progress === 'indeterminate'}
+      class:progress-bar--idle={progress === null}
+    ><span style={typeof progress === 'number' ? `width: ${Math.round(progress * 100)}%` : ''}></span></div>
   {/if}
 </div>
 
@@ -81,12 +83,18 @@
     overflow: hidden;
     position: relative;
   }
+  .progress-bar--idle {
+    background: transparent;
+  }
   .progress-bar > span {
     display: block;
     height: 100%;
     background: color-mix(in oklab, royalblue 60%, CanvasText);
     border-radius: 999px;
     position: relative;
+  }
+  .progress-bar--idle > span {
+    background: transparent;
   }
   .progress-bar--indeterminate > span {
     width: 30%;

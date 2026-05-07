@@ -26,7 +26,7 @@
   import { navigate } from '$lib/router';
   import CustomProxySetupModal from '../components/CustomProxySetupModal.svelte';
   import { assetToggles, setAssetToggle, loadAssetToggles } from '$lib/asset-toggles';
-  import { loadInstallHintPref } from '$lib/install-hint-pref';
+  import { installHintDismissed, loadInstallHintPref } from '$lib/install-hint-pref';
   import InstallHelperHint from '../components/library-status/InstallHelperHint.svelte';
   import { threadHydrator } from '$lib/thread-hydrator';
   import { capabilitySnapshot } from '$lib/capability-snapshot';
@@ -338,7 +338,9 @@
     </details>
   </section>
 
-  <InstallHelperHint showDismiss={false} />
+  {#if !$capabilitySnapshot.helper.detected && $installHintDismissed}
+    <InstallHelperHint showDismiss={false} />
+  {/if}
 
   <section class="settings-section">
     <h3>Reset</h3>

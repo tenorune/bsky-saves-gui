@@ -4,9 +4,10 @@ import type { HydrationFailure } from './hydration-state';
 const KEYS = {
   images: 'failures:images:v1',
   articles: 'failures:articles:v1',
+  threads: 'failures:threads:v1',
 } as const;
 
-type Domain = 'images' | 'articles';
+type Domain = 'images' | 'articles' | 'threads';
 
 function isHydrationFailure(v: unknown): v is HydrationFailure {
   if (!v || typeof v !== 'object') return false;
@@ -51,7 +52,7 @@ export async function loadFailures(domain: Domain): Promise<HydrationFailure[]> 
  */
 export async function clearFailures(domain?: Domain): Promise<void> {
   if (domain === undefined) {
-    await Promise.all([del(KEYS.images), del(KEYS.articles)]);
+    await Promise.all([del(KEYS.images), del(KEYS.articles), del(KEYS.threads)]);
     return;
   }
   await del(KEYS[domain]);
