@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Library status — brainstorm mockups</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  body {
+    margin: 0;
+    padding: 2rem 1rem 4rem;
+    background: Canvas;
+    color: CanvasText;
+    line-height: 1.45;
+  }
+  .page-intro {
+    max-width: 56rem;
+    margin: 0 auto 2rem;
+  }
+  .page-intro h1 { margin: 0 0 0.5rem; font-size: 1.4rem; }
+  .page-intro p { margin: 0 0 0.5rem; opacity: 0.8; }
+  .variant {
+    max-width: 56rem;
+    margin: 0 auto 3rem;
+    padding: 1.25rem;
+    border: 1px solid color-mix(in oklab, CanvasText 18%, transparent);
+    border-radius: 12px;
+    background: color-mix(in oklab, CanvasText 3%, Canvas);
+  }
+  .variant > h2 { margin: 0 0 0.25rem; font-size: 1.1rem; }
+  .variant > .desc { margin: 0 0 1rem; opacity: 0.75; font-size: 0.9rem; }
+  .state-label {
+    margin: 1.25rem 0 0.5rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    opacity: 0.6;
+  }
+
+  /* Mock library shell */
+  .library {
+    border: 1px solid color-mix(in oklab, CanvasText 20%, transparent);
+    border-radius: 8px;
+    background: Canvas;
+    overflow: hidden;
+  }
+  .library__header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid color-mix(in oklab, CanvasText 12%, transparent);
+  }
+  .library__header h3 { margin: 0; font-size: 1rem; flex: 1; }
+  .button {
+    font: inherit;
+    font-size: 0.875rem;
+    padding: 0.35rem 0.75rem;
+    border: 1px solid color-mix(in oklab, CanvasText 25%, transparent);
+    border-radius: 6px;
+    background: Canvas;
+    color: CanvasText;
+    cursor: pointer;
+  }
+  .button--small {
+    font-size: 0.8rem;
+    padding: 0.2rem 0.55rem;
+  }
+  .library__status {
+    padding: 0.5rem 1rem;
+    background: color-mix(in oklab, CanvasText 4%, Canvas);
+    border-bottom: 1px solid color-mix(in oklab, CanvasText 12%, transparent);
+    font-size: 0.875rem;
+  }
+  .library__body {
+    padding: 1rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 0.5rem;
+  }
+  .save-card {
+    aspect-ratio: 1.4;
+    background: color-mix(in oklab, CanvasText 8%, transparent);
+    border-radius: 6px;
+  }
+
+  /* Common status bits */
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    align-items: baseline;
+  }
+  .row + .row { margin-top: 0.4rem; }
+  .label {
+    font-weight: 600;
+    min-width: 4.5rem;
+    display: inline-block;
+  }
+  .muted { opacity: 0.7; }
+  .badge {
+    font-size: 0.75rem;
+    padding: 0.05rem 0.45rem;
+    border-radius: 999px;
+    border: 1px solid color-mix(in oklab, CanvasText 25%, transparent);
+    color: color-mix(in oklab, CanvasText 75%, Canvas);
+  }
+  .badge--on {
+    background: color-mix(in oklab, mediumseagreen 18%, Canvas);
+    border-color: color-mix(in oklab, mediumseagreen 35%, transparent);
+  }
+  .badge--off { opacity: 0.55; }
+  .progress-bar {
+    flex-basis: 100%;
+    height: 4px;
+    margin-top: 0.35rem;
+    background: color-mix(in oklab, CanvasText 12%, transparent);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .progress-bar > span {
+    display: block;
+    height: 100%;
+    background: color-mix(in oklab, royalblue 60%, CanvasText);
+    border-radius: 999px;
+  }
+  .backend {
+    font-size: 0.8rem;
+    opacity: 0.7;
+  }
+  .pill {
+    font-size: 0.75rem;
+    padding: 0.05rem 0.45rem;
+    border-radius: 4px;
+    background: color-mix(in oklab, CanvasText 8%, transparent);
+  }
+  .actions {
+    display: flex;
+    gap: 0.4rem;
+    margin-left: auto;
+  }
+  .action-link {
+    font: inherit;
+    font-size: 0.8rem;
+    background: none;
+    border: 0;
+    padding: 0.1rem 0.25rem;
+    color: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  .global-summary {
+    font-size: 0.95rem;
+  }
+  .global-summary strong { font-weight: 600; }
+
+  /* Variant E table */
+  .stat-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+  .stat-table th, .stat-table td {
+    padding: 0.4rem 0.6rem;
+    text-align: left;
+    border-bottom: 1px solid color-mix(in oklab, CanvasText 10%, transparent);
+  }
+  .stat-table tr:last-child td { border-bottom: 0; }
+  .stat-table th {
+    font-weight: 600;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    opacity: 0.65;
+  }
+
+  /* Variant F card grid */
+  .stat-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 0.65rem;
+  }
+  .stat-card {
+    padding: 0.65rem 0.8rem;
+    border: 1px solid color-mix(in oklab, CanvasText 14%, transparent);
+    border-radius: 6px;
+  }
+  .stat-card__label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    opacity: 0.65;
+  }
+  .stat-card__value {
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin: 0.1rem 0 0.25rem;
+  }
+  .stat-card__meta {
+    font-size: 0.78rem;
+    opacity: 0.75;
+    display: flex;
+    gap: 0.35rem;
+    align-items: center;
+  }
+</style>
+</head>
+<body>
+
+<div class="page-intro">
+  <h1>Library status — brainstorm mockups</h1>
+  <p>Six layout variants for Library's always-visible status area.
+     Each variant shows multiple states.
+     Elements per status: post count, threads on/off, images on/off, articles
+     on/off, backend (per element if different from the dominant one).
+     Some variants include hydrate-now controls.</p>
+  <p class="muted">Throwaway. Will be deleted from <code>app/public/mockups/</code>
+     once we settle on a layout.</p>
+</div>
+
+<!-- ───────────────────────────────────────────────────────────── A -->
+<section class="variant">
+  <h2>Variant A — one line per concern, no controls</h2>
+  <p class="desc">Stacked rows. Backend appears per-row in muted text on the right.
+     Read-only — refresh in header is the only action.</p>
+
+  <div class="state-label">Idle, all hydrated, backend uniform</div>
+  <div class="library">
+    <div class="library__header">
+      <h3>Library</h3>
+      <button class="button">Refresh</button>
+    </div>
+    <div class="library__status">
+      <div class="row"><span class="label">Posts</span><span>247 of 247</span><span class="backend">via local helper</span></div>
+      <div class="row"><span class="label">Threads</span><span class="badge badge--on">on</span><span>247 of 247</span><span class="backend">via local helper</span></div>
+      <div class="row"><span class="label">Images</span><span class="badge badge--on">on</span><span>89 of 247</span><span class="backend">via local helper</span></div>
+      <div class="row"><span class="label">Articles</span><span class="badge badge--on">on</span><span>12 of 14</span><span class="backend">via local helper</span></div>
+    </div>
+    <div class="library__body">
+      <div class="save-card"></div><div class="save-card"></div><div class="save-card"></div>
+      <div class="save-card"></div><div class="save-card"></div><div class="save-card"></div>
+    </div>
+  </div>
+
+  <div class="state-label">Active fetch, mixed backends</div>
+  <div class="library">
+    <div class="library__header">
+      <h3>Library</h3>
+      <button class="button" disabled>Refreshing…</button>
+    </div>
+    <div class="library__status">
+      <div class="row">
+        <span class="label">Posts</span><span>120 of 247…</span>
+        <span class="backend">via local helper</span>
+        <div class="progress-bar"><span style="width:48%"></span></div>
+      </div>
+      <div class="row"><span class="label">Threads</span><span class="badge badge--on">on</span><span>queued</span><span class="backend">via local helper</span></div>
+      <div class="row"><span class="label">Images</span><span class="badge badge--on">on</span><span>0 of 247</span><span class="backend">via your worker proxy</span></div>
+      <div class="row"><span class="label">Articles</span><span class="badge badge--off">off</span><span class="muted">disabled in Settings</span></div>
+    </div>
+    <div class="library__body">
+      <div class="save-card"></div><div class="save-card"></div><div class="save-card"></div>
+      <div class="save-card"></div><div class="save-card"></div><div class="save-card"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────────────────────────────────────────── B -->
+<section class="variant">
+  <h2>Variant B — one line per concern, per-row hydrate controls</h2>
+  <p class="desc">Same stacked rows; each row that's hydratable gets a small
+     "Hydrate now" button on the right. Backend label moves to mid-line.</p>
+
+  <div class="state-label">Idle, partially hydrated</div>
+  <div class="library">
+    <div class="library__header">
+      <h3>Library</h3>
+      <button class="button">Refresh all</button>
+    </div>
+    <div class="library__status">
+      <div class="row">
+        <span class="label">Posts</span><span>247 of 247</span>
+        <span class="backend">via local helper</span>
+      </div>
+      <div class="row">
+        <span class="label">Threads</span><span class="badge badge--on">on</span>
+        <span>247 of 247</span><span class="backend">via local helper</span>
+        <span class="actions"><button class="button button--small">Re-hydrate</button></span>
+      </div>
+      <div class="row">
+        <span class="label">Images</span><span class="badge badge--on">on</span>
+        <span>89 of 247</span><span class="backend">via your worker proxy</span>
+        <span class="actions"><button class="button button--small">Hydrate now</button></span>
+      </div>
+      <div class="row">
+        <span class="label">Articles</span><span class="badge badge--on">on</span>
+        <span>12 of 14</span><span class="backend">via local helper</span>
+        <span class="actions"><button class="button button--small">Hydrate now</button></span>
+      </div>
+    </div>
+    <div class="library__body">
+      <div class="save-card"></div><div class="save-card"></div><div class="save-card"></div>
+      <div class="save-card"></div><div class="save-card"></div><div class="save-card"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────────────────────────────────────────── C -->
+<section class="variant">
+  <h2>Variant C — collapsed posts header + three asset rows</h2>
+  <p class="desc">Post count gets pulled up next to the page title (it's the
+     primary metric), so the status block only has three rows: threads, images,
+     articles. Less dense.</p>
+
+  <div class="state-label">Idle, uniform backend</div>
+  <div class="library">
+    <div class="library__header">
+      <h3>Library — <span class="muted" style="font-weight:400">247 posts</span></h3>
+      <span class="backend" style="margin-right:0.5rem">via local helper</span>
+      <button class="button">Refresh</button>
+    </div>
+    <div class="library__status">
+      <div class="row"><span class="label">Threads</span><span class="badge badge--on">on</span><span>247 of 247</span></div>
+      <div class="row"><span class="label">Images</span><span class="badge badge--on">on</span><span>89 of 247</span></div>
+      <div class="row"><span class="label">Articles</span><span class="badge badge--on">on</span><span>12 of 14</span></div>
+    </div>
+    <div class="library__body">
+      <div class="save-card"></div><div class="save-card"></div><div class="save-card"></div>
+      <div class="save-card"></div><div class="save-card"></div><div class="save-card"></div>
+    </div>
+  </div>
+
+  <div class="state-label">Mixed backend — per-row backend appears only on rows that differ</div>
+  <div class="library">
+    <div class="library__header">
+      <h3>Library — <span class="muted" style="font-weight:400">247 posts</span></h3>
+      <span class="backend" style="margin-right:0.5rem">via local helper</span>
+      <button class="button">Refresh</button>
+    </div>
+    <div class="library__status">
+      <div class="row"><span class="label">Threads</span><span class="badge badge--on">on</span><span>247 of 247</span></div>
+      <div class="row"><span class="label">Images</span><span class="badge badge--on">on</span><span>89 of 247</span><span class="backend">via your worker proxy</span></div>
+      <div class="row"><span class="label">Articles</span><span class="badge badge--off">off</span><span class="muted">disabled in Settings</span></div>
+    </div>
+    <div class="library__body">
+      <div class="save-card"></div><div class="save-card"></div><div class="save-card"></div>
+      <div class="save-card"></div><div class="save-card"></div><div class="save-card"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────────────────────────────────────────── D -->
+<section class="variant">
+  <h2>Variant D — global summary line + per-asset rows</h2>
+  <p class="desc">The first line is a sentence-style global summary
+     ("247 posts · threads on · images on · articles on · via local helper").
+     Below it, only assets that are actively hydrating or have failures show a
+     row. Quiet by default; expressive when needed.</p>
+
+  <div class="state-label">Idle, fully hydrated — only the summary line</div>
+  <div class="library">
+    <div class="library__header">
+      <h3>Library</h3>
+      <button class="button">Refresh</button>
+    </div>
+    <div class="library__status">
+      <div class="row global-summary">
+        <strong>247 posts</strong><span class="muted">·</span>
+        <span>threads <span class="badge badge--on">on</span></span><span class="muted">·</span>
+        <span>images <span class="badge badge--on">on</span></span><span class="muted">·</span>
+        <span>articles <span class="badge badge--on">on</span></span><span class="muted">·</span>
+        <span class="backend">via local helper</span>
+      </div>
+    </div>
+    <div class="library__body">
+      <div class="save-card"></div><div class="save-card"></div><div class="save-card"></div>
+      <div class="save-card"></div><div class="save-card"></div><div class="save-card"></div>
+    </div>
+  </div>
+
+  <div class="state-label">Active — summary plus rows for what's running</div>
+  <div class="library">
+    <div class="library__header">
+      <h3>Library</h3>
+      <button class="button" disabled>Refreshing…</button>
+    </div>
+    <div class="library__status">
+      <div class="row global-summary">
+        <strong>247 posts</strong><span class="muted">·</span>
+        <span>threads <span class="badge badge--on">on</span></span><span class="muted">·</span>
+        <span>images <span class="badge badge--on">on</span></span><span class="muted">·</span>
+        <span>articles <span class="badge badge--on">on</span></span><span class="muted">·</span>
+        <span class="backend">via local helper</span>
+      </div>
+      <div class="row">
+        <span class="label">Images</span><span>89 of 247…</span>
+        <span class="backend">via your worker proxy</span>
+        <div class="progress-bar"><span style="width:36%"></span></div>
+      </div>
+      <div class="row">
+        <span class="label">Articles</span><span>2 of 14… <span class="muted">(1 failed)</span></span>
+        <span class="backend">via local helper</span>
+        <div class="progress-bar"><span style="width:14%"></span></div>
+      </div>
+    </div>
+    <div class="library__body">
+      <div class="save-card"></div><div class="save-card"></div><div class="save-card"></div>
+      <div class="save-card"></div><div class="save-card"></div><div class="save-card"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────────────────────────────────────────── E -->
+<section class="variant">
+  <h2>Variant E — compact table</h2>
+  <p class="desc">Tabular layout with columns for state, count, backend, action.
+     Densest. Easiest to scan when you're checking on multiple assets at once.</p>
+
+  <div class="library">
+    <div class="library__header">
+      <h3>Library</h3>
+      <span class="backend" style="margin-right:0.5rem">247 posts</span>
+      <button class="button">Refresh</button>
+    </div>
+    <div class="library__status">
+      <table class="stat-table">
+        <thead>
+          <tr><th></th><th>State</th><th>Count</th><th>Backend</th><th></th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Threads</td><td><span class="badge badge--on">on</span></td><td>247 of 247</td><td>local helper</td><td></td></tr>
+          <tr><td>Images</td><td><span class="badge badge--on">on</span></td><td>89 of 247</td><td>your worker proxy</td><td><button class="button button--small">Hydrate</button></td></tr>
+          <tr><td>Articles</td><td><span class="badge badge--off">off</span></td><td><span class="muted">—</span></td><td><span class="muted">—</span></td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="library__body">
+      <div class="save-card"></div><div class="save-card"></div><div class="save-card"></div>
+      <div class="save-card"></div><div class="save-card"></div><div class="save-card"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────────────────────────────────────────── F -->
+<section class="variant">
+  <h2>Variant F — stat cards</h2>
+  <p class="desc">Four small cards (Posts, Threads, Images, Articles).
+     Each card has a count, an on/off badge, and the backend in subscript.
+     Highest "dashboard" feel; takes the most vertical space when calm.</p>
+
+  <div class="library">
+    <div class="library__header">
+      <h3>Library</h3>
+      <button class="button">Refresh</button>
+    </div>
+    <div class="library__status">
+      <div class="stat-cards">
+        <div class="stat-card">
+          <div class="stat-card__label">Posts</div>
+          <div class="stat-card__value">247 / 247</div>
+          <div class="stat-card__meta"><span class="backend">via local helper</span></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card__label">Threads</div>
+          <div class="stat-card__value">247 / 247</div>
+          <div class="stat-card__meta"><span class="badge badge--on">on</span><span class="backend">via local helper</span></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card__label">Images</div>
+          <div class="stat-card__value">89 / 247</div>
+          <div class="stat-card__meta"><span class="badge badge--on">on</span><span class="backend">via your worker proxy</span></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card__label">Articles</div>
+          <div class="stat-card__value">12 / 14</div>
+          <div class="stat-card__meta"><span class="badge badge--on">on</span><span class="backend">via local helper</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="library__body">
+      <div class="save-card"></div><div class="save-card"></div><div class="save-card"></div>
+      <div class="save-card"></div><div class="save-card"></div><div class="save-card"></div>
+    </div>
+  </div>
+</section>
+
+<div class="page-intro" style="margin-top:3rem">
+  <p class="muted"><strong>Notes:</strong> backend strings are placeholders
+    ("local helper", "your worker proxy", "operator's worker proxy", "Pyodide").
+    Counts are illustrative. Hydration progress bars are absent in some variants
+    on purpose — pick whichever signal density feels right.</p>
+</div>
+
+</body>
+</html>
