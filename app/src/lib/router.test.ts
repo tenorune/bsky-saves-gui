@@ -59,12 +59,23 @@ describe('router', () => {
     }
   });
 
-  it('routes #/run to the run route', async () => {
+  it('redirects #/run to the library route (legacy)', async () => {
     window.location.hash = '#/run';
     const { currentRoute, startRouter } = await import('./router');
     const stop = startRouter();
     try {
-      expect(get(currentRoute).name).toBe('run');
+      expect(get(currentRoute).name).toBe('library');
+    } finally {
+      stop();
+    }
+  });
+
+  it('redirects #/refresh to the library route (legacy)', async () => {
+    window.location.hash = '#/refresh';
+    const { currentRoute, startRouter } = await import('./router');
+    const stop = startRouter();
+    try {
+      expect(get(currentRoute).name).toBe('library');
     } finally {
       stop();
     }
