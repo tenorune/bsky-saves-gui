@@ -1,60 +1,24 @@
 // Background loop that walks an inventory's article URLs, extracts each via
-// the helper, and mutates the inventory in place: writes article_text and
-// (when present) article_title onto each save. Persists the updated inventory
-// back to IDB once the run completes. Updates articleHydration as it goes.
+// the configured backend, and mutates the inventory in place: writes
+// article_text and (when present) article_title onto each save. Persists the
+// updated inventory back to IDB once the run completes. Updates
+// articleHydration as it goes.
 //
 // Articles are stored INSIDE the inventory (not a separate store) to match
 // bsky-saves' CLI shape and the existing parser's article synthesis.
+//
+// Routing decision is driven by CapabilitySnapshot.articles (read once per
+// hydrateArticles call).
 
+import { get } from 'svelte/store';
 import { extractArticleUrls } from './extract-article-urls';
-import { extractArticleViaHelper, type ExtractedArticle, pingHelper } from './helper-client';
+import { extractArticleViaHelper, type ExtractedArticle } from './helper-client';
 import { config } from './config';
 import { saveInventory } from './inventory-store';
 import { articleHydration, type HydrationFailure } from './hydration-state';
-import { loadProxyConfig, saveProxyConfig } from './proxy-config';
-import { extractArticleViaWorker, WorkerNoArticlesError } from './user-worker-client';
+import { extractArticleViaWorker } from './user-worker-client';
 import { saveFailures } from './failure-store';
-
-function makeDefaultFetcher(signal: AbortSignal | undefined): (url: string) => Promise<ExtractedArticle> {
-  // Cache the backend choice for the duration of the run. Probe lazily on first
-  // call so unit tests that don't actually fetch still see the right shape.
-  let resolved: 'helper' | 'worker' | 'none' | undefined;
-  let proxy: { url: string; sharedSecret: string; supportsArticles: boolean } | null = null;
-
-  async function resolveBackend() {
-    if (resolved !== undefined) return;
-    if (await pingHelper(config.helperOrigin)) {
-      resolved = 'helper';
-      return;
-    }
-    proxy = await loadProxyConfig();
-    if (proxy && proxy.supportsArticles) {
-      resolved = 'worker';
-      return;
-    }
-    resolved = 'none';
-  }
-
-  return async (url: string) => {
-    await resolveBackend();
-    if (resolved === 'helper') {
-      return extractArticleViaHelper(config.helperOrigin, url, { signal });
-    }
-    if (resolved === 'worker' && proxy) {
-      try {
-        return await extractArticleViaWorker(proxy, url, { signal });
-      } catch (err) {
-        if (err instanceof WorkerNoArticlesError) {
-          await saveProxyConfig({ ...proxy, supportsArticles: false });
-          resolved = 'none';
-          throw new Error('worker no longer supports articles — redeploy with the article-enabled bundle');
-        }
-        throw err;
-      }
-    }
-    throw new Error('no article backend available — start the local helper or enable article extraction on your custom worker');
-  };
-}
+import { capabilitySnapshot, type CapabilitySnapshot } from './capability-snapshot';
 
 export interface HydrateArticleResult {
   readonly fetched: number;
@@ -64,9 +28,19 @@ export interface HydrateArticleResult {
 }
 
 export interface HydrateArticleOptions {
-  /** Inject a fetcher for testing. Defaults to the real helper extractor. */
+  /**
+   * Inject a fetcher directly. When provided, snapshot-based routing is
+   * bypassed entirely. Useful for existing tests that don't need to exercise
+   * routing dispatch.
+   */
   readonly fetcher?: (url: string) => Promise<ExtractedArticle>;
   readonly signal?: AbortSignal;
+  /**
+   * Provide a CapabilitySnapshot to route article fetches. When omitted and
+   * `fetcher` is also omitted, the singleton capabilitySnapshot store is read.
+   * Inject a fake in tests to exercise snapshot-based routing.
+   */
+  readonly getSnapshot?: () => CapabilitySnapshot;
 }
 
 function reasonOf(err: unknown): string {
@@ -90,12 +64,49 @@ function findSaveByUrl(inventory: unknown, url: string): Record<string, unknown>
   return null;
 }
 
+/**
+ * Build a fetcher function from a CapabilitySnapshot's articles descriptor.
+ *
+ * - 'helper'      → extractArticleViaHelper using the configured helper origin
+ * - 'user-worker' → extractArticleViaWorker at the snapshot-provided URL
+ * - 'none'        → throws; the caller records each URL as a failure
+ */
+function fetcherFromSnapshot(
+  snapshot: CapabilitySnapshot,
+  signal: AbortSignal | undefined,
+): (url: string) => Promise<ExtractedArticle> {
+  const backend = snapshot.articles;
+  if (backend.kind === 'helper') {
+    return (articleUrl) => extractArticleViaHelper(config.helperOrigin, articleUrl, { signal });
+  }
+  if (backend.kind === 'user-worker') {
+    const workerUrl = backend.url;
+    return (articleUrl) =>
+      extractArticleViaWorker(
+        { url: workerUrl, sharedSecret: '', supportsArticles: true },
+        articleUrl,
+        { signal },
+      );
+  }
+  // kind === 'none'
+  return (_articleUrl) => {
+    throw new Error('no article backend available — start the local helper or configure a user worker with article support');
+  };
+}
+
 export async function hydrateArticles(
   inventory: unknown,
   options: HydrateArticleOptions = {},
 ): Promise<HydrateArticleResult> {
   const signal = options.signal;
-  const fetcher = options.fetcher ?? makeDefaultFetcher(signal);
+
+  let fetcher: (url: string) => Promise<ExtractedArticle>;
+  if (options.fetcher) {
+    fetcher = options.fetcher;
+  } else {
+    const snapshot = (options.getSnapshot ?? (() => get(capabilitySnapshot)))();
+    fetcher = fetcherFromSnapshot(snapshot, signal);
+  }
 
   const allUrls: string[] = [];
   if (inventory && typeof inventory === 'object') {

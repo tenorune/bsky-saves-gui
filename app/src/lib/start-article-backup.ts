@@ -1,16 +1,19 @@
 // Run-lifecycle helper for article backup. Wraps article-hydrator with the
 // controls the UI needs:
 //
-// - startArticleBackup(inventory): probes available backends (helper or
-//   user-deployed worker with article extraction). Returns {started:false,
-//   reason} if neither is available. Otherwise spawns the hydration loop
-//   (which picks the backend itself) and returns {started:true}.
+// - startArticleBackup(inventory): probes available backends via
+//   initCapabilitySnapshot (with a custom loadUserWorker that only returns the
+//   user worker when supportsArticles is true). Reads
+//   CapabilitySnapshot.articles to decide whether to start. Returns
+//   {started:false, reason} when no backend is available. Otherwise spawns
+//   the hydration loop and returns {started:true}.
 //
 // - cancelArticleBackup(): aborts the most recent run, or no-op.
 
-import { probeConfiguredHelper } from './helper-client';
+import { get } from 'svelte/store';
 import { hydrateArticles } from './article-hydrator';
 import { setBackupEnabled } from './backup-prefs';
+import { initCapabilitySnapshot, capabilitySnapshot } from './capability-snapshot';
 import { loadProxyConfig } from './proxy-config';
 
 export interface StartArticleResult {
@@ -20,20 +23,26 @@ export interface StartArticleResult {
 
 let activeController: AbortController | null = null;
 
-export async function startArticleBackup(inventory: unknown): Promise<StartArticleResult> {
-  const helper = await probeConfiguredHelper();
-  const helperOk =
-    helper.status === 'available' && helper.features.includes('extract-article');
+/**
+ * Load the user worker URL only if the configured proxy supports article
+ * extraction. This prevents routing articles to a worker that doesn't have
+ * the `/extract-article` endpoint.
+ */
+async function loadArticleCapableUserWorker(): Promise<{ readonly url: string } | null> {
+  const cfg = await loadProxyConfig();
+  return cfg && cfg.url && cfg.supportsArticles ? { url: cfg.url } : null;
+}
 
-  if (!helperOk) {
-    const proxy = await loadProxyConfig();
-    if (!(proxy && proxy.supportsArticles)) {
-      return {
-        started: false,
-        reason:
-          'no article backend available — start the local helper or set up a custom worker that supports article extraction',
-      };
-    }
+export async function startArticleBackup(inventory: unknown): Promise<StartArticleResult> {
+  await initCapabilitySnapshot({ loadUserWorker: loadArticleCapableUserWorker });
+  const snapshot = get(capabilitySnapshot);
+
+  if (snapshot.articles.kind === 'none') {
+    return {
+      started: false,
+      reason:
+        'no article backend available — start the local helper or set up a custom worker that supports article extraction',
+    };
   }
 
   const controller = new AbortController();

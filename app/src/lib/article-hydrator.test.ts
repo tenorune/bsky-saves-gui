@@ -1,6 +1,17 @@
-import { describe, expect, it, beforeEach, vi, afterEach } from 'vitest';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
 import 'fake-indexeddb/auto';
 import { get } from 'svelte/store';
+import type { CapabilitySnapshot } from './capability-snapshot';
+
+vi.mock('./helper-client', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('./helper-client')>();
+  return { ...mod, extractArticleViaHelper: vi.fn() };
+});
+
+vi.mock('./user-worker-client', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('./user-worker-client')>();
+  return { ...mod, extractArticleViaWorker: vi.fn() };
+});
 
 beforeEach(async () => {
   const { clearInventory } = await import('./inventory-store');
@@ -118,158 +129,175 @@ describe('hydrateArticles cancellation', () => {
 });
 
 describe('hydrateArticles aborts in-flight fetch when signal fires', () => {
-  beforeEach(async () => {
-    vi.resetModules();
-    const { clearInventory } = await import('./inventory-store');
-    await clearInventory();
-    const { resetArticleHydration } = await import('./hydration-state');
-    resetArticleHydration();
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   it('aborts the in-flight fetch when signal is triggered', async () => {
-    // Configure a proxy that supportsArticles so makeDefaultFetcher picks the
-    // worker path (helper /ping returns 404 immediately, keeping the test fast).
-    const { saveProxyConfig } = await import('./proxy-config');
-    await saveProxyConfig({ url: 'https://w.example/', sharedSecret: 's', supportsArticles: true });
-
-    let abortedDuringFetch = false;
-    const fetchMock = vi.fn(async (input: RequestInfo, init?: RequestInit) => {
-      const u = typeof input === 'string' ? input : (input as Request).url;
-      // Helper probe: return 404 quickly so the worker path is chosen.
-      if (u.endsWith('/ping')) return new Response('nope', { status: 404 });
-      // Mimic a slow upstream that respects AbortSignal.
-      const sig = init?.signal;
-      return new Promise<Response>((_resolve, reject) => {
-        sig?.addEventListener('abort', () => {
-          abortedDuringFetch = true;
-          reject(new DOMException('aborted', 'AbortError'));
-        });
-        // never resolves unless aborted
-      });
-    });
-    vi.stubGlobal('fetch', fetchMock);
-    const { hydrateArticles } = await import('./article-hydrator');
-
-    const inv = { saves: [{ embed: { url: 'https://a.example/p' } }] };
     const ctrl = new AbortController();
-    const promise = hydrateArticles(inv, { signal: ctrl.signal });
+    let resolveAbort!: () => void;
+    let abortedDuringFetch = false;
 
-    // Give the fetch a tick to start, then abort.
-    await new Promise((r) => setTimeout(r, 5));
+    // A fetcher that simulates a slow in-flight request respecting AbortSignal.
+    const fetcher = vi.fn((_url: string) =>
+      new Promise<{ url: string; title: string; text: string; fetched_at: string }>(
+        (_resolve, reject) => {
+          ctrl.signal.addEventListener('abort', () => {
+            abortedDuringFetch = true;
+            resolveAbort?.();
+            reject(new DOMException('aborted', 'AbortError'));
+          });
+        },
+      ),
+    );
+
+    const { hydrateArticles } = await import('./article-hydrator');
+    const inv = { saves: [{ embed: { url: 'https://a.example/p' } }] };
+    const promise = hydrateArticles(inv, { fetcher, signal: ctrl.signal });
+
+    // Give the fetcher a tick to start, then abort.
+    await new Promise((r) => { resolveAbort = r as () => void; setTimeout(r, 5); });
     ctrl.abort();
 
     const r = await promise;
     expect(r.cancelled).toBe(true);
     expect(abortedDuringFetch).toBe(true);
-    vi.unstubAllGlobals();
+    const { articleHydration } = await import('./hydration-state');
+    expect(get(articleHydration).status).toBe('cancelled');
   });
 });
 
 describe('hydrateArticles writes save.article', () => {
-  beforeEach(async () => {
-    vi.resetModules();
-    const { clearInventory } = await import('./inventory-store');
-    await clearInventory();
-    const { resetArticleHydration } = await import('./hydration-state');
-    resetArticleHydration();
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   it('also writes save.article so the renderer sees the new article text', async () => {
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo) => {
-      const u = typeof input === 'string' ? input : (input as Request).url;
-      if (u.endsWith('/ping')) {
-        return {
-          ok: true,
-          json: async () => ({ name: 'bsky-saves', version: '0.3.0', features: ['extract-article'] }),
-        };
-      }
-      return {
-        ok: true,
-        json: async () => ({
-          url: 'https://a.example/p',
-          title: 'Hello',
-          text: 'body text',
-          fetched_at: '2026-05-05T00:00:00Z',
-        }),
-      };
+    const fetcher = vi.fn(async (_url: string) => ({
+      url: 'https://a.example/p',
+      title: 'Hello',
+      text: 'body text',
+      fetched_at: '2026-05-05T00:00:00Z',
     }));
     const inv = { saves: [{ uri: 'a', embed: { url: 'https://a.example/p' } } as Record<string, unknown>] };
     const { hydrateArticles } = await import('./article-hydrator');
-    await hydrateArticles(inv);
+    await hydrateArticles(inv, { fetcher });
     const save = inv.saves[0];
     expect(save.article_text).toBe('body text');
     expect(save.article).toEqual({ url: 'https://a.example/p', text: 'body text', title: 'Hello' });
-    vi.unstubAllGlobals();
   });
 });
 
-describe('hydrateArticles default backend selection', () => {
-  beforeEach(async () => {
-    vi.resetModules();
-    const { clearInventory } = await import('./inventory-store');
-    await clearInventory();
-    const { resetArticleHydration } = await import('./hydration-state');
-    resetArticleHydration();
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it('uses worker fetcher when helper is absent and worker supportsArticles', async () => {
-    // The hydrator is given an inventory with one article URL.
-    // We do NOT pass a custom fetcher, so the default backend-selection logic runs.
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo) => {
-      const u = typeof input === 'string' ? input : (input as Request).url;
-      if (u.endsWith('/ping')) return new Response('nope', { status: 404 });
-      if (u.endsWith('/extract-article')) {
-        return new Response(JSON.stringify({
-          url: 'https://a.example/p', title: 'T', text: 'body', fetched_at: '2026-05-05T00:00:00Z',
-        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
-      }
-      throw new Error(`unexpected fetch ${u}`);
-    }));
-    const { saveProxyConfig } = await import('./proxy-config');
-    await saveProxyConfig({ url: 'https://w.example/', sharedSecret: 's', supportsArticles: true });
+describe('hydrateArticles snapshot-based dispatch', () => {
+  it('routes to user-worker when snapshot.articles.kind is user-worker', async () => {
+    const { extractArticleViaWorker } = await import('./user-worker-client');
+    vi.mocked(extractArticleViaWorker).mockResolvedValue({
+      url: 'https://a.example/p', title: 'T', text: 'body', fetched_at: '2026-05-05T00:00:00Z',
+    });
     const inv = { saves: [{ embed: { url: 'https://a.example/p' } }] };
     const { hydrateArticles } = await import('./article-hydrator');
-    const r = await hydrateArticles(inv);
+    const r = await hydrateArticles(inv, {
+      getSnapshot: () => ({
+        helper: { detected: false },
+        fetch: { kind: 'pyodide' },
+        enrich: { kind: 'pyodide' },
+        threads: { kind: 'pyodide' },
+        images: { kind: 'operator-worker' },
+        articles: { kind: 'user-worker', url: 'https://w.example/' },
+      }),
+    });
     expect(r.fetched).toBe(1);
     expect(r.failed).toBe(0);
+    expect(vi.mocked(extractArticleViaWorker)).toHaveBeenCalledWith(
+      expect.objectContaining({ url: 'https://w.example/' }),
+      'https://a.example/p',
+      expect.any(Object),
+    );
   });
 
-  it('flips supportsArticles to false on runtime 404 from worker', async () => {
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo) => {
-      const u = typeof input === 'string' ? input : (input as Request).url;
-      if (u.endsWith('/ping')) return new Response('nope', { status: 404 });
-      if (u.endsWith('/extract-article')) return new Response('not found', { status: 404 });
-      throw new Error(`unexpected fetch ${u}`);
-    }));
-    const { saveProxyConfig, loadProxyConfig } = await import('./proxy-config');
-    await saveProxyConfig({ url: 'https://w.example/', sharedSecret: 's', supportsArticles: true });
-    const inv = { saves: [{ embed: { url: 'https://a.example/p' } }, { embed: { url: 'https://a.example/q' } }] };
-    const { hydrateArticles } = await import('./article-hydrator');
-    const r = await hydrateArticles(inv);
-    expect(r.failed).toBe(2);
-    const updated = await loadProxyConfig();
-    expect(updated?.supportsArticles).toBe(false);
-  });
-
-  it('fails with a clear note when neither helper nor worker is available', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('nope', { status: 404 })));
-    const { clearProxyConfig } = await import('./proxy-config');
-    await clearProxyConfig();
+  it('fails with a clear note when snapshot.articles.kind is none', async () => {
     const inv = { saves: [{ embed: { url: 'https://a.example/p' } }] };
     const { hydrateArticles } = await import('./article-hydrator');
-    const r = await hydrateArticles(inv);
+    const r = await hydrateArticles(inv, {
+      getSnapshot: () => ({
+        helper: { detected: false },
+        fetch: { kind: 'pyodide' },
+        enrich: { kind: 'pyodide' },
+        threads: { kind: 'pyodide' },
+        images: { kind: 'operator-worker' },
+        articles: { kind: 'none' },
+      }),
+    });
     expect(r.failed).toBe(1);
+  });
+});
+
+const makeSingleArticleInv = () => ({
+  saves: [{ uri: 'a', embed: { url: 'https://a.example/article' } }],
+});
+
+const okArticle = (url: string) => ({
+  url,
+  title: 'Test Title',
+  text: 'Test body text',
+  fetched_at: '2026-05-07T00:00:00Z',
+});
+
+function fakeSnapshot(articles: CapabilitySnapshot['articles']): CapabilitySnapshot {
+  return {
+    helper: { detected: false },
+    fetch: { kind: 'pyodide' },
+    enrich: { kind: 'pyodide' },
+    threads: { kind: 'pyodide' },
+    images: { kind: 'operator-worker' },
+    articles,
+  };
+}
+
+describe('hydrateArticles snapshot routing: helper', () => {
+  it('calls extractArticleViaHelper when snapshot.articles.kind is helper', async () => {
+    const { extractArticleViaHelper } = await import('./helper-client');
+    vi.mocked(extractArticleViaHelper).mockResolvedValue(okArticle('https://a.example/article'));
+
+    const { hydrateArticles } = await import('./article-hydrator');
+    const result = await hydrateArticles(makeSingleArticleInv(), {
+      getSnapshot: () => fakeSnapshot({ kind: 'helper' }),
+    });
+
+    expect(result.fetched).toBe(1);
+    expect(result.failed).toBe(0);
+    expect(vi.mocked(extractArticleViaHelper)).toHaveBeenCalledWith(
+      expect.any(String),
+      'https://a.example/article',
+      expect.any(Object),
+    );
+  });
+});
+
+describe('hydrateArticles snapshot routing: user-worker', () => {
+  it('calls extractArticleViaWorker with the snapshot URL when kind is user-worker', async () => {
+    const { extractArticleViaWorker } = await import('./user-worker-client');
+    vi.mocked(extractArticleViaWorker).mockResolvedValue(okArticle('https://a.example/article'));
+
+    const { hydrateArticles } = await import('./article-hydrator');
+    const result = await hydrateArticles(makeSingleArticleInv(), {
+      getSnapshot: () => fakeSnapshot({ kind: 'user-worker', url: 'https://worker.example.com' }),
+    });
+
+    expect(result.fetched).toBe(1);
+    expect(result.failed).toBe(0);
+    expect(vi.mocked(extractArticleViaWorker)).toHaveBeenCalledWith(
+      expect.objectContaining({ url: 'https://worker.example.com' }),
+      'https://a.example/article',
+      expect.any(Object),
+    );
+  });
+});
+
+describe('hydrateArticles snapshot routing: none', () => {
+  it('records a failure for each URL when snapshot.articles.kind is none', async () => {
+    const { hydrateArticles } = await import('./article-hydrator');
+    const result = await hydrateArticles(makeSingleArticleInv(), {
+      getSnapshot: () => fakeSnapshot({ kind: 'none' }),
+    });
+
+    expect(result.fetched).toBe(0);
+    expect(result.failed).toBe(1);
+    expect(result.cancelled).toBe(false);
+    const { articleHydration } = await import('./hydration-state');
+    expect(get(articleHydration).failures).toHaveLength(1);
+    expect(get(articleHydration).failures[0].url).toBe('https://a.example/article');
   });
 });
