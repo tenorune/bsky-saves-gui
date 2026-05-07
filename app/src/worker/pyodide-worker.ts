@@ -321,12 +321,11 @@ print(f'bsky-saves: thread hydration done — {hydrated} hydrated, {skipped} ski
   return JSON.parse(raw);
 }
 
-async function runFetchOnly(input: FetchOnlyInput): Promise<unknown> {
+async function applyPreauthSessionPatch(preauthSession: PreauthSession | undefined): Promise<void> {
+  if (!preauthSession) return;
   if (!pyodide) throw new Error('Worker not initialised');
-
-  if (input.preauthSession) {
-    const sessionJson = JSON.stringify(input.preauthSession);
-    await pyodide.runPythonAsync(`
+  const sessionJson = JSON.stringify(preauthSession);
+  await pyodide.runPythonAsync(`
 import bsky_saves.auth as _bsky_auth
 import bsky_saves.fetch as _bsky_fetch
 import json as _json
@@ -337,14 +336,29 @@ _bsky_auth.create_session = _patched_create_session
 _bsky_fetch.create_session = _patched_create_session
 print('reusing pre-authenticated session from main thread')
 `);
-  }
+}
 
+async function setupEnv(handle: string, appPassword: string, pds: string): Promise<void> {
+  if (!pyodide) throw new Error('Worker not initialised');
   await pyodide.runPythonAsync(`
 import os
-os.environ['BSKY_HANDLE'] = ${JSON.stringify(input.handle)}
-os.environ['BSKY_APP_PASSWORD'] = ${JSON.stringify(input.appPassword)}
-os.environ['BSKY_PDS'] = ${JSON.stringify(input.pds)}
+os.environ['BSKY_HANDLE'] = ${JSON.stringify(handle)}
+os.environ['BSKY_APP_PASSWORD'] = ${JSON.stringify(appPassword)}
+os.environ['BSKY_PDS'] = ${JSON.stringify(pds)}
 `);
+}
+
+function readInventoryFromDisk(): unknown {
+  if (!pyodide) throw new Error('Worker not initialised');
+  const raw = pyodide.FS.readFile(INVENTORY_PATH, { encoding: 'utf8' });
+  return JSON.parse(raw);
+}
+
+async function runFetchOnly(input: FetchOnlyInput): Promise<unknown> {
+  if (!pyodide) throw new Error('Worker not initialised');
+
+  await applyPreauthSessionPatch(input.preauthSession);
+  await setupEnv(input.handle, input.appPassword, input.pds);
 
   log('Fetching saves…');
   await pyodide.runPythonAsync(`
@@ -360,9 +374,9 @@ _bsky_fetch.fetch_to_inventory(
 `);
 
   log('Reading inventory…');
-  const raw = pyodide.FS.readFile(INVENTORY_PATH, { encoding: 'utf8' });
+  const result = readInventoryFromDisk();
   log('Done.');
-  return JSON.parse(raw);
+  return result;
 }
 
 async function runEnrichOnly(input: EnrichOnlyInput): Promise<unknown> {
@@ -382,35 +396,16 @@ _bsky_enrich.enrich_inventory(Path('${INVENTORY_PATH}'))
 `);
 
   log('Reading inventory…');
-  const raw = pyodide.FS.readFile(INVENTORY_PATH, { encoding: 'utf8' });
+  const result = readInventoryFromDisk();
   log('Done.');
-  return JSON.parse(raw);
+  return result;
 }
 
 async function runThreadsOnly(input: ThreadsOnlyInput): Promise<unknown> {
   if (!pyodide) throw new Error('Worker not initialised');
 
-  if (input.preauthSession) {
-    const sessionJson = JSON.stringify(input.preauthSession);
-    await pyodide.runPythonAsync(`
-import bsky_saves.auth as _bsky_auth
-import bsky_saves.fetch as _bsky_fetch
-import json as _json
-_preauth = _json.loads(${JSON.stringify(sessionJson)})
-def _patched_create_session(pds_base, handle, app_password):
-    return _preauth
-_bsky_auth.create_session = _patched_create_session
-_bsky_fetch.create_session = _patched_create_session
-print('reusing pre-authenticated session from main thread')
-`);
-  }
-
-  await pyodide.runPythonAsync(`
-import os
-os.environ['BSKY_HANDLE'] = ${JSON.stringify(input.handle)}
-os.environ['BSKY_APP_PASSWORD'] = ${JSON.stringify(input.appPassword)}
-os.environ['BSKY_PDS'] = ${JSON.stringify(input.pds)}
-`);
+  await applyPreauthSessionPatch(input.preauthSession);
+  await setupEnv(input.handle, input.appPassword, input.pds);
 
   const invJson = JSON.stringify(input.inventory);
   await pyodide.runPythonAsync(`
@@ -427,9 +422,9 @@ print(f'bsky-saves: thread hydration done — {hydrated} hydrated, {skipped} ski
 `);
 
   log('Reading inventory…');
-  const raw = pyodide.FS.readFile(INVENTORY_PATH, { encoding: 'utf8' });
+  const result = readInventoryFromDisk();
   log('Done.');
-  return JSON.parse(raw);
+  return result;
 }
 
 ctx.addEventListener('message', async (event: MessageEvent<Inbound>) => {
