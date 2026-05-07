@@ -240,9 +240,11 @@ See § 5 for the broader auth contract.
 
 ### 4. Capability advertisement
 
-The new endpoints are advertised via the existing **`/ping`** `features` array — gains `"fetch"`, `"enrich"`, and `"hydrate-threads"` entries when the daemon supports them.
+The new endpoints are advertised via the existing **`/ping`** `features` array. v0.4.0 adds `"fetch"`, `"enrich"`, and `"hydrate-threads"`; v0.4.1 additionally adds `"jwt-credentials"` to signal that `/fetch` and `/hydrate-threads` accept the JWT-pair credential shape (see § 1 and § 5).
 
 Older daemons (pre-0.4) won't advertise these; the GUI feature-detects per-endpoint and falls back to Pyodide for any feature missing from the helper. Mixed support is fine — a daemon that advertises `enrich` and `hydrate-threads` but not `fetch` will see those two operations routed through the helper while `fetch` stays on Pyodide.
+
+The GUI's routing decision is **purely feature-flag introspection** — no semver parsing on the routing path. `MIN_HELPER_VERSION` (in `app/src/lib/min-helper-version.ts`) drives the orthogonal "your helper is outdated, please upgrade" UX nag, independent of routing.
 
 ### 5. Authentication handling
 
