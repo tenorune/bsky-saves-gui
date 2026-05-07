@@ -61,6 +61,7 @@ import type { PyodideWorkerDriver } from './pyodide-worker-driver';
 describe('fetchHydrator (pyodide path)', () => {
   it('delegates to driver.runFetchOnly() and returns its inventory', async () => {
     const fakeDriver = {
+      initialise: vi.fn().mockResolvedValue(undefined),
       runFetchOnly: vi.fn().mockResolvedValue({ saves: [{ uri: 'at://x' }] }),
     } as unknown as PyodideWorkerDriver;
 

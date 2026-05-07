@@ -31,7 +31,7 @@ describe('enrichHydrator (pyodide path)', () => {
   beforeEach(() => resetEnrichProgress());
 
   it('delegates to driver.runEnrichOnly()', async () => {
-    const fakeDriver = { runEnrichOnly: vi.fn().mockResolvedValue({ saves: [{ uri: 'at://a', post_created_at: 'X' }] }) };
+    const fakeDriver = { initialise: vi.fn().mockResolvedValue(undefined), runEnrichOnly: vi.fn().mockResolvedValue({ saves: [{ uri: 'at://a', post_created_at: 'X' }] }) };
     const out = await enrichHydrator.start({
       backend: { kind: 'pyodide' },
       origin: '',

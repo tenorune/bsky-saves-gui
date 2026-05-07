@@ -1,6 +1,8 @@
 import { enrichProgress, resetEnrichProgress } from './hydration-state';
 import { enrichUris as defaultEnrichUris, type EnrichResponse } from './helper-client';
+import { getSharedDriver } from './pyodide-worker-driver';
 import type { PyodideWorkerDriver } from './pyodide-worker-driver';
+import { config } from './config';
 
 export type EnrichBackend = { kind: 'helper' } | { kind: 'pyodide' };
 
@@ -32,8 +34,9 @@ export const enrichHydrator = {
         enrichProgress.update((p) => ({ ...p, status: 'done', fetched: res.enriched.length, failed: res.errors.length, failures: res.errors.map((e) => ({ url: e.uri, reason: e.reason })) }));
         return { ...input.inventory, saves: merged };
       }
-      if (!deps.driver) throw new Error('PyodideWorkerDriver not provided');
-      const out = await deps.driver.runEnrichOnly({ inventory: input.inventory });
+      const driver = deps.driver ?? getSharedDriver();
+      await driver.initialise(config.pyodideVersion);
+      const out = await driver.runEnrichOnly({ inventory: input.inventory });
       enrichProgress.update((p) => ({ ...p, status: 'done' }));
       return out;
     } catch (e) {

@@ -6,7 +6,9 @@ import {
   type FetchSavesResponse,
 } from './helper-client';
 import { setLastSession as defaultSetLastSession, lastSession } from './last-session';
+import { getSharedDriver } from './pyodide-worker-driver';
 import type { PyodideWorkerDriver } from './pyodide-worker-driver';
+import { config } from './config';
 
 export type FetchBackend = { kind: 'helper' } | { kind: 'pyodide' };
 
@@ -63,13 +65,14 @@ async function runPyodidePath(
   input: FetchHydratorInput,
   deps: FetchHydratorDeps,
 ): Promise<unknown> {
-  if (!deps.driver) throw new Error('PyodideWorkerDriver not provided');
+  const driver = deps.driver ?? getSharedDriver();
+  await driver.initialise(config.pyodideVersion);
   resetFetchProgress();
   fetchProgress.set({ status: 'running', total: 0, fetched: 0, skipped: 0, failed: 0, failures: [] });
   if (!('appPassword' in input.credentials)) {
     throw new Error('Pyodide path requires app-password credentials');
   }
-  const inv = await deps.driver.runFetchOnly({
+  const inv = await driver.runFetchOnly({
     handle: input.credentials.handle,
     appPassword: input.credentials.appPassword,
     pds: input.credentials.pds,

@@ -23,17 +23,45 @@ export interface ThreadsOnlyInput {
 }
 
 export class PyodideWorkerDriver {
+  private _initPromise: Promise<void> | null = null;
+
   constructor(private worker: WorkerLike) {}
 
-  runFetchOnly(input: FetchOnlyInput): Promise<unknown> {
+  initialise(pyodideVersion: string): Promise<void> {
+    if (!this._initPromise) {
+      this._initPromise = new Promise<void>((resolve, reject) => {
+        const onMessage = (e: MessageEvent | ErrorEvent) => {
+          if ('data' in e && (e as MessageEvent).data?.type === 'init-ready') {
+            this.worker.removeEventListener('message', onMessage);
+            this.worker.removeEventListener('error', onMessage);
+            resolve();
+          } else if ('data' in e && (e as MessageEvent).data?.type === 'error') {
+            this.worker.removeEventListener('message', onMessage);
+            this.worker.removeEventListener('error', onMessage);
+            reject(new Error((e as MessageEvent).data.message ?? 'pyodide worker init error'));
+          } else if (!('data' in e)) {
+            this.worker.removeEventListener('message', onMessage);
+            this.worker.removeEventListener('error', onMessage);
+            reject(new Error('pyodide worker init error'));
+          }
+        };
+        this.worker.addEventListener('message', onMessage);
+        this.worker.addEventListener('error', onMessage);
+        this.worker.postMessage({ type: 'init', pyodideVersion });
+      });
+    }
+    return this._initPromise;
+  }
+
+  async runFetchOnly(input: FetchOnlyInput): Promise<unknown> {
     return this.send({ type: 'fetchOnly', input });
   }
 
-  runEnrichOnly(input: EnrichOnlyInput): Promise<unknown> {
+  async runEnrichOnly(input: EnrichOnlyInput): Promise<unknown> {
     return this.send({ type: 'enrichOnly', input });
   }
 
-  runThreadsOnly(input: ThreadsOnlyInput): Promise<unknown> {
+  async runThreadsOnly(input: ThreadsOnlyInput): Promise<unknown> {
     return this.send({ type: 'threadsOnly', input });
   }
 
@@ -63,4 +91,22 @@ export class PyodideWorkerDriver {
   terminate(): void {
     this.worker.terminate();
   }
+}
+
+let _shared: PyodideWorkerDriver | null = null;
+
+export function getSharedDriver(): PyodideWorkerDriver {
+  if (!_shared) {
+    const worker = new Worker(
+      new URL('../worker/pyodide-worker.ts', import.meta.url),
+      { type: 'module' },
+    );
+    _shared = new PyodideWorkerDriver(worker);
+  }
+  return _shared;
+}
+
+/** For tests only — resets the shared driver. */
+export function _resetSharedDriverForTests(): void {
+  _shared = null;
 }

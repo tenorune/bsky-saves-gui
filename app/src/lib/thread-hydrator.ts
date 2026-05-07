@@ -1,6 +1,8 @@
 import { threadProgress, resetThreadProgress } from './hydration-state';
 import { hydrateThreads as defaultHydrateThreads, type FetchSavesCredentials, type HydrateThreadsResponse } from './helper-client';
+import { getSharedDriver } from './pyodide-worker-driver';
 import type { PyodideWorkerDriver } from './pyodide-worker-driver';
+import { config } from './config';
 
 export type ThreadBackend = { kind: 'helper' } | { kind: 'pyodide' };
 
@@ -33,9 +35,10 @@ export const threadHydrator = {
         threadProgress.update((p) => ({ ...p, status: 'done', fetched: res.threaded.length, failed: res.errors.length, failures: res.errors.map((e) => ({ url: e.uri, reason: e.reason })) }));
         return { ...input.inventory, saves: merged };
       }
-      if (!deps.driver) throw new Error('PyodideWorkerDriver not provided');
+      const driver = deps.driver ?? getSharedDriver();
+      await driver.initialise(config.pyodideVersion);
       if (!('appPassword' in input.credentials)) throw new Error('Pyodide path requires app-password credentials');
-      const out = await deps.driver.runThreadsOnly({
+      const out = await driver.runThreadsOnly({
         inventory: input.inventory,
         handle: input.credentials.handle,
         appPassword: input.credentials.appPassword,

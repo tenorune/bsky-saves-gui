@@ -29,7 +29,7 @@ describe('threadHydrator (pyodide path)', () => {
   beforeEach(() => resetThreadProgress());
 
   it('delegates to driver.runThreadsOnly()', async () => {
-    const fakeDriver = { runThreadsOnly: vi.fn().mockResolvedValue({ saves: [] }) };
+    const fakeDriver = { initialise: vi.fn().mockResolvedValue(undefined), runThreadsOnly: vi.fn().mockResolvedValue({ saves: [] }) };
     await threadHydrator.start({
       backend: { kind: 'pyodide' },
       origin: '',
