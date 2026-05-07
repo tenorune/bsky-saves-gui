@@ -20,9 +20,6 @@
   <header class="library-view__filters">
     <SearchBar bind:value={query} />
     <DateRangeFilter bind:from bind:to />
-    <p class="library-view__count" aria-live="polite">
-      Showing {visible.length} of {inventory.saves.length}
-    </p>
   </header>
 
   {#if visible.length === 0}
@@ -49,11 +46,6 @@
     gap: 1rem;
     align-items: end;
     margin-bottom: 1.5rem;
-  }
-  .library-view__count {
-    margin: 0 0 0 auto;
-    font-size: 0.875rem;
-    opacity: 0.8;
   }
   .library-view__feed {
     list-style: none;

@@ -9,6 +9,7 @@
   import { startLibraryRefresh, stopLibraryRefresh, libraryRefreshState } from '$lib/library-refresh';
   import { cancelImageBackup } from '$lib/start-image-backup';
   import { cancelArticleBackup } from '$lib/start-article-backup';
+  import { cancelThreadHydration } from '$lib/thread-hydrator';
   import { assetToggles } from '$lib/asset-toggles';
   import { capabilitySnapshot } from '$lib/capability-snapshot';
   import { computeDominantBackend } from '$lib/dominant-backend';
@@ -94,9 +95,7 @@
     stopLibraryRefresh();
     cancelImageBackup();
     cancelArticleBackup();
-    // Threads hydration doesn't have a cancel API yet; the in-flight call
-    // will complete naturally. The button at least flips back so the user
-    // sees their click was acknowledged.
+    cancelThreadHydration();
   }
 
   $: snap = $capabilitySnapshot;
@@ -192,7 +191,7 @@
     padding: 0.75rem 1rem;
     border-bottom: 1px solid color-mix(in oklab, CanvasText 12%, transparent);
   }
-  .route__title { margin: 0; font-size: 1rem; flex: 1; }
+  .route__title { margin: 0; flex: 1; }
   .route__count { font-weight: 400; opacity: 0.7; }
   .route__backend { font-size: 0.8rem; opacity: 0.7; margin-right: 0.5rem; }
   .route__refresh {

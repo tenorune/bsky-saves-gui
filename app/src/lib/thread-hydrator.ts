@@ -10,7 +10,7 @@ export type ThreadBackend = { kind: 'helper' } | { kind: 'pyodide' };
 export interface ThreadHydratorInput {
   readonly backend: ThreadBackend;
   readonly origin: string;
-  readonly inventory: { readonly saves: readonly { readonly uri: string }[] };
+  readonly inventory: { readonly saves: readonly { readonly uri: string; readonly thread_replies?: unknown }[] };
   readonly credentials: FetchSavesCredentials;
   readonly preauthSession?: PreauthSession;
 }
@@ -20,14 +20,38 @@ export interface ThreadHydratorDeps {
   readonly driver?: PyodideWorkerDriver;
 }
 
+let _cancelled = false;
+
+/**
+ * Cancel an in-flight thread hydration. The helper path checks this flag
+ * between chunk fetches; the Pyodide path can't interrupt the worker mid-run
+ * but discards the result on completion. Either way, the threadProgress
+ * store transitions to 'cancelled' so the UI flips back.
+ */
+export function cancelThreadHydration(): void {
+  _cancelled = true;
+  threadProgress.update((p) => ({ ...p, status: 'cancelled' }));
+}
+
 export const threadHydrator = {
   async start(input: ThreadHydratorInput, deps: ThreadHydratorDeps = {}): Promise<unknown> {
+    _cancelled = false;
     resetThreadProgress();
-    threadProgress.set({ status: 'running', total: input.inventory.saves.length, fetched: 0, skipped: 0, failed: 0, failures: [] });
     try {
       if (input.backend.kind === 'helper') {
         const ht = deps.hydrateThreads ?? defaultHydrateThreads;
-        const uris = input.inventory.saves.map((s) => s.uri);
+        // Skip saves that already have thread_replies populated (matches
+        // bsky-saves CLI's hydrate-threads behavior). Failed and new saves
+        // are retried on each Refresh.
+        const needsHydration = input.inventory.saves.filter((s) => s.thread_replies === undefined);
+        const uris = needsHydration.map((s) => s.uri);
+        threadProgress.set({ status: 'running', total: uris.length, fetched: 0, skipped: 0, failed: 0, failures: [] });
+
+        if (uris.length === 0) {
+          threadProgress.update((p) => ({ ...p, status: 'done' }));
+          return input.inventory;
+        }
+
         // Prefer JWT-pair credentials when available so the helper skips
         // its createSession validation step. See fetch-hydrator for the
         // full rationale (eurosky.social etc. rate-limit createSession).
@@ -54,6 +78,11 @@ export const threadHydrator = {
         const allThreaded: HydrateThreadsResponse['threaded'][number][] = [];
         const allErrors: HydrateThreadsResponse['errors'][number][] = [];
         for (let i = 0; i < uris.length; i += CHUNK_SIZE) {
+          if (_cancelled) {
+            // Bail out cleanly: status was already set to 'cancelled' by
+            // cancelThreadHydration; just return what we've merged so far.
+            return mergeThreaded(input.inventory, allThreaded);
+          }
           const chunk = uris.slice(i, i + CHUNK_SIZE);
           const res = await ht(input.origin, { uris: chunk, credentials });
           allThreaded.push(...res.threaded);
@@ -65,11 +94,7 @@ export const threadHydrator = {
             failures: allErrors.map((e) => ({ url: e.uri, reason: e.reason })),
           }));
         }
-        const byUri = new Map(allThreaded.map((e) => [e.uri, e]));
-        const merged = input.inventory.saves.map((s) => {
-          const t = byUri.get(s.uri);
-          return t ? { ...s, thread_replies: t.thread_replies, thread_schema_version: t.thread_schema_version, thread_fetched_at: t.thread_fetched_at } : s;
-        });
+        const merged = mergeThreaded(input.inventory, allThreaded);
         threadProgress.update((p) => ({
           ...p,
           status: 'done',
@@ -77,8 +102,9 @@ export const threadHydrator = {
           failed: allErrors.length,
           failures: allErrors.map((e) => ({ url: e.uri, reason: e.reason })),
         }));
-        return { ...input.inventory, saves: merged };
+        return merged;
       }
+      threadProgress.set({ status: 'running', total: input.inventory.saves.length, fetched: 0, skipped: 0, failed: 0, failures: [] });
       const driver = deps.driver ?? getSharedDriver();
       await driver.initialise(config.pyodideVersion);
       if (!('appPassword' in input.credentials)) throw new Error('Pyodide path requires app-password credentials');
@@ -104,11 +130,31 @@ export const threadHydrator = {
           }
         },
       });
+      if (_cancelled) {
+        // Pyodide can't stop mid-run; the worker finished, but discard the
+        // result so we don't overwrite the existing inventory with a stale run.
+        return input.inventory;
+      }
       threadProgress.update((p) => ({ ...p, status: 'done', fetched: p.total }));
       return out;
     } catch (e) {
+      if (_cancelled) return input.inventory;
       threadProgress.update((p) => ({ ...p, status: 'cancelled' }));
       throw e;
     }
   },
 };
+
+function mergeThreaded(
+  inv: ThreadHydratorInput['inventory'],
+  threaded: HydrateThreadsResponse['threaded'][number][],
+): { saves: typeof inv.saves } {
+  const byUri = new Map(threaded.map((e) => [e.uri, e]));
+  const merged = inv.saves.map((s) => {
+    const t = byUri.get(s.uri);
+    return t
+      ? { ...s, thread_replies: t.thread_replies, thread_schema_version: t.thread_schema_version, thread_fetched_at: t.thread_fetched_at }
+      : s;
+  });
+  return { ...inv, saves: merged };
+}
