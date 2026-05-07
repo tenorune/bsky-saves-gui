@@ -43,14 +43,36 @@
     const session = get(lastSession);
     const toggles = get(assetToggles);
 
+    // When a session is in-memory (set by SignIn's main-thread createSession,
+    // updated by /fetch's rotated_credentials handling), thread it through as
+    // preauthSession so:
+    //  - helper path: hydrators switch to JWT-pair credentials → helper skips
+    //    createSession per request, avoiding 429 from PDSes that rate-limit.
+    //  - pyodide path: worker's create_session monkey-patch returns the
+    //    pre-baked session, no PDS createSession from the worker either.
+    const preauthSession = session
+      ? {
+          accessJwt: session.accessJwt,
+          refreshJwt: session.refreshJwt,
+          did: session.did,
+          handle: session.handle,
+        }
+      : undefined;
+
     if (draft && draft.appPassword) {
-      // Password mode (fresh sign-in)
+      // Fresh sign-in path: keep app-password credentials so the Pyodide
+      // path has a usable handle/appPassword/pds (Pyodide doesn't accept
+      // JWT-pair). Helper path is unaffected; preauthSession steers it to
+      // JWT-pair regardless.
       startLibraryRefresh({
         credentials: { handle: draft.handle, appPassword: draft.appPassword, pds: draft.pds },
         includeThreads: toggles.threads,
+        preauthSession,
       });
     } else if (session) {
-      // Session mode (JWT-pair restore)
+      // Session restore (no draft): JWT-pair credentials are the only thing
+      // we have. Pyodide path won't work in this case — fetchHydrator
+      // throws and the auth-error banner will prompt for a fresh sign-in.
       startLibraryRefresh({
         credentials: {
           accessJwt: session.accessJwt,
@@ -59,6 +81,7 @@
           pds: session.pds,
         },
         includeThreads: toggles.threads,
+        preauthSession,
       });
     } else {
       navigate('/');
