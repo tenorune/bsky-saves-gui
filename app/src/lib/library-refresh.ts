@@ -61,10 +61,16 @@ export async function startLibraryRefresh(
         await loadFromDb();
       },
     });
-    if (_cancelled) return;
+    // Persist the orchestrator's result *even when cancelled* so partial
+    // progress isn't lost — e.g. if the user stops mid-thread-hydration,
+    // the saves whose threads finished still have thread_replies merged in,
+    // and we want that on disk so the next reload restores the count.
     await saveInventory(inv);
-    // Refresh the in-memory inventory store so Library re-renders with the new saves.
     await loadFromDb();
+    if (_cancelled) {
+      // User asked to stop. Don't kick off image/article hydration after.
+      return;
+    }
     store.set({ status: 'idle' });
     // Fire-and-forget: kick off image/article hydration in the background if their
     // toggles are on. Hydrators skip already-hydrated entries internally.

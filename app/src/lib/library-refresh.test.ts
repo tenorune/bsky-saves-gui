@@ -76,19 +76,33 @@ describe('startLibraryRefresh', () => {
 describe('stopLibraryRefresh', () => {
   beforeEach(() => _resetLibraryRefreshForTests());
 
-  it('returns state to idle and discards pending result', async () => {
+  it('returns state to idle and persists partial result', async () => {
     let resolveOrchestrate: (v: unknown) => void;
+    const partial = { saves: [{ uri: 'at://x', thread_replies: [] }] };
     const orchestrate = vi.fn().mockImplementation(() => new Promise((r) => { resolveOrchestrate = r; }));
-    const saveInventory = vi.fn();
+    const saveInventory = vi.fn().mockResolvedValue(undefined);
+    const startImageBackup = vi.fn();
+    const startArticleBackup = vi.fn();
     const promise = startLibraryRefresh(
       { credentials: { handle: 'a', appPassword: 'b', pds: 'c' }, includeThreads: false },
-      { orchestrate, saveInventory, loadFromDb: vi.fn().mockResolvedValue(undefined) },
+      {
+        orchestrate,
+        saveInventory,
+        loadFromDb: vi.fn().mockResolvedValue(undefined),
+        loadInventory: vi.fn().mockResolvedValue(partial),
+        startImageBackup,
+        startArticleBackup,
+      },
     );
     expect(get(libraryRefreshState).status).toBe('running');
     stopLibraryRefresh();
     expect(get(libraryRefreshState).status).toBe('idle');
-    resolveOrchestrate!({ saves: [] });
+    resolveOrchestrate!(partial);
     await promise;
-    expect(saveInventory).not.toHaveBeenCalled();
+    // Partial progress should be persisted (so a reload can restore the count).
+    expect(saveInventory).toHaveBeenCalledWith(partial);
+    // But image/article hydration should NOT proceed after a Stop.
+    expect(startImageBackup).not.toHaveBeenCalled();
+    expect(startArticleBackup).not.toHaveBeenCalled();
   });
 });
