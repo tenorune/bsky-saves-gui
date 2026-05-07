@@ -54,27 +54,32 @@
       ? 'indeterminate' as const
       : null;
 
-  // Images
+  // Images. Display fetched+skipped as cumulative coverage so the count
+  // doesn't reset to zero each refresh — skipped reflects images already
+  // present in IDB from prior runs; fetched is this-run's newly-fetched.
+  // Together they're the total hydrated.
   $: imagesTotal = $imageHydration.total || null;
-  $: imagesFetched = $imageHydration.fetched || null;
+  $: imagesHydrated = $imageHydration.fetched + $imageHydration.skipped;
+  $: imagesFetched = imagesHydrated > 0 ? imagesHydrated : null;
   $: imagesFailed = $imageHydration.failed;
   $: imagesRunning = $imageHydration.status === 'running';
   $: imagesProgressFrac =
-    imagesRunning && imagesTotal && (imagesFetched ?? 0) > 0
-      ? Math.min(1, ($imageHydration.fetched ?? 0) / imagesTotal)
+    imagesRunning && imagesTotal && imagesHydrated > 0
+      ? Math.min(1, imagesHydrated / imagesTotal)
       : imagesRunning
       ? 'indeterminate' as const
       : null;
 
-  // Articles
+  // Articles — same treatment as images.
   $: articlesBackendAvailable = snap.articles.kind !== 'none';
   $: articlesTotal = $articleHydration.total || null;
-  $: articlesFetched = $articleHydration.fetched || null;
+  $: articlesHydrated = $articleHydration.fetched + $articleHydration.skipped;
+  $: articlesFetched = articlesHydrated > 0 ? articlesHydrated : null;
   $: articlesFailed = $articleHydration.failed;
   $: articlesRunning = $articleHydration.status === 'running';
   $: articlesProgressFrac =
-    articlesRunning && articlesTotal && (articlesFetched ?? 0) > 0
-      ? Math.min(1, ($articleHydration.fetched ?? 0) / articlesTotal)
+    articlesRunning && articlesTotal && articlesHydrated > 0
+      ? Math.min(1, articlesHydrated / articlesTotal)
       : articlesRunning
       ? 'indeterminate' as const
       : null;
