@@ -1,5 +1,8 @@
 <script lang="ts">
   import { dismissInstallHint } from '$lib/install-hint-pref';
+
+  /** When false, render only the tip text + "How to install" link (no dismiss). */
+  export let showDismiss: boolean = true;
 </script>
 
 <div class="install-hint">
@@ -7,7 +10,9 @@
     Tip: install <code>bsky-saves</code> locally for faster fetch and built-in image &amp; article backup.
   </span>
   <a class="install-hint__link" href="https://github.com/tenorune/bsky-saves#install" target="_blank" rel="noopener noreferrer">How to install</a>
-  <button type="button" class="install-hint__dismiss" on:click={dismissInstallHint}>Dismiss</button>
+  {#if showDismiss}
+    <button type="button" class="install-hint__dismiss" on:click={dismissInstallHint}>Dismiss</button>
+  {/if}
 </div>
 
 <style>
