@@ -1,4 +1,4 @@
-import { writable, type Readable } from 'svelte/store';
+import { writable, type Readable, get } from 'svelte/store';
 import { loadInventory } from './inventory-store';
 import { parseInventory, type Inventory } from '../reader/inventory-shape';
 
@@ -12,7 +12,14 @@ const store = writable<InventoryState>({ status: 'loading' });
 export const inventoryState: Readable<InventoryState> = { subscribe: store.subscribe };
 
 export async function loadFromDb(): Promise<void> {
-  store.set({ status: 'loading' });
+  // Only show the 'loading' placeholder when we have nothing usable to display.
+  // When the store is already 'ready' (e.g., a mid-refresh save+reload cycle),
+  // keep the existing saves visible until the new ones are parsed — otherwise
+  // Library would unmount/remount LibraryView and flash mid-refresh.
+  const cur = get(store);
+  if (cur.status !== 'ready') {
+    store.set({ status: 'loading' });
+  }
   const raw = await loadInventory();
   if (raw === null) {
     store.set({ status: 'empty' });
