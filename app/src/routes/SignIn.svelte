@@ -1,10 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { get } from 'svelte/store';
   import { config } from '$lib/config';
   import { navigate } from '$lib/router';
   import { signInDraft } from '$lib/sign-in-draft';
   import { hasCredentials, loadCredentials } from '$lib/credentials-store';
   import { DecryptError } from '$lib/crypto';
+  import { startLibraryRefresh } from '$lib/library-refresh';
+  import { assetToggles, loadAssetToggles } from '$lib/asset-toggles';
 
   let savedPresent = false;
   let useDifferentAccount = false;
@@ -15,6 +18,7 @@
 
   onMount(async () => {
     savedPresent = await hasCredentials();
+    await loadAssetToggles();
   });
 
   async function unlockSaved() {
@@ -72,7 +76,13 @@
       saveCredentials,
       passphrase,
     });
-    navigate('/run');
+
+    startLibraryRefresh({
+      credentials: { handle, appPassword, pds },
+      includeThreads: get(assetToggles).threads,
+    });
+
+    navigate('/library');
   }
 </script>
 
