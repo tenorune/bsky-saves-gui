@@ -1,6 +1,7 @@
 import { get, writable, type Readable } from 'svelte/store';
 import { orchestrateRefresh as defaultOrchestrate } from './orchestrate-refresh';
 import { saveInventory as defaultSaveInventory } from './inventory-store';
+import { loadFromDb as defaultLoadFromDb } from './inventory-loader';
 import { capabilitySnapshot } from './capability-snapshot';
 import { config } from './config';
 import type { FetchSavesCredentials } from './helper-client';
@@ -23,6 +24,7 @@ export interface StartLibraryRefreshInput {
 export interface StartLibraryRefreshDeps {
   readonly orchestrate?: typeof defaultOrchestrate;
   readonly saveInventory?: typeof defaultSaveInventory;
+  readonly loadFromDb?: typeof defaultLoadFromDb;
 }
 
 export async function startLibraryRefresh(
@@ -31,6 +33,7 @@ export async function startLibraryRefresh(
 ): Promise<void> {
   const orchestrate = deps.orchestrate ?? defaultOrchestrate;
   const saveInventory = deps.saveInventory ?? defaultSaveInventory;
+  const loadFromDb = deps.loadFromDb ?? defaultLoadFromDb;
   _cancelled = false;
   store.set({ status: 'running' });
   try {
@@ -42,10 +45,15 @@ export async function startLibraryRefresh(
     });
     if (_cancelled) return;
     await saveInventory(inv);
+    // Refresh the in-memory inventory store so Library re-renders with the new saves.
+    await loadFromDb();
     store.set({ status: 'idle' });
   } catch (e) {
     if (_cancelled) return;
     const msg = e instanceof Error ? e.message : String(e);
+    // Log so the browser console shows the actual error when the auth-error banner renders.
+    // eslint-disable-next-line no-console
+    console.error('[library-refresh] orchestrate failed:', e);
     store.set({ status: 'error', error: msg });
   }
 }

@@ -10,7 +10,7 @@ describe('startLibraryRefresh', () => {
     const saveInventory = vi.fn().mockResolvedValue(undefined);
     const promise = startLibraryRefresh(
       { credentials: { handle: 'a', appPassword: 'b', pds: 'c' }, includeThreads: true },
-      { orchestrate, saveInventory },
+      { orchestrate, saveInventory, loadFromDb: vi.fn().mockResolvedValue(undefined) },
     );
     expect(get(libraryRefreshState).status).toBe('running');
     await promise;
@@ -21,7 +21,7 @@ describe('startLibraryRefresh', () => {
     const orchestrate = vi.fn().mockRejectedValue(new Error('auth refresh failed'));
     await startLibraryRefresh(
       { credentials: { handle: 'a', appPassword: 'b', pds: 'c' }, includeThreads: true },
-      { orchestrate, saveInventory: vi.fn() },
+      { orchestrate, saveInventory: vi.fn(), loadFromDb: vi.fn() },
     );
     const s = get(libraryRefreshState);
     expect(s.status).toBe('error');
@@ -34,9 +34,20 @@ describe('startLibraryRefresh', () => {
     const saveInventory = vi.fn().mockResolvedValue(undefined);
     await startLibraryRefresh(
       { credentials: { handle: 'a', appPassword: 'b', pds: 'c' }, includeThreads: false },
-      { orchestrate, saveInventory },
+      { orchestrate, saveInventory, loadFromDb: vi.fn().mockResolvedValue(undefined) },
     );
     expect(saveInventory).toHaveBeenCalledWith(inv);
+  });
+
+  it('reloads inventoryState via loadFromDb after a successful save', async () => {
+    const orchestrate = vi.fn().mockResolvedValue({ saves: [{ uri: 'at://x' }] });
+    const saveInventory = vi.fn().mockResolvedValue(undefined);
+    const loadFromDb = vi.fn().mockResolvedValue(undefined);
+    await startLibraryRefresh(
+      { credentials: { handle: 'a', appPassword: 'b', pds: 'c' }, includeThreads: false },
+      { orchestrate, saveInventory, loadFromDb },
+    );
+    expect(loadFromDb).toHaveBeenCalled();
   });
 });
 
@@ -49,7 +60,7 @@ describe('stopLibraryRefresh', () => {
     const saveInventory = vi.fn();
     const promise = startLibraryRefresh(
       { credentials: { handle: 'a', appPassword: 'b', pds: 'c' }, includeThreads: false },
-      { orchestrate, saveInventory },
+      { orchestrate, saveInventory, loadFromDb: vi.fn().mockResolvedValue(undefined) },
     );
     expect(get(libraryRefreshState).status).toBe('running');
     stopLibraryRefresh();
