@@ -91,4 +91,13 @@ describe('computeCapabilitySnapshot', () => {
     expect(snap.helper.detected).toBe(false);
     expect(snap.fetch.kind).toBe('pyodide');
   });
+
+  it('respects user-worker when helper unavailable', () => {
+    const snap = computeCapabilitySnapshot({
+      helper: { status: 'unavailable' },
+      userWorker: { url: 'https://my.worker.dev' },
+    });
+    expect(snap.images).toEqual({ kind: 'user-worker', url: 'https://my.worker.dev' });
+    expect(snap.articles).toEqual({ kind: 'user-worker', url: 'https://my.worker.dev' });
+  });
 });
