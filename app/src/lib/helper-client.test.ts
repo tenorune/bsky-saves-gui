@@ -270,3 +270,72 @@ describe('fetchSaves (app-password)', () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe('fetchSaves (jwt-pair)', () => {
+  it('POSTs the JWT-pair credential shape (snake_case keys)', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ saves: [], cursor: null }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { fetchSaves } = await import('./helper-client');
+    await fetchSaves('http://x', {
+      credentials: { accessJwt: 'A', refreshJwt: 'R', did: 'did:plc:1', pds: 'https://bsky.social' },
+      cursor: null,
+      limit: 100,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('http://x/fetch', expect.objectContaining({
+      body: JSON.stringify({
+        credentials: { access_jwt: 'A', refresh_jwt: 'R', did: 'did:plc:1', pds: 'https://bsky.social' },
+        cursor: null,
+        limit: 100,
+      }),
+    }));
+    vi.unstubAllGlobals();
+  });
+
+  it('returns rotated_credentials when present', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({
+        saves: [],
+        cursor: 'c1',
+        rotated_credentials: { access_jwt: 'A2', refresh_jwt: 'R2', did: 'did:plc:1' },
+      }), { status: 200 }),
+    ));
+
+    const { fetchSaves } = await import('./helper-client');
+    const out = await fetchSaves('http://x', {
+      credentials: { accessJwt: 'A', refreshJwt: 'R', did: 'did:plc:1' },
+      cursor: null, limit: 100,
+    });
+
+    expect(out.rotated_credentials).toEqual({ access_jwt: 'A2', refresh_jwt: 'R2', did: 'did:plc:1' });
+    vi.unstubAllGlobals();
+  });
+
+  it('rotated_credentials absent when refresh did not happen', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ saves: [], cursor: null }), { status: 200 }),
+    ));
+    const { fetchSaves } = await import('./helper-client');
+    const out = await fetchSaves('http://x', {
+      credentials: { accessJwt: 'A', refreshJwt: 'R', did: 'did:plc:1' },
+      cursor: null, limit: 100,
+    });
+    expect(out.rotated_credentials).toBeUndefined();
+    vi.unstubAllGlobals();
+  });
+
+  it('throws on 401 auth refresh failed', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: 'auth refresh failed', code: 'refresh_failed' }), { status: 401 }),
+    ));
+    const { fetchSaves } = await import('./helper-client');
+    await expect(fetchSaves('http://x', {
+      credentials: { accessJwt: 'A', refreshJwt: 'R', did: 'did:plc:1' },
+      cursor: null, limit: 100,
+    })).rejects.toThrow(/auth refresh failed/);
+    vi.unstubAllGlobals();
+  });
+});
