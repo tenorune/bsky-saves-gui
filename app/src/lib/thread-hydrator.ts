@@ -110,12 +110,23 @@ export const threadHydrator = {
       threadProgress.set({ status: 'running', total: input.inventory.saves.length, fetched: 0, skipped: 0, failed: 0, failures: [] });
       const driver = deps.driver ?? getSharedDriver();
       await driver.initialise(config.pyodideVersion);
-      if (!('appPassword' in input.credentials)) throw new Error('Pyodide path requires app-password credentials');
+      // With preauthSession in hand the worker's monkey-patch bypasses
+      // createSession; appPassword is then unused, so JWT-pair credentials
+      // are accepted (handle comes from preauthSession).
+      const isAppPw = 'appPassword' in input.credentials;
+      if (!isAppPw && !input.preauthSession) {
+        throw new Error('Pyodide path requires app-password credentials');
+      }
+      const pyHandle = isAppPw
+        ? input.credentials.handle
+        : (input.preauthSession?.handle ?? '');
+      const pyAppPassword = isAppPw ? input.credentials.appPassword : '';
+      const pyPds = ('pds' in input.credentials && input.credentials.pds) || 'https://bsky.social';
       const out = await driver.runThreadsOnly({
         inventory: input.inventory,
-        handle: input.credentials.handle,
-        appPassword: input.credentials.appPassword,
-        pds: input.credentials.pds,
+        handle: pyHandle,
+        appPassword: pyAppPassword,
+        pds: pyPds,
         preauthSession: input.preauthSession,
       }, {
         // bsky-saves' hydrate_threads CLI loop prints `[N/M] at://...` per

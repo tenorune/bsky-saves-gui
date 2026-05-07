@@ -11,7 +11,7 @@
   import { cancelArticleBackup } from '$lib/start-article-backup';
   import { cancelThreadHydration } from '$lib/thread-hydrator';
   import { assetToggles } from '$lib/asset-toggles';
-  import { capabilitySnapshot } from '$lib/capability-snapshot';
+  import { capabilitySnapshot, initCapabilitySnapshot } from '$lib/capability-snapshot';
   import { computeDominantBackend } from '$lib/dominant-backend';
   import { imageHydration, articleHydration, threadProgress, fetchProgress } from '$lib/hydration-state';
   import LibraryView from '../reader/LibraryView.svelte';
@@ -181,7 +181,11 @@
   {/if}
 </section>
 
-<CustomProxySetupModal open={setupOpen} on:close={() => (setupOpen = false)} />
+<CustomProxySetupModal
+  open={setupOpen}
+  on:close={() => (setupOpen = false)}
+  on:change={() => initCapabilitySnapshot()}
+/>
 
 <BackupFailuresModal
   open={failuresOpen !== null}

@@ -90,13 +90,26 @@ async function runPyodidePath(
   await driver.initialise(config.pyodideVersion);
   resetFetchProgress();
   fetchProgress.set({ status: 'running', total: 0, fetched: 0, skipped: 0, failed: 0, failures: [] });
-  if (!('appPassword' in input.credentials)) {
+
+  // Pyodide path needs handle + pds + appPassword for env vars, but the
+  // worker's create_session monkey-patch (applyPreauthSessionPatch) bypasses
+  // the actual createSession call when preauthSession is provided. So with
+  // a preauthSession in hand, JWT-pair credentials work — appPassword can be
+  // empty since it's never read.
+  const isAppPw = 'appPassword' in input.credentials;
+  if (!isAppPw && !input.preauthSession) {
     throw new Error('Pyodide path requires app-password credentials');
   }
+  const handle = isAppPw
+    ? input.credentials.handle
+    : (input.preauthSession?.handle ?? '');
+  const appPassword = isAppPw ? input.credentials.appPassword : '';
+  const pds = ('pds' in input.credentials && input.credentials.pds) || 'https://bsky.social';
+
   const inv = await driver.runFetchOnly({
-    handle: input.credentials.handle,
-    appPassword: input.credentials.appPassword,
-    pds: input.credentials.pds,
+    handle,
+    appPassword,
+    pds,
     preauthSession: input.preauthSession,
   });
   fetchProgress.update((p) => ({ ...p, status: 'done' }));

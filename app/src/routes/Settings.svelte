@@ -29,7 +29,7 @@
   import { installHintDismissed, loadInstallHintPref } from '$lib/install-hint-pref';
   import InstallHelperHint from '../components/library-status/InstallHelperHint.svelte';
   import { threadHydrator } from '$lib/thread-hydrator';
-  import { capabilitySnapshot } from '$lib/capability-snapshot';
+  import { capabilitySnapshot, initCapabilitySnapshot } from '$lib/capability-snapshot';
   import { signInDraft } from '$lib/sign-in-draft';
   import { loadInventory } from '$lib/inventory-store';
 
@@ -49,6 +49,9 @@
 
   async function handleSetupModalChange(): Promise<void> {
     await refreshCustomProxyStatus();
+    // Recompute the capability snapshot so Library / status panel
+    // pick up the new user-worker config without a page reload.
+    await initCapabilitySnapshot();
   }
 
   onMount(async () => {
