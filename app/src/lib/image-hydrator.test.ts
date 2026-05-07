@@ -1,6 +1,17 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import 'fake-indexeddb/auto';
 import { get } from 'svelte/store';
+import type { CapabilitySnapshot } from './capability-snapshot';
+
+vi.mock('./helper-client', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('./helper-client')>();
+  return { ...mod, fetchImageViaHelper: vi.fn() };
+});
+
+vi.mock('./user-worker-client', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('./user-worker-client')>();
+  return { ...mod, fetchImageViaUserWorker: vi.fn() };
+});
 
 beforeEach(async () => {
   const { clearImageBlobs } = await import('./image-store');
@@ -106,5 +117,72 @@ describe('hydrateImages respects AbortSignal cancellation', () => {
     expect(result.cancelled).toBe(true);
     expect(result.fetched).toBeLessThan(3);
     expect(get(imageHydration).status).toBe('cancelled');
+  });
+});
+
+const singleImageInv = { saves: [{ uri: 'a', images: [{ url: 'https://x/1.jpg' }] }] };
+
+function fakeSnapshot(images: CapabilitySnapshot['images']): CapabilitySnapshot {
+  return {
+    helper: { detected: false },
+    fetch: { kind: 'pyodide' },
+    enrich: { kind: 'pyodide' },
+    threads: { kind: 'pyodide' },
+    images,
+    articles: { kind: 'none' },
+  };
+}
+
+describe('hydrateImages snapshot routing: helper', () => {
+  it('calls fetchImageViaHelper when snapshot.images.kind is helper', async () => {
+    const { fetchImageViaHelper } = await import('./helper-client');
+    vi.mocked(fetchImageViaHelper).mockResolvedValue(okBlob(1));
+
+    const { hydrateImages } = await import('./image-hydrator');
+    const result = await hydrateImages(singleImageInv, {
+      getSnapshot: () => fakeSnapshot({ kind: 'helper' }),
+    });
+
+    expect(result.fetched).toBe(1);
+    expect(vi.mocked(fetchImageViaHelper)).toHaveBeenCalledWith(
+      expect.any(String),
+      'https://x/1.jpg',
+    );
+  });
+});
+
+describe('hydrateImages snapshot routing: user-worker', () => {
+  it('calls fetchImageViaUserWorker with the snapshot URL when kind is user-worker', async () => {
+    const { fetchImageViaUserWorker } = await import('./user-worker-client');
+    vi.mocked(fetchImageViaUserWorker).mockResolvedValue(okBlob(2));
+
+    const { hydrateImages } = await import('./image-hydrator');
+    const result = await hydrateImages(singleImageInv, {
+      getSnapshot: () => fakeSnapshot({ kind: 'user-worker', url: 'https://worker.example.com' }),
+    });
+
+    expect(result.fetched).toBe(1);
+    expect(vi.mocked(fetchImageViaUserWorker)).toHaveBeenCalledWith(
+      expect.objectContaining({ url: 'https://worker.example.com' }),
+      'https://x/1.jpg',
+    );
+  });
+});
+
+describe('hydrateImages snapshot routing: operator-worker', () => {
+  it('calls fetchImageViaUserWorker with operator config when kind is operator-worker', async () => {
+    const { fetchImageViaUserWorker } = await import('./user-worker-client');
+    vi.mocked(fetchImageViaUserWorker).mockResolvedValue(okBlob(3));
+
+    const { hydrateImages } = await import('./image-hydrator');
+    const result = await hydrateImages(singleImageInv, {
+      getSnapshot: () => fakeSnapshot({ kind: 'operator-worker' }),
+    });
+
+    expect(result.fetched).toBe(1);
+    expect(vi.mocked(fetchImageViaUserWorker)).toHaveBeenCalledWith(
+      expect.objectContaining({ supportsArticles: false }),
+      'https://x/1.jpg',
+    );
   });
 });
