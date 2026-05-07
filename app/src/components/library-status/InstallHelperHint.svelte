@@ -18,6 +18,7 @@
 <style>
   .install-hint {
     margin-top: 0.6rem;
+    margin-bottom: 0.6rem;
     padding-top: 0.5rem;
     border-top: 1px solid color-mix(in oklab, CanvasText 10%, transparent);
     font-size: 0.85rem;

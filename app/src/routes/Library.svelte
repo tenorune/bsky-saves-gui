@@ -140,9 +140,16 @@
             <span class="route__count">— {postCount} posts</span>
           {/if}
         </h2>
-        {#if fetchRunning}
-          <div class="progress-bar progress-bar--indeterminate" aria-label="Fetching posts" role="progressbar"><span></span></div>
-        {/if}
+        <!-- Always-rendered slot so the bar's appearance doesn't shift the
+             header layout. Inner span is empty (hence invisible) when idle;
+             when fetching, gets the indeterminate animation. -->
+        <div
+          class="progress-bar progress-bar--header"
+          class:progress-bar--indeterminate={fetchRunning}
+          aria-hidden={!fetchRunning}
+          aria-label={fetchRunning ? 'Fetching posts' : ''}
+          role={fetchRunning ? 'progressbar' : undefined}
+        ><span></span></div>
       </div>
       {#if dominantBackend}
         <span class="route__backend">via {dominantBackend}</span>
@@ -204,7 +211,9 @@
   .route__title-block { flex: 1; display: flex; flex-direction: column; gap: 0.4rem; }
   .route__title { margin: 0; }
   .route__count { font-weight: 400; opacity: 0.7; }
-  /* Indeterminate progress bar for posts fetch — same shape as AssetRow's. */
+  /* Indeterminate progress bar for posts fetch — same shape as AssetRow's.
+     Always-rendered so its appearance doesn't shift the header layout;
+     the inner span is invisible until the indeterminate modifier is added. */
   .progress-bar {
     height: 4px;
     background: color-mix(in oklab, CanvasText 12%, transparent);
@@ -212,12 +221,21 @@
     overflow: hidden;
     position: relative;
   }
+  .progress-bar--header {
+    background: transparent;
+  }
+  .progress-bar--header.progress-bar--indeterminate {
+    background: color-mix(in oklab, CanvasText 12%, transparent);
+  }
   .progress-bar > span {
     display: block;
     height: 100%;
     background: color-mix(in oklab, royalblue 60%, CanvasText);
     border-radius: 999px;
     position: relative;
+  }
+  .progress-bar:not(.progress-bar--indeterminate) > span {
+    background: transparent;
   }
   .progress-bar--indeterminate > span {
     width: 30%;
