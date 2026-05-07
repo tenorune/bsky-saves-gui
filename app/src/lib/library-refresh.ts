@@ -13,6 +13,8 @@ export type LibraryRefreshState =
 const store = writable<LibraryRefreshState>({ status: 'idle' });
 export const libraryRefreshState: Readable<LibraryRefreshState> = { subscribe: store.subscribe };
 
+let _cancelled = false;
+
 export interface StartLibraryRefreshInput {
   readonly credentials: FetchSavesCredentials;
   readonly includeThreads: boolean;
@@ -29,6 +31,7 @@ export async function startLibraryRefresh(
 ): Promise<void> {
   const orchestrate = deps.orchestrate ?? defaultOrchestrate;
   const saveInventory = deps.saveInventory ?? defaultSaveInventory;
+  _cancelled = false;
   store.set({ status: 'running' });
   try {
     const inv = await orchestrate({
@@ -37,15 +40,23 @@ export async function startLibraryRefresh(
       snapshot: get(capabilitySnapshot),
       origin: config.helperOrigin,
     });
+    if (_cancelled) return;
     await saveInventory(inv);
     store.set({ status: 'idle' });
   } catch (e) {
+    if (_cancelled) return;
     const msg = e instanceof Error ? e.message : String(e);
     store.set({ status: 'error', error: msg });
   }
 }
 
+export function stopLibraryRefresh(): void {
+  _cancelled = true;
+  store.set({ status: 'idle' });
+}
+
 /** For tests only — resets the state to idle. */
 export function _resetLibraryRefreshForTests(): void {
+  _cancelled = false;
   store.set({ status: 'idle' });
 }

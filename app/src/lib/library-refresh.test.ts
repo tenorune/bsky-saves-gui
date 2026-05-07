@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { get } from 'svelte/store';
-import { libraryRefreshState, startLibraryRefresh, _resetLibraryRefreshForTests } from './library-refresh';
+import { libraryRefreshState, startLibraryRefresh, stopLibraryRefresh, _resetLibraryRefreshForTests } from './library-refresh';
 
 describe('startLibraryRefresh', () => {
   beforeEach(() => _resetLibraryRefreshForTests());
@@ -37,5 +37,25 @@ describe('startLibraryRefresh', () => {
       { orchestrate, saveInventory },
     );
     expect(saveInventory).toHaveBeenCalledWith(inv);
+  });
+});
+
+describe('stopLibraryRefresh', () => {
+  beforeEach(() => _resetLibraryRefreshForTests());
+
+  it('returns state to idle and discards pending result', async () => {
+    let resolveOrchestrate: (v: unknown) => void;
+    const orchestrate = vi.fn().mockImplementation(() => new Promise((r) => { resolveOrchestrate = r; }));
+    const saveInventory = vi.fn();
+    const promise = startLibraryRefresh(
+      { credentials: { handle: 'a', appPassword: 'b', pds: 'c' }, includeThreads: false },
+      { orchestrate, saveInventory },
+    );
+    expect(get(libraryRefreshState).status).toBe('running');
+    stopLibraryRefresh();
+    expect(get(libraryRefreshState).status).toBe('idle');
+    resolveOrchestrate!({ saves: [] });
+    await promise;
+    expect(saveInventory).not.toHaveBeenCalled();
   });
 });
