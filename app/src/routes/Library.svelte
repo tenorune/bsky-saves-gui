@@ -7,9 +7,12 @@
   import { navigate } from '$lib/router';
   import { slideFromRight } from '$lib/slide-transition';
   import { startLibraryRefresh, stopLibraryRefresh, libraryRefreshState } from '$lib/library-refresh';
+  import { cancelImageBackup } from '$lib/start-image-backup';
+  import { cancelArticleBackup } from '$lib/start-article-backup';
   import { assetToggles } from '$lib/asset-toggles';
   import { capabilitySnapshot } from '$lib/capability-snapshot';
   import { computeDominantBackend } from '$lib/dominant-backend';
+  import { imageHydration, articleHydration, threadProgress } from '$lib/hydration-state';
   import LibraryView from '../reader/LibraryView.svelte';
   import LibraryStatusPanel from '../components/LibraryStatusPanel.svelte';
   import CustomProxySetupModal from '../components/CustomProxySetupModal.svelte';
@@ -61,13 +64,24 @@
   }
 
   function stop(): void {
+    // Cancel whatever's active — orchestrator-driven refresh and any
+    // independently-triggered asset hydration (e.g., started from Settings).
     stopLibraryRefresh();
+    cancelImageBackup();
+    cancelArticleBackup();
+    // Threads hydration doesn't have a cancel API yet; the in-flight call
+    // will complete naturally. The button at least flips back so the user
+    // sees their click was acknowledged.
   }
 
   $: snap = $capabilitySnapshot;
   $: dominantBackend = computeDominantBackend(snap);
   $: postCount = $inventoryState.status === 'ready' ? $inventoryState.inventory.saves.length : 0;
-  $: refreshing = $libraryRefreshState.status === 'running';
+  $: refreshing =
+    $libraryRefreshState.status === 'running' ||
+    $threadProgress.status === 'running' ||
+    $imageHydration.status === 'running' ||
+    $articleHydration.status === 'running';
 </script>
 
 <section class="route route--library" use:slideFromRight>
