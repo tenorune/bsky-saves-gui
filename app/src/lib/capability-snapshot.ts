@@ -65,3 +65,43 @@ export function computeCapabilitySnapshot(
       : { kind: 'none' },
   };
 }
+
+import { writable, type Readable } from 'svelte/store';
+import { probeConfiguredHelper } from './helper-client';
+import { loadProxyConfig } from './proxy-config';
+
+const store = writable<CapabilitySnapshot>(EMPTY_SNAPSHOT);
+export const capabilitySnapshot: Readable<CapabilitySnapshot> = { subscribe: store.subscribe };
+
+export interface InitDeps {
+  readonly probe?: () => Promise<HelperStatus>;
+  readonly loadUserWorker?: () => Promise<{ readonly url: string } | null>;
+}
+
+export async function initCapabilitySnapshot(deps: InitDeps = {}): Promise<void> {
+  const probe = deps.probe ?? probeConfiguredHelper;
+  const loadUserWorker = deps.loadUserWorker ?? loadUserWorkerFromProxyConfig;
+  let helper: HelperStatus;
+  try {
+    helper = await probe();
+  } catch {
+    helper = { status: 'unavailable' };
+  }
+  let userWorker: { readonly url: string } | null;
+  try {
+    userWorker = await loadUserWorker();
+  } catch {
+    userWorker = null;
+  }
+  store.set(computeCapabilitySnapshot({ helper, userWorker }));
+}
+
+async function loadUserWorkerFromProxyConfig(): Promise<{ readonly url: string } | null> {
+  const cfg = await loadProxyConfig();
+  return cfg && cfg.url ? { url: cfg.url } : null;
+}
+
+/** For tests only — resets the store to EMPTY_SNAPSHOT. */
+export function _resetForTests(): void {
+  store.set(EMPTY_SNAPSHOT);
+}

@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import { EMPTY_SNAPSHOT, type CapabilitySnapshot, computeCapabilitySnapshot } from './capability-snapshot';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { get } from 'svelte/store';
+import { EMPTY_SNAPSHOT, type CapabilitySnapshot, computeCapabilitySnapshot, capabilitySnapshot, initCapabilitySnapshot, _resetForTests } from './capability-snapshot';
 import type { HelperStatus } from './helper-client';
 
 const helperWith = (features: string[], version = '0.4.1'): HelperStatus => ({
@@ -99,5 +100,31 @@ describe('computeCapabilitySnapshot', () => {
     });
     expect(snap.images).toEqual({ kind: 'user-worker', url: 'https://my.worker.dev' });
     expect(snap.articles).toEqual({ kind: 'user-worker', url: 'https://my.worker.dev' });
+  });
+});
+
+describe('capabilitySnapshot store', () => {
+  beforeEach(() => _resetForTests());
+
+  it('initializes to EMPTY_SNAPSHOT', () => {
+    expect(get(capabilitySnapshot)).toEqual(EMPTY_SNAPSHOT);
+  });
+
+  it('initCapabilitySnapshot writes a computed snapshot', async () => {
+    const fakeProbe = async () => helperWith(['fetch-image']);
+    const fakeUserWorker = async () => null;
+    await initCapabilitySnapshot({ probe: fakeProbe, loadUserWorker: fakeUserWorker });
+    const snap = get(capabilitySnapshot);
+    expect(snap.helper.detected).toBe(true);
+    expect(snap.images.kind).toBe('helper');
+    expect(snap.articles.kind).toBe('none');
+  });
+
+  it('initCapabilitySnapshot tolerates probe rejection', async () => {
+    const fakeProbe = async () => { throw new Error('network'); };
+    const fakeUserWorker = async () => null;
+    await initCapabilitySnapshot({ probe: fakeProbe, loadUserWorker: fakeUserWorker });
+    const snap = get(capabilitySnapshot);
+    expect(snap.helper.detected).toBe(false);
   });
 });
