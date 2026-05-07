@@ -1,0 +1,38 @@
+import { writable, type Readable } from 'svelte/store';
+import { get as idbGet, set as idbSet } from 'idb-keyval';
+
+export type AssetKey = 'threads' | 'images' | 'articles';
+
+export interface AssetTogglesShape {
+  readonly threads: boolean;
+  readonly images: boolean;
+  readonly articles: boolean;
+}
+
+const KEY = 'asset-toggles:v1';
+const DEFAULTS: AssetTogglesShape = { threads: true, images: true, articles: true };
+
+const store = writable<AssetTogglesShape>(DEFAULTS);
+export const assetToggles: Readable<AssetTogglesShape> = { subscribe: store.subscribe };
+
+export async function loadAssetToggles(): Promise<void> {
+  const raw = (await idbGet(KEY)) as Partial<AssetTogglesShape> | undefined;
+  if (!raw) return;
+  store.set({
+    threads: typeof raw.threads === 'boolean' ? raw.threads : DEFAULTS.threads,
+    images: typeof raw.images === 'boolean' ? raw.images : DEFAULTS.images,
+    articles: typeof raw.articles === 'boolean' ? raw.articles : DEFAULTS.articles,
+  });
+}
+
+export async function setAssetToggle(key: AssetKey, value: boolean): Promise<void> {
+  store.update((cur) => ({ ...cur, [key]: value }));
+  let snapshot: AssetTogglesShape = DEFAULTS;
+  store.subscribe((v) => { snapshot = v; })();
+  await idbSet(KEY, snapshot);
+}
+
+/** For tests only — resets to defaults without touching IndexedDB. */
+export function _resetAssetTogglesForTests(): void {
+  store.set(DEFAULTS);
+}
