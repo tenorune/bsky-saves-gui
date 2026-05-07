@@ -54,7 +54,6 @@
     gap: 0.5rem 1rem;
     align-items: baseline;
   }
-  .row + .row { margin-top: 0.4rem; }
   .label { font-weight: 600; min-width: 4.5rem; display: inline-block; }
   .muted { opacity: 0.7; }
   .badge {

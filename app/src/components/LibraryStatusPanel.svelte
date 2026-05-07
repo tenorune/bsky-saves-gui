@@ -52,7 +52,6 @@
       : null;
 
   // Images
-  $: imagesBackendAvailable = snap.images.kind !== 'none';
   $: imagesTotal = $imageHydration.total || null;
   $: imagesFetched = $imageHydration.fetched || null;
   $: imagesFailed = $imageHydration.failed;
@@ -97,7 +96,7 @@
   <AssetRow
     label="Images"
     on={toggles.images}
-    backendAvailable={imagesBackendAvailable}
+    backendAvailable={true}
     backendLabel={rowBackend(snap.images.kind)}
     fetched={imagesFetched}
     total={imagesTotal}
@@ -130,5 +129,8 @@
     background: color-mix(in oklab, CanvasText 4%, Canvas);
     border-bottom: 1px solid color-mix(in oklab, CanvasText 12%, transparent);
     font-size: 0.875rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
   }
 </style>
