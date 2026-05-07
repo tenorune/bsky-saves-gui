@@ -208,3 +208,40 @@ export async function fetchSaves(
   }
   return await res.json() as FetchSavesResponse;
 }
+
+export interface EnrichRequest {
+  readonly uris: readonly string[];
+}
+
+export interface EnrichEntry {
+  readonly uri: string;
+  readonly post_created_at: string;
+}
+
+export interface EnrichErrorEntry {
+  readonly uri: string;
+  readonly reason: string;
+}
+
+export interface EnrichResponse {
+  readonly enriched: readonly EnrichEntry[];
+  readonly errors: readonly EnrichErrorEntry[];
+}
+
+export async function enrichUris(origin: string, req: EnrichRequest): Promise<EnrichResponse> {
+  const base = origin.replace(/\/+$/, '');
+  const res = await fetch(`${base}/enrich`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uris: req.uris }),
+  });
+  if (!res.ok) {
+    let msg = `helper /enrich returned ${res.status}`;
+    try {
+      const body = await res.json() as { error?: string };
+      if (body.error) msg = body.error;
+    } catch { /* keep default */ }
+    throw new Error(msg);
+  }
+  return await res.json() as EnrichResponse;
+}

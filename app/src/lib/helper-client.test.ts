@@ -339,3 +339,32 @@ describe('fetchSaves (jwt-pair)', () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe('enrichUris', () => {
+  it('POSTs to /enrich with uris (no credentials)', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ enriched: [{ uri: 'at://x', post_created_at: '2026-01-01T00:00:00Z' }], errors: [] }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { enrichUris } = await import('./helper-client');
+    const out = await enrichUris('http://x', { uris: ['at://x'] });
+
+    expect(fetchMock).toHaveBeenCalledWith('http://x/enrich', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ uris: ['at://x'] }),
+    }));
+    expect(out.enriched).toHaveLength(1);
+    expect(out.errors).toEqual([]);
+    vi.unstubAllGlobals();
+  });
+
+  it('throws on 400 missing uris', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: 'missing uris' }), { status: 400 }),
+    ));
+    const { enrichUris } = await import('./helper-client');
+    await expect(enrichUris('http://x', { uris: [] as unknown as string[] })).rejects.toThrow(/missing uris/);
+    vi.unstubAllGlobals();
+  });
+});
