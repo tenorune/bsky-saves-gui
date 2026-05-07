@@ -158,7 +158,7 @@ await micropip.install('pyodide-http')
 import pyodide_http
 pyodide_http.patch_all()
 await micropip.install('httpx')
-await micropip.install('bsky-saves==0.3.1', deps=False)
+await micropip.install('bsky-saves==0.4.1', deps=False)
 
 # pyodide-http patches urllib/urllib3/requests but NOT httpx, which uses
 # httpcore that tries raw sockets. Replace the httpx surface bsky-saves
