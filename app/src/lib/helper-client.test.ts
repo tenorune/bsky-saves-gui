@@ -368,3 +368,38 @@ describe('enrichUris', () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe('hydrateThreads', () => {
+  it('POSTs uris and credentials to /hydrate-threads', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ threaded: [], errors: [] }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { hydrateThreads } = await import('./helper-client');
+    await hydrateThreads('http://x', {
+      uris: ['at://a'],
+      credentials: { accessJwt: 'A', refreshJwt: 'R', did: 'did:plc:1' },
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('http://x/hydrate-threads', expect.objectContaining({
+      body: JSON.stringify({
+        uris: ['at://a'],
+        credentials: { access_jwt: 'A', refresh_jwt: 'R', did: 'did:plc:1' },
+      }),
+    }));
+    vi.unstubAllGlobals();
+  });
+
+  it('throws on 400 missing credentials', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: 'missing credentials' }), { status: 400 }),
+    ));
+    const { hydrateThreads } = await import('./helper-client');
+    await expect(hydrateThreads('http://x', {
+      uris: ['at://a'],
+      credentials: { handle: '', appPassword: '', pds: '' },
+    })).rejects.toThrow(/missing credentials/);
+    vi.unstubAllGlobals();
+  });
+});

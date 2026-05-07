@@ -245,3 +245,49 @@ export async function enrichUris(origin: string, req: EnrichRequest): Promise<En
   }
   return await res.json() as EnrichResponse;
 }
+
+export interface HydrateThreadsRequest {
+  readonly uris: readonly string[];
+  readonly credentials: FetchSavesCredentials;
+}
+
+export interface ThreadEntry {
+  readonly uri: string;
+  readonly thread_replies: readonly unknown[];
+  readonly thread_schema_version: number;
+  readonly thread_fetched_at: string;
+}
+
+export interface ThreadErrorEntry {
+  readonly uri: string;
+  readonly reason: string;
+}
+
+export interface HydrateThreadsResponse {
+  readonly threaded: readonly ThreadEntry[];
+  readonly errors: readonly ThreadErrorEntry[];
+}
+
+export async function hydrateThreads(
+  origin: string,
+  req: HydrateThreadsRequest,
+): Promise<HydrateThreadsResponse> {
+  const base = origin.replace(/\/+$/, '');
+  const res = await fetch(`${base}/hydrate-threads`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      uris: req.uris,
+      credentials: serialiseCredentials(req.credentials),
+    }),
+  });
+  if (!res.ok) {
+    let msg = `helper /hydrate-threads returned ${res.status}`;
+    try {
+      const body = await res.json() as { error?: string };
+      if (body.error) msg = body.error;
+    } catch { /* keep default */ }
+    throw new Error(msg);
+  }
+  return await res.json() as HydrateThreadsResponse;
+}
