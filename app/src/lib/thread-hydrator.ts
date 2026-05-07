@@ -46,8 +46,23 @@ export const threadHydrator = {
         appPassword: input.credentials.appPassword,
         pds: input.credentials.pds,
         preauthSession: input.preauthSession,
+      }, {
+        // bsky-saves' hydrate_threads CLI loop prints `[N/M] at://...` per
+        // entry. We capture that to drive the threads progress bar in real
+        // time. Also handles `bsky-saves: K hydrated, F failed` summary at
+        // end (informational; the merged inventory drives the final state).
+        onLog: (line: string) => {
+          const m = /^\s*\[(\d+)\/(\d+)\]/.exec(line);
+          if (m) {
+            const fetched = parseInt(m[1], 10);
+            const total = parseInt(m[2], 10);
+            if (!Number.isNaN(fetched) && !Number.isNaN(total) && total > 0) {
+              threadProgress.update((p) => ({ ...p, fetched, total }));
+            }
+          }
+        },
       });
-      threadProgress.update((p) => ({ ...p, status: 'done' }));
+      threadProgress.update((p) => ({ ...p, status: 'done', fetched: p.total }));
       return out;
     } catch (e) {
       threadProgress.update((p) => ({ ...p, status: 'cancelled' }));

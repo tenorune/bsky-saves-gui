@@ -22,6 +22,15 @@ export interface ThreadsOnlyInput {
   readonly preauthSession?: { accessJwt: string; refreshJwt: string; did: string; handle: string };
 }
 
+export interface SendOptions {
+  /**
+   * Called with each Python stdout/stderr line streamed from the worker
+   * during the call. Used to parse [N/M]-style progress prints from
+   * bsky-saves' CLI loops (e.g., hydrate_threads).
+   */
+  readonly onLog?: (line: string) => void;
+}
+
 export class PyodideWorkerDriver {
   private _initPromise: Promise<void> | null = null;
 
@@ -53,21 +62,25 @@ export class PyodideWorkerDriver {
     return this._initPromise;
   }
 
-  async runFetchOnly(input: FetchOnlyInput): Promise<unknown> {
-    return this.send({ type: 'fetchOnly', input });
+  async runFetchOnly(input: FetchOnlyInput, opts: SendOptions = {}): Promise<unknown> {
+    return this.send({ type: 'fetchOnly', input }, opts);
   }
 
-  async runEnrichOnly(input: EnrichOnlyInput): Promise<unknown> {
-    return this.send({ type: 'enrichOnly', input });
+  async runEnrichOnly(input: EnrichOnlyInput, opts: SendOptions = {}): Promise<unknown> {
+    return this.send({ type: 'enrichOnly', input }, opts);
   }
 
-  async runThreadsOnly(input: ThreadsOnlyInput): Promise<unknown> {
-    return this.send({ type: 'threadsOnly', input });
+  async runThreadsOnly(input: ThreadsOnlyInput, opts: SendOptions = {}): Promise<unknown> {
+    return this.send({ type: 'threadsOnly', input }, opts);
   }
 
-  private send(message: unknown): Promise<unknown> {
+  private send(message: unknown, opts: SendOptions): Promise<unknown> {
     return new Promise<unknown>((resolve, reject) => {
       const onMessage = (e: MessageEvent | ErrorEvent) => {
+        if ('data' in e && (e as MessageEvent).data?.type === 'log') {
+          opts.onLog?.((e as MessageEvent).data.line ?? '');
+          return; // log messages are not terminal
+        }
         if ('data' in e && (e as MessageEvent).data?.type === 'result') {
           this.worker.removeEventListener('message', onMessage);
           this.worker.removeEventListener('error', onMessage);
