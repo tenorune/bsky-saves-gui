@@ -16,11 +16,13 @@
   import LibraryView from '../reader/LibraryView.svelte';
   import LibraryStatusPanel from '../components/LibraryStatusPanel.svelte';
   import CustomProxySetupModal from '../components/CustomProxySetupModal.svelte';
+  import BackupFailuresModal from '../components/BackupFailuresModal.svelte';
   import { rkeyOf } from '../reader/inventory-shape';
   import type { Save } from '../reader/inventory-shape';
   import { restoreHydrationFromInventory } from '$lib/restore-hydration';
 
   let setupOpen = false;
+  let failuresOpen: 'images' | 'articles' | null = null;
 
   onMount(async () => {
     if (get(inventoryState).status === 'loading') {
@@ -82,6 +84,14 @@
     $threadProgress.status === 'running' ||
     $imageHydration.status === 'running' ||
     $articleHydration.status === 'running';
+
+  $: failureRows = failuresOpen === 'images'
+    ? $imageHydration.failures.map((f) => ({ ...f, type: 'image' as const }))
+    : failuresOpen === 'articles'
+      ? $articleHydration.failures.map((f) => ({ ...f, type: 'article' as const }))
+      : [];
+
+  $: failuresInventory = $inventoryState.status === 'ready' ? $inventoryState.inventory : null;
 </script>
 
 <section class="route route--library" use:slideFromRight>
@@ -106,6 +116,8 @@
     <LibraryStatusPanel
       onSetupImages={() => (setupOpen = true)}
       onSetupArticles={() => (setupOpen = true)}
+      onViewImageFailures={() => (failuresOpen = 'images')}
+      onViewArticleFailures={() => (failuresOpen = 'articles')}
     />
   </div>
 
@@ -121,6 +133,14 @@
 </section>
 
 <CustomProxySetupModal open={setupOpen} on:close={() => (setupOpen = false)} />
+
+<BackupFailuresModal
+  open={failuresOpen !== null}
+  failures={failureRows}
+  inventory={failuresInventory}
+  title={failuresOpen === 'images' ? 'Image backup failures' : 'Article backup failures'}
+  on:close={() => (failuresOpen = null)}
+/>
 
 <style>
   .route--library { display: flex; flex-direction: column; }
