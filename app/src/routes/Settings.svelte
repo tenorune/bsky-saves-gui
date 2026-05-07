@@ -28,6 +28,10 @@
   import BackupRow from '../components/BackupRow.svelte';
   import { assetToggles, setAssetToggle, loadAssetToggles } from '$lib/asset-toggles';
   import { installHintDismissed, restoreInstallHint, loadInstallHintPref } from '$lib/install-hint-pref';
+  import { threadHydrator } from '$lib/thread-hydrator';
+  import { capabilitySnapshot } from '$lib/capability-snapshot';
+  import { signInDraft } from '$lib/sign-in-draft';
+  import { loadInventory } from '$lib/inventory-store';
 
   let status = '';
   let error = '';
@@ -87,9 +91,34 @@
 
   $: toggles = $assetToggles;
 
-  function handleToggleChange(key: 'threads' | 'images' | 'articles', event: Event): void {
+  function handleToggleChange(key: 'images' | 'articles', event: Event): void {
     const checked = (event.currentTarget as HTMLInputElement).checked;
     void setAssetToggle(key, checked);
+  }
+
+  function handleThreadsToggleChange(event: Event): void {
+    const checked = (event.currentTarget as HTMLInputElement).checked;
+    void setAssetToggle('threads', checked, { onThreadsToggleOn: triggerThreadHydration });
+  }
+
+  async function triggerThreadHydration(): Promise<void> {
+    const inv = (await loadInventory()) as { saves: { uri: string }[] } | null;
+    if (!inv) return;
+    const draft = get(signInDraft);
+    const session = get(lastSession);
+    const credentials = draft && draft.appPassword
+      ? { handle: draft.handle, appPassword: draft.appPassword, pds: draft.pds }
+      : session
+        ? { accessJwt: session.accessJwt, refreshJwt: session.refreshJwt, did: session.did, pds: session.pds }
+        : null;
+    if (!credentials) return;
+    const out = await threadHydrator.start({
+      backend: get(capabilitySnapshot).threads,
+      origin: config.helperOrigin,
+      inventory: inv,
+      credentials,
+    });
+    await saveInventory(out);
   }
 
   $: libraryFetchedAt = (() => {
@@ -225,7 +254,7 @@
       <input
         type="checkbox"
         checked={toggles.threads}
-        on:change={(e) => handleToggleChange('threads', e)}
+        on:change={handleThreadsToggleChange}
       />
       <span>Back up threads</span>
     </label>

@@ -25,11 +25,24 @@ export async function loadAssetToggles(): Promise<void> {
   });
 }
 
-export async function setAssetToggle(key: AssetKey, value: boolean): Promise<void> {
+export interface SetAssetToggleDeps {
+  readonly onThreadsToggleOn?: () => void;
+}
+
+export async function setAssetToggle(
+  key: AssetKey,
+  value: boolean,
+  deps: SetAssetToggleDeps = {},
+): Promise<void> {
+  let prev = false;
+  store.subscribe((v) => { prev = v[key]; })();
   store.update((cur) => ({ ...cur, [key]: value }));
   let snapshot: AssetTogglesShape = DEFAULTS;
   store.subscribe((v) => { snapshot = v; })();
   await idbSet(KEY, snapshot);
+  if (key === 'threads' && value && !prev) {
+    deps.onThreadsToggleOn?.();
+  }
 }
 
 /** For tests only — resets to defaults without touching IndexedDB. */
