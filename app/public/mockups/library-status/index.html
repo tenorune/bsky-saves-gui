@@ -286,7 +286,7 @@
     <div class="library__header">
       <h3>Library — <span class="muted" style="font-weight:400">120 of 247…</span></h3>
       <span class="backend" style="margin-right:0.5rem">via local helper</span>
-      <button class="button" disabled>Refreshing…</button>
+      <button class="button">Stop</button>
     </div>
     <div class="library__status">
       <div class="row">
@@ -315,7 +315,7 @@
     <div class="library__header">
       <h3>Library — <span class="muted" style="font-weight:400">247 posts</span></h3>
       <span class="backend" style="margin-right:0.5rem">via local helper</span>
-      <button class="button" disabled>Refreshing…</button>
+      <button class="button">Stop</button>
     </div>
     <div class="library__status">
       <div class="row">
@@ -389,7 +389,6 @@
   <div class="library">
     <div class="library__header">
       <h3>Library — <span class="muted" style="font-weight:400">247 posts</span></h3>
-      <span class="backend" style="margin-right:0.5rem">via Pyodide</span>
       <button class="button">Refresh</button>
     </div>
     <div class="library__status">
@@ -400,9 +399,9 @@
         <span class="backend">via operator's worker proxy</span>
       </div>
       <div class="row">
-        <span class="label">Articles</span><span class="badge badge--on">on</span>
+        <span class="label">Articles</span>
         <span class="needs-setup">no backend available</span>
-        <span class="actions"><button class="button button--small">Set up</button></span>
+        <button class="action-link">Set up</button>
       </div>
     </div>
     <div class="library__body">
@@ -422,20 +421,19 @@
   <div class="library">
     <div class="library__header">
       <h3>Library — <span class="muted" style="font-weight:400">247 posts</span></h3>
-      <span class="backend" style="margin-right:0.5rem">via Pyodide</span>
       <button class="button">Refresh</button>
     </div>
     <div class="library__status">
       <div class="row"><span class="label">Threads</span><span class="badge badge--on">on</span><span>247 of 247</span></div>
       <div class="row">
-        <span class="label">Images</span><span class="badge badge--on">on</span>
+        <span class="label">Images</span>
         <span class="needs-setup">no backend available</span>
-        <span class="actions"><button class="button button--small">Set up</button></span>
+        <button class="action-link">Set up</button>
       </div>
       <div class="row">
-        <span class="label">Articles</span><span class="badge badge--on">on</span>
+        <span class="label">Articles</span>
         <span class="needs-setup">no backend available</span>
-        <span class="actions"><button class="button button--small">Set up</button></span>
+        <button class="action-link">Set up</button>
       </div>
     </div>
     <div class="library__body">
@@ -486,7 +484,7 @@
     <div class="library__header">
       <h3>Library — <span class="muted" style="font-weight:400">247 posts</span></h3>
       <span class="backend" style="margin-right:0.5rem">via local helper</span>
-      <button class="button" disabled>Refreshing…</button>
+      <button class="button">Stop</button>
     </div>
     <div class="library__status">
       <div class="row">
@@ -502,9 +500,9 @@
         <span class="backend">via your worker proxy</span>
       </div>
       <div class="row">
-        <span class="label">Articles</span><span class="badge badge--on">on</span>
+        <span class="label">Articles</span>
         <span class="needs-setup">no backend available</span>
-        <span class="actions"><button class="button button--small">Set up</button></span>
+        <button class="action-link">Set up</button>
       </div>
     </div>
     <div class="library__body">
@@ -535,6 +533,70 @@
       <div class="row"><span class="label">Threads</span><span class="badge badge--on">on</span><span>247 of 247 <span class="muted">(last refresh)</span></span></div>
       <div class="row"><span class="label">Images</span><span class="badge badge--on">on</span><span>89 of 247</span></div>
       <div class="row"><span class="label">Articles</span><span class="badge badge--on">on</span><span>12 of 14</span></div>
+    </div>
+    <div class="library__body">
+      <div class="save-card"></div><div class="save-card"></div><div class="save-card"></div>
+      <div class="save-card"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────────────────────────────── C-install-helper (gentle) -->
+<section class="variant">
+  <h2>C9 — install-helper CTA (gentle, footer-style)</h2>
+  <p class="desc">Pyodide-only user. Subtle one-line hint at the bottom of the
+     status block. Dismissible; reappears for new users only. Doesn't compete
+     with content; just points to a faster path.</p>
+
+  <div class="library">
+    <div class="library__header">
+      <h3>Library — <span class="muted" style="font-weight:400">247 posts</span></h3>
+      <button class="button">Refresh</button>
+    </div>
+    <div class="library__status">
+      <div class="row"><span class="label">Threads</span><span class="badge badge--on">on</span><span>247 of 247</span></div>
+      <div class="row"><span class="label">Images</span><span class="badge badge--on">on</span><span>89 of 247</span><span class="backend">via operator's worker proxy</span></div>
+      <div class="row">
+        <span class="label">Articles</span>
+        <span class="needs-setup">no backend available</span>
+        <button class="action-link">Set up</button>
+      </div>
+      <div class="row" style="margin-top:0.6rem; font-size:0.85rem; opacity:0.75">
+        <span>Tip: install <code>bsky-saves</code> locally for faster fetch and built-in image &amp; article backup.</span>
+        <button class="action-link">How to install</button>
+      </div>
+    </div>
+    <div class="library__body">
+      <div class="save-card"></div><div class="save-card"></div><div class="save-card"></div>
+      <div class="save-card"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────────────────────────────── C-install-helper (banner) -->
+<section class="variant">
+  <h2>C10 — install-helper CTA (prominent banner)</h2>
+  <p class="desc">Same situation as C9 but the CTA is a full-width info banner
+     at the top of the status block, similar in weight to the outdated-helper
+     warning. Higher signal; takes more vertical space.</p>
+
+  <div class="library">
+    <div class="library__header">
+      <h3>Library — <span class="muted" style="font-weight:400">247 posts</span></h3>
+      <button class="button">Refresh</button>
+    </div>
+    <div class="library__status">
+      <div class="inline-warning" style="background: color-mix(in oklab, royalblue 12%, Canvas); border-color: color-mix(in oklab, royalblue 30%, transparent)">
+        <span><strong>Faster setup available.</strong> Install <code>bsky-saves</code> locally to skip the in-browser engine and unlock image &amp; article backup with no extra setup.</span>
+        <span class="actions"><button class="action-link">How to install</button> · <button class="action-link">Dismiss</button></span>
+      </div>
+      <div class="row"><span class="label">Threads</span><span class="badge badge--on">on</span><span>247 of 247</span></div>
+      <div class="row"><span class="label">Images</span><span class="badge badge--on">on</span><span>89 of 247</span><span class="backend">via operator's worker proxy</span></div>
+      <div class="row">
+        <span class="label">Articles</span>
+        <span class="needs-setup">no backend available</span>
+        <button class="action-link">Set up</button>
+      </div>
     </div>
     <div class="library__body">
       <div class="save-card"></div><div class="save-card"></div><div class="save-card"></div>
