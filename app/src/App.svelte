@@ -59,9 +59,11 @@
       ·
       <a href="#/privacy">Privacy</a>
     </p>
-    <p class="app-footer__build" title="Build timestamp and source branch">
-      <code>build {BUILD_TIME} -- ({BUILD_BRANCH})</code>
-    </p>
+    {#if BUILD_BRANCH !== 'main'}
+      <p class="app-footer__build" title="Build timestamp and source branch">
+        <code>build {BUILD_TIME} -- ({BUILD_BRANCH})</code>
+      </p>
+    {/if}
   </footer>
 </div>
 
