@@ -58,6 +58,7 @@
   // doesn't reset to zero each refresh — skipped reflects images already
   // present in IDB from prior runs; fetched is this-run's newly-fetched.
   // Together they're the total hydrated.
+  $: imagesBackendAvailable = snap.images.kind !== 'none';
   $: imagesTotal = $imageHydration.total || null;
   $: imagesHydrated = $imageHydration.fetched + $imageHydration.skipped;
   $: imagesFetched = imagesHydrated > 0 ? imagesHydrated : null;
@@ -109,7 +110,7 @@
   <AssetRow
     label="Images"
     on={toggles.images}
-    backendAvailable={true}
+    backendAvailable={imagesBackendAvailable}
     backendLabel={rowBackend(snap.images.kind)}
     fetched={imagesFetched}
     total={imagesTotal}

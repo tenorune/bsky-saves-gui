@@ -16,7 +16,8 @@ export type CapabilitySnapshot = {
   readonly images:
     | { readonly kind: 'helper' }
     | { readonly kind: 'user-worker'; readonly url: string }
-    | { readonly kind: 'operator-worker' };
+    | { readonly kind: 'operator-worker' }
+    | { readonly kind: 'none' };
   readonly articles:
     | { readonly kind: 'helper' }
     | { readonly kind: 'user-worker'; readonly url: string }
@@ -35,16 +36,20 @@ export const EMPTY_SNAPSHOT: CapabilitySnapshot = {
 export interface CapabilitySnapshotInputs {
   readonly helper: HelperStatus;
   readonly userWorker: { readonly url: string } | null;
+  readonly operatorProxyOptOut: boolean;
 }
 
 export function computeCapabilitySnapshot(
   inputs: CapabilitySnapshotInputs,
 ): CapabilitySnapshot {
-  const { helper, userWorker } = inputs;
+  const { helper, userWorker, operatorProxyOptOut } = inputs;
+  const operatorOrNone = operatorProxyOptOut
+    ? { kind: 'none' as const }
+    : { kind: 'operator-worker' as const };
   if (helper.status !== 'available') {
     return {
       ...EMPTY_SNAPSHOT,
-      images:   userWorker ? { kind: 'user-worker', url: userWorker.url } : { kind: 'operator-worker' },
+      images:   userWorker ? { kind: 'user-worker', url: userWorker.url } : operatorOrNone,
       articles: userWorker ? { kind: 'user-worker', url: userWorker.url } : { kind: 'none' },
     };
   }
@@ -58,7 +63,7 @@ export function computeCapabilitySnapshot(
     images:
       f.has('fetch-image') ? { kind: 'helper' }
       : userWorker        ? { kind: 'user-worker', url: userWorker.url }
-      : { kind: 'operator-worker' },
+      : operatorOrNone,
     articles:
       f.has('extract-article') ? { kind: 'helper' }
       : userWorker             ? { kind: 'user-worker', url: userWorker.url }
@@ -69,6 +74,7 @@ export function computeCapabilitySnapshot(
 import { writable, type Readable } from 'svelte/store';
 import { probeConfiguredHelper } from './helper-client';
 import { loadProxyConfig } from './proxy-config';
+import { loadBackupPrefs } from './backup-prefs';
 
 const store = writable<CapabilitySnapshot>(EMPTY_SNAPSHOT);
 export const capabilitySnapshot: Readable<CapabilitySnapshot> = { subscribe: store.subscribe };
@@ -76,11 +82,13 @@ export const capabilitySnapshot: Readable<CapabilitySnapshot> = { subscribe: sto
 export interface InitDeps {
   readonly probe?: () => Promise<HelperStatus>;
   readonly loadUserWorker?: () => Promise<{ readonly url: string } | null>;
+  readonly loadOperatorProxyOptOut?: () => Promise<boolean>;
 }
 
 export async function initCapabilitySnapshot(deps: InitDeps = {}): Promise<void> {
   const probe = deps.probe ?? probeConfiguredHelper;
   const loadUserWorker = deps.loadUserWorker ?? loadUserWorkerFromProxyConfig;
+  const loadOperatorProxyOptOut = deps.loadOperatorProxyOptOut ?? defaultLoadOperatorProxyOptOut;
   let helper: HelperStatus;
   try {
     helper = await probe();
@@ -93,12 +101,23 @@ export async function initCapabilitySnapshot(deps: InitDeps = {}): Promise<void>
   } catch {
     userWorker = null;
   }
-  store.set(computeCapabilitySnapshot({ helper, userWorker }));
+  let operatorProxyOptOut = false;
+  try {
+    operatorProxyOptOut = await loadOperatorProxyOptOut();
+  } catch {
+    operatorProxyOptOut = false;
+  }
+  store.set(computeCapabilitySnapshot({ helper, userWorker, operatorProxyOptOut }));
 }
 
 async function loadUserWorkerFromProxyConfig(): Promise<{ readonly url: string } | null> {
   const cfg = await loadProxyConfig();
   return cfg && cfg.url ? { url: cfg.url } : null;
+}
+
+async function defaultLoadOperatorProxyOptOut(): Promise<boolean> {
+  const prefs = await loadBackupPrefs();
+  return prefs.operatorProxyOptOut;
 }
 
 /** For tests only — resets the store to EMPTY_SNAPSHOT. */

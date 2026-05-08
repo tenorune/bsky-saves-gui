@@ -86,6 +86,9 @@
     const checked = (event.target as HTMLInputElement).checked;
     await setOperatorProxyOptOut(checked);
     await reloadBackupPrefs();
+    // Recompute the capability snapshot so Library reflects the new
+    // image-backend selection (operator-worker → none when opting out).
+    await initCapabilitySnapshot();
   }
 
   async function reloadBackupPrefs() {

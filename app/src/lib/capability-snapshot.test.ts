@@ -26,6 +26,7 @@ describe('computeCapabilitySnapshot', () => {
     const snap = computeCapabilitySnapshot({
       helper: helperWith(['fetch', 'enrich', 'hydrate-threads', 'jwt-credentials', 'fetch-image', 'extract-article']),
       userWorker: null,
+      operatorProxyOptOut: false,
     });
     expect(snap.fetch.kind).toBe('helper');
     expect(snap.enrich.kind).toBe('helper');
@@ -38,6 +39,7 @@ describe('computeCapabilitySnapshot', () => {
     const snap = computeCapabilitySnapshot({
       helper: helperWith(['fetch', 'enrich', 'hydrate-threads']),
       userWorker: null,
+      operatorProxyOptOut: false,
     });
     expect(snap.fetch.kind).toBe('pyodide');
     expect(snap.enrich.kind).toBe('pyodide');
@@ -48,6 +50,7 @@ describe('computeCapabilitySnapshot', () => {
     const snap = computeCapabilitySnapshot({
       helper: helperWith(['fetch', 'enrich', 'jwt-credentials']),
       userWorker: null,
+      operatorProxyOptOut: false,
     });
     expect(snap.threads.kind).toBe('pyodide');
   });
@@ -56,6 +59,7 @@ describe('computeCapabilitySnapshot', () => {
     const snap = computeCapabilitySnapshot({
       helper: helperWith(['fetch']),
       userWorker: { url: 'https://my.worker.dev' },
+      operatorProxyOptOut: false,
     });
     expect(snap.images).toEqual({ kind: 'user-worker', url: 'https://my.worker.dev' });
   });
@@ -64,6 +68,7 @@ describe('computeCapabilitySnapshot', () => {
     const snap = computeCapabilitySnapshot({
       helper: helperWith([]),
       userWorker: null,
+      operatorProxyOptOut: false,
     });
     expect(snap.images).toEqual({ kind: 'operator-worker' });
   });
@@ -72,6 +77,7 @@ describe('computeCapabilitySnapshot', () => {
     const snap = computeCapabilitySnapshot({
       helper: helperWith([]),
       userWorker: null,
+      operatorProxyOptOut: false,
     });
     expect(snap.articles).toEqual({ kind: 'none' });
   });
@@ -80,6 +86,7 @@ describe('computeCapabilitySnapshot', () => {
     const snap = computeCapabilitySnapshot({
       helper: helperWith([]),
       userWorker: { url: 'https://my.worker.dev' },
+      operatorProxyOptOut: false,
     });
     expect(snap.articles).toEqual({ kind: 'user-worker', url: 'https://my.worker.dev' });
   });
@@ -88,6 +95,7 @@ describe('computeCapabilitySnapshot', () => {
     const snap = computeCapabilitySnapshot({
       helper: { status: 'unavailable' },
       userWorker: null,
+      operatorProxyOptOut: false,
     });
     expect(snap.helper.detected).toBe(false);
     expect(snap.fetch.kind).toBe('pyodide');
@@ -97,6 +105,7 @@ describe('computeCapabilitySnapshot', () => {
     const snap = computeCapabilitySnapshot({
       helper: { status: 'unavailable' },
       userWorker: { url: 'https://my.worker.dev' },
+      operatorProxyOptOut: false,
     });
     expect(snap.images).toEqual({ kind: 'user-worker', url: 'https://my.worker.dev' });
     expect(snap.articles).toEqual({ kind: 'user-worker', url: 'https://my.worker.dev' });
