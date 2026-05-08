@@ -20,6 +20,17 @@ export function consumeLibraryScroll(): number | null {
   return y;
 }
 
+/**
+ * Discard any saved scroll position without consuming it. Use when the
+ * user explicitly chooses to navigate to the top of the Library — e.g.,
+ * the "Library" link in a post's backup-status footer — so the next
+ * Library mount lands at the top instead of jumping to a stale per-card
+ * scroll position from the previous Library visit.
+ */
+export function clearLibraryScroll(): void {
+  savedY = null;
+}
+
 /** For tests only. */
 export function _resetLibraryScrollForTests(): void {
   savedY = null;

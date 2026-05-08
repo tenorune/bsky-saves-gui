@@ -37,17 +37,18 @@
     }
   });
 
-  // Restore window scroll once the inventory is ready and the post list
-  // has rendered. rAF defers to after layout so window.scrollTo isn't
-  // clamped against a 0-height list. didRestoreScroll guards the reactive
-  // block so a later store update (e.g., refresh completing) doesn't
-  // re-yank scroll back to the saved position.
+  // Always start the Library at the top, then optionally restore a
+  // previously-saved scroll position (set when the user clicked into a
+  // post). rAF defers to after layout so window.scrollTo isn't clamped
+  // against a 0-height list. didRestoreScroll guards the reactive block
+  // so a later store update (e.g., refresh completing) doesn't re-yank
+  // scroll back to the saved position.
   $: if (!didRestoreScroll && $inventoryState.status === 'ready') {
     didRestoreScroll = true;
     const y = consumeLibraryScroll();
-    if (y !== null && y > 0) {
-      requestAnimationFrame(() => window.scrollTo(0, y));
-    }
+    requestAnimationFrame(() => {
+      window.scrollTo(0, y !== null && y > 0 ? y : 0);
+    });
   }
 
   function open(save: Save): void {

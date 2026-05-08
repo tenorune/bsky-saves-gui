@@ -8,28 +8,12 @@
   import { imageHydration, articleHydration } from '$lib/hydration-state';
   import { getSavedImageUrls } from '$lib/image-store';
   import { getPostBackupStatus } from '$lib/post-backup-status';
+  import { extractImageUrlsFromSave } from '$lib/extract-image-urls';
+  import { clearLibraryScroll } from '$lib/library-scroll';
   import BackupFailuresModal from './BackupFailuresModal.svelte';
   import { describeAvailableImageBackend, describeArticleBackend } from '$lib/describe-backend';
 
   export let save: Save;
-
-  function imageUrlsForSave(s: Save): string[] {
-    const out = new Set<string>();
-    const collect = (arr: unknown) => {
-      if (!Array.isArray(arr)) return;
-      for (const img of arr) {
-        if (!img || typeof img !== 'object') continue;
-        const url = (img as Record<string, unknown>).url;
-        if (typeof url === 'string' && /^https?:\/\//.test(url)) out.add(url);
-      }
-    };
-    collect((s as Record<string, unknown>).images);
-    const embed = (s as Record<string, unknown>).embed;
-    if (embed && typeof embed === 'object') {
-      collect((embed as Record<string, unknown>).images);
-    }
-    return [...out];
-  }
 
   function articleUrlForSave(s: Save): string | null {
     const embed = (s as Record<string, unknown>).embed;
@@ -38,7 +22,11 @@
     return typeof url === 'string' && /^https?:\/\//.test(url) ? url : null;
   }
 
-  $: imageUrls = imageUrlsForSave(save);
+  // Image URLs reachable from the save: the post itself, the quoted
+  // post, and any thread replies (including the quoted post's thread).
+  // Mirrors bsky-saves' image-iteration so backup-status reflects every
+  // image the user can see when reading the post.
+  $: imageUrls = extractImageUrlsFromSave(save);
   $: articleUrl = articleUrlForSave(save);
 
   let savedImageUrls = new Set<string>();
@@ -78,6 +66,20 @@
       .filter((f) => f.url === articleUrl)
       .map((f) => ({ ...f, type: 'article' as const })),
   ];
+
+  // Subject phrase for the library-link branch: "Image" / "Images" /
+  // "Article" / "Image and Article" / "Images and Article". Same logic
+  // as in post-backup-status.ts; duplicated here so the link can be
+  // rendered as a real anchor (with a click handler that clears the
+  // saved Library scroll) rather than parsed out of the summary text.
+  $: librarySubject = (() => {
+    const hasImages = status.images.total > 0;
+    const hasArticle = status.article !== null;
+    const imageWord = status.images.total === 1 ? 'Image' : 'Images';
+    if (hasImages && hasArticle) return `${imageWord} and Article`;
+    if (hasImages) return imageWord;
+    return 'Article';
+  })();
 </script>
 
 {#if status.hasAssets}
@@ -95,7 +97,7 @@
         {status.summary}
       </button>
     {:else if status.link === 'library'}
-      Not yet saved — <a class="post-backup-overlay__button" href="#/library">go to Library to save</a>.
+      {librarySubject} not yet backed up in the <a class="post-backup-overlay__button" href="#/library" on:click={clearLibraryScroll}>Library</a>.
     {:else if status.link === 'setup'}
       Not yet saved — <a class="post-backup-overlay__button" href="#/settings">set up a backend</a>.
     {:else}

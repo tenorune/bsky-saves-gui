@@ -116,7 +116,20 @@ export function getPostBackupStatus(
     summary = '';
   } else if (allPending && !hydrating) {
     if (input.setupAvailable) {
-      summary = 'Not yet saved — go to Library to save.';
+      // Differentiated copy by what's missing: "Image" / "Images" /
+      // "Article" / "Image and Article" / "Images and Article". The
+      // PostBackupOverlay component renders the trailing "Library" as
+      // a link that clears the saved scroll, so the user lands at the
+      // top of the Library instead of a stale per-card position.
+      const hasImages = images.total > 0;
+      const hasArticle = article !== null;
+      const imageWord = images.total === 1 ? 'Image' : 'Images';
+      const subject = hasImages && hasArticle
+        ? `${imageWord} and Article`
+        : hasImages
+          ? imageWord
+          : 'Article';
+      summary = `${subject} not yet backed up in the Library.`;
       link = 'library';
     } else {
       summary = 'Not yet saved — set up a backend.';

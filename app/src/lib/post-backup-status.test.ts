@@ -27,7 +27,7 @@ describe('getPostBackupStatus', () => {
     expect(r.hasAssets).toBe(false);
   });
 
-  it('returns "Not yet saved — go to Library to save." when a backend is available', () => {
+  it('returns "Images not yet backed up in the Library." for multiple pending images', () => {
     const r = getPostBackupStatus({
       save: baseSave,
       imageUrlsInPost: ['https://i/1', 'https://i/2', 'https://i/3'],
@@ -37,9 +37,65 @@ describe('getPostBackupStatus', () => {
       articleHydration: idle,
       setupAvailable: true,
     });
-    expect(r.summary).toBe('Not yet saved — go to Library to save.');
+    expect(r.summary).toBe('Images not yet backed up in the Library.');
     expect(r.link).toBe('library');
     expect(r.anyFailed).toBe(false);
+  });
+
+  it('uses singular "Image" when only one pending image and no article', () => {
+    const r = getPostBackupStatus({
+      save: baseSave,
+      imageUrlsInPost: ['https://i/1'],
+      articleUrlInPost: null,
+      savedImageUrls: new Set(),
+      imageHydration: idle,
+      articleHydration: idle,
+      setupAvailable: true,
+    });
+    expect(r.summary).toBe('Image not yet backed up in the Library.');
+    expect(r.link).toBe('library');
+  });
+
+  it('says "Article not yet backed up in the Library." for an article-only pending post', () => {
+    const r = getPostBackupStatus({
+      save: baseSave,
+      imageUrlsInPost: [],
+      articleUrlInPost: 'https://a/1',
+      savedImageUrls: new Set(),
+      imageHydration: idle,
+      articleHydration: idle,
+      setupAvailable: true,
+    });
+    expect(r.summary).toBe('Article not yet backed up in the Library.');
+    expect(r.link).toBe('library');
+  });
+
+  it('combines as "Image and Article" for one pending image plus an article', () => {
+    const r = getPostBackupStatus({
+      save: baseSave,
+      imageUrlsInPost: ['https://i/1'],
+      articleUrlInPost: 'https://a/1',
+      savedImageUrls: new Set(),
+      imageHydration: idle,
+      articleHydration: idle,
+      setupAvailable: true,
+    });
+    expect(r.summary).toBe('Image and Article not yet backed up in the Library.');
+    expect(r.link).toBe('library');
+  });
+
+  it('combines as "Images and Article" for multiple pending images plus an article', () => {
+    const r = getPostBackupStatus({
+      save: baseSave,
+      imageUrlsInPost: ['https://i/1', 'https://i/2'],
+      articleUrlInPost: 'https://a/1',
+      savedImageUrls: new Set(),
+      imageHydration: idle,
+      articleHydration: idle,
+      setupAvailable: true,
+    });
+    expect(r.summary).toBe('Images and Article not yet backed up in the Library.');
+    expect(r.link).toBe('library');
   });
 
   it('returns "Not yet saved — set up a backend." when no backend is available', () => {

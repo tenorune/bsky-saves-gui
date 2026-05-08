@@ -42,6 +42,18 @@ function collectFromSave(entry: unknown, out: Set<string>): void {
   }
 }
 
+/**
+ * Distinct https?:// image URLs reachable from a single save — same four
+ * locations as extractImageUrls, scoped to one save. Used by the post
+ * footer to compute backup status across the post itself, the quoted
+ * post, and any thread replies.
+ */
+export function extractImageUrlsFromSave(save: unknown): string[] {
+  const out = new Set<string>();
+  collectFromSave(save, out);
+  return [...out];
+}
+
 export function extractImageUrls(inventory: unknown): string[] {
   if (!inventory || typeof inventory !== 'object') return [];
   const inv = inventory as { saves?: unknown };
