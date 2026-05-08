@@ -56,7 +56,12 @@ describe('startLibraryRefresh', () => {
   });
 
   it('kicks off image and article hydration after a successful refresh when toggles are on', async () => {
-    // Asset toggles default to all-on, so no extra setup needed.
+    // Defaults are all-off as of the first-time-use change; flip them on
+    // for this test so we exercise the post-refresh hydration path.
+    const { setAssetToggle } = await import('./asset-toggles');
+    await setAssetToggle('images', true);
+    await setAssetToggle('articles', true);
+
     const inv = { saves: [{ uri: 'at://x' }] };
     const orchestrate = vi.fn().mockResolvedValue(inv);
     const saveInventory = vi.fn().mockResolvedValue(undefined);

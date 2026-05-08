@@ -16,9 +16,9 @@ describe('assetToggles', () => {
     _resetAssetTogglesForTests();
   });
 
-  it('defaults all three to on', () => {
+  it('defaults all three to off (first-time-use)', () => {
     const t = get(assetToggles);
-    expect(t).toEqual<AssetTogglesShape>({ threads: true, images: true, articles: true });
+    expect(t).toEqual<AssetTogglesShape>({ threads: false, images: false, articles: false });
   });
 
   it('setAssetToggle updates the store and persists', async () => {
@@ -31,7 +31,7 @@ describe('assetToggles', () => {
 
   it('loadAssetToggles tolerates a missing record by keeping defaults', async () => {
     await loadAssetToggles();
-    expect(get(assetToggles)).toEqual<AssetTogglesShape>({ threads: true, images: true, articles: true });
+    expect(get(assetToggles)).toEqual<AssetTogglesShape>({ threads: false, images: false, articles: false });
   });
 });
 
@@ -51,7 +51,8 @@ describe('threads-toggle-on triggers thread hydration', () => {
 
   it('does not call onThreadsToggleOn when threads is set to its existing value', async () => {
     const onThreadsToggleOn = vi.fn();
-    await setAssetToggle('threads', true, { onThreadsToggleOn });
+    // Defaults are off; set to false (existing value) — no fire.
+    await setAssetToggle('threads', false, { onThreadsToggleOn });
     expect(onThreadsToggleOn).not.toHaveBeenCalled();
   });
 

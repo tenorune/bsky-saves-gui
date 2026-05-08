@@ -2,7 +2,8 @@
   import { onMount } from 'svelte';
   import { get } from 'svelte/store';
   import { inventoryState, loadFromDb } from '$lib/inventory-loader';
-  import { saveInventory, clearInventory } from '$lib/inventory-store';
+  import { clearInventory, saveInventory } from '$lib/inventory-store';
+  import { triggerThreadHydration, triggerImageHydration, triggerArticleHydration } from '$lib/asset-trigger';
   import { clearCredentials } from '$lib/credentials-store';
   import { clearAccount } from '$lib/account-store';
   import { lastSession, clearLastSession } from '$lib/last-session';
@@ -15,8 +16,8 @@
     type BackupPrefs,
   } from '$lib/backup-prefs';
   import { config } from '$lib/config';
-  import { startImageBackup, cancelImageBackup } from '$lib/start-image-backup';
-  import { startArticleBackup, cancelArticleBackup } from '$lib/start-article-backup';
+  import { cancelImageBackup } from '$lib/start-image-backup';
+  import { cancelArticleBackup } from '$lib/start-article-backup';
   import { clearImageBlobs } from '$lib/image-store';
   import { clearFailures } from '$lib/failure-store';
   import { resetImageHydration, resetArticleHydration } from '$lib/hydration-state';
@@ -28,10 +29,7 @@
   import { assetToggles, setAssetToggle, loadAssetToggles } from '$lib/asset-toggles';
   import { installHintDismissed, loadInstallHintPref } from '$lib/install-hint-pref';
   import InstallHelperHint from '../components/library-status/InstallHelperHint.svelte';
-  import { threadHydrator } from '$lib/thread-hydrator';
   import { capabilitySnapshot, initCapabilitySnapshot } from '$lib/capability-snapshot';
-  import { signInDraft } from '$lib/sign-in-draft';
-  import { loadInventory } from '$lib/inventory-store';
 
   let status = '';
   let error = '';
@@ -112,37 +110,9 @@
     void setAssetToggle('threads', checked, { onThreadsToggleOn: triggerThreadHydration });
   }
 
-  async function triggerThreadHydration(): Promise<void> {
-    const inv = (await loadInventory()) as { saves: { uri: string }[] } | null;
-    if (!inv) return;
-    const draft = get(signInDraft);
-    const session = get(lastSession);
-    const credentials = draft && draft.appPassword
-      ? { handle: draft.handle, appPassword: draft.appPassword, pds: draft.pds }
-      : session
-        ? { accessJwt: session.accessJwt, refreshJwt: session.refreshJwt, did: session.did, pds: session.pds }
-        : null;
-    if (!credentials) return;
-    const out = await threadHydrator.start({
-      backend: get(capabilitySnapshot).threads,
-      origin: config.helperOrigin,
-      inventory: inv,
-      credentials,
-    });
-    await saveInventory(out);
-  }
-
-  async function triggerImageHydration(): Promise<void> {
-    const inv = await loadInventory();
-    if (!inv) return;
-    void startImageBackup(inv);
-  }
-
-  async function triggerArticleHydration(): Promise<void> {
-    const inv = await loadInventory();
-    if (!inv) return;
-    void startArticleBackup(inv);
-  }
+  // Trigger functions live in $lib/asset-trigger so the Library hub's
+  // row-badge toggles use the exact same code path. See that module for
+  // the canonical implementations.
 
   $: libraryFetchedAt = (() => {
     const s = $inventoryState;

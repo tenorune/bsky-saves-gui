@@ -10,7 +10,9 @@ export interface AssetTogglesShape {
 }
 
 const KEY = 'asset-toggles:v1';
-const DEFAULTS: AssetTogglesShape = { threads: true, images: true, articles: true };
+// First-time-use default: all backups OFF. The user opts in per asset
+// via the Settings checkboxes or the Library hub row badges.
+const DEFAULTS: AssetTogglesShape = { threads: false, images: false, articles: false };
 
 const store = writable<AssetTogglesShape>(DEFAULTS);
 export const assetToggles: Readable<AssetTogglesShape> = { subscribe: store.subscribe };

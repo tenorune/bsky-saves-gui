@@ -1,11 +1,12 @@
 <script lang="ts">
   import { capabilitySnapshot } from '$lib/capability-snapshot';
-  import { assetToggles } from '$lib/asset-toggles';
+  import { assetToggles, setAssetToggle } from '$lib/asset-toggles';
   import { installHintDismissed } from '$lib/install-hint-pref';
   import { libraryRefreshState } from '$lib/library-refresh';
   import { imageHydration, articleHydration, threadProgress } from '$lib/hydration-state';
   import { computeDominantBackend } from '$lib/dominant-backend';
   import { isHelperOutdated } from '$lib/min-helper-version';
+  import { triggerThreadHydration, triggerImageHydration, triggerArticleHydration } from '$lib/asset-trigger';
   import AssetRow from './library-status/AssetRow.svelte';
   import AuthErrorBanner from './library-status/AuthErrorBanner.svelte';
   import OutdatedHelperBanner from './library-status/OutdatedHelperBanner.svelte';
@@ -17,6 +18,19 @@
   export let onViewImageFailures: (() => void) | null = null;
   export let onViewArticleFailures: (() => void) | null = null;
   export let onViewThreadFailures: (() => void) | null = null;
+
+  // Wire row badges to the same persistent state Settings's checkboxes use.
+  // Off→on flip kicks off the matching hydrator over the existing inventory
+  // (mirrors Settings's behavior).
+  function toggleThreads(next: boolean) {
+    void setAssetToggle('threads', next, { onThreadsToggleOn: triggerThreadHydration });
+  }
+  function toggleImages(next: boolean) {
+    void setAssetToggle('images', next, { onImagesToggleOn: triggerImageHydration });
+  }
+  function toggleArticles(next: boolean) {
+    void setAssetToggle('articles', next, { onArticlesToggleOn: triggerArticleHydration });
+  }
 
   $: snap = $capabilitySnapshot;
   $: toggles = $assetToggles;
@@ -106,6 +120,7 @@
     failed={threadsFailed}
     progress={threadsProgress}
     onViewFailures={onViewThreadFailures}
+    onToggle={toggleThreads}
   />
   <AssetRow
     label="Images"
@@ -118,6 +133,7 @@
     progress={imagesProgressFrac}
     onSetup={onSetupImages}
     onViewFailures={onViewImageFailures}
+    onToggle={toggleImages}
   />
   <AssetRow
     label="Articles"
@@ -130,6 +146,7 @@
     progress={articlesProgressFrac}
     onSetup={onSetupArticles}
     onViewFailures={onViewArticleFailures}
+    onToggle={toggleArticles}
   />
 
   {#if pyodideOnly && !$installHintDismissed}

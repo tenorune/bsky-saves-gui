@@ -17,19 +17,41 @@
   export let onSetup: (() => void) | null = null;
   /** View failures callback shown when failed > 0. */
   export let onViewFailures: (() => void) | null = null;
+  /**
+   * When provided, the on/off badge becomes a clickable toggle button
+   * (with hover state). The callback receives the new value the user is
+   * requesting. Same effect as flipping the matching Settings checkbox.
+   */
+  export let onToggle: ((next: boolean) => void) | null = null;
+
+  function handleToggle() {
+    onToggle?.(!on);
+  }
 </script>
 
 <div class="row">
   <span class="label">{label}</span>
-  {#if !on}
+  {#if onToggle}
+    <button
+      type="button"
+      class="badge badge--toggle"
+      class:badge--on={on}
+      class:badge--off={!on}
+      on:click={handleToggle}
+      aria-pressed={on}
+      aria-label={`${label} backup: ${on ? 'on' : 'off'} — click to toggle`}
+    >{on ? 'on' : 'off'}</button>
+  {:else if on}
+    <span class="badge badge--on">on</span>
+  {:else}
     <span class="badge badge--off">off</span>
-  {:else if !backendAvailable}
+  {/if}
+  {#if on && !backendAvailable}
     <span class="needs-setup">no backend available</span>
     {#if onSetup}
       <button type="button" class="action-link" on:click={onSetup}>Set up</button>
     {/if}
-  {:else}
-    <span class="badge badge--on">on</span>
+  {:else if on && backendAvailable}
     {#if total !== null && fetched !== null}
       <span>
         {fetched} of {total}
@@ -79,6 +101,25 @@
     border-color: color-mix(in oklab, mediumseagreen 35%, transparent);
   }
   .badge--off { opacity: 0.55; }
+  .badge--toggle {
+    font: inherit;
+    font-size: 0.75rem;
+    cursor: pointer;
+    user-select: none;
+    transition: background 100ms ease, border-color 100ms ease, opacity 100ms ease;
+  }
+  .badge--toggle:hover.badge--off {
+    opacity: 0.85;
+    background: color-mix(in oklab, CanvasText 8%, Canvas);
+  }
+  .badge--toggle:hover.badge--on {
+    background: color-mix(in oklab, mediumseagreen 28%, Canvas);
+    border-color: color-mix(in oklab, mediumseagreen 50%, transparent);
+  }
+  .badge--toggle:focus-visible {
+    outline: 2px solid color-mix(in oklab, royalblue 70%, transparent);
+    outline-offset: 2px;
+  }
   .progress-bar {
     flex-basis: 100%;
     height: 4px;
