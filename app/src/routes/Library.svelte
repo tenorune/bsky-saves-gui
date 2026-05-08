@@ -124,10 +124,16 @@
 
   $: failuresInventory = $inventoryState.status === 'ready' ? $inventoryState.inventory : null;
 
-  // Indeterminate progress bar under the Library title while fetch is in
-  // flight. We don't know the post total in advance — pages stream in via the
-  // helper's cursor — so an oscillating bar is more honest than a count.
-  $: fetchRunning = $fetchProgress.status === 'running';
+  // Indeterminate progress bar under the Library title for the entire
+  // "we're fetching" phase — from sign-in submit through to fetch
+  // completion. This intentionally INCLUDES the Pyodide-load phase
+  // (helper-absent first run takes ~10s to load WASM + bsky-saves before
+  // the fetcher itself starts), so the user always sees an animated
+  // signal that something's happening, not just "First fetch in
+  // progress…" sitting still.
+  $: fetchRunning =
+    $libraryRefreshState.status === 'running' &&
+    $fetchProgress.status !== 'done';
 </script>
 
 <section class="route route--library" use:slideFromRight>
