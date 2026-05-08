@@ -60,16 +60,19 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem 1rem;
-    align-items: baseline;
+    align-items: center;
   }
   .label { font-weight: 600; min-width: 4.5rem; display: inline-block; }
   .muted { opacity: 0.7; }
   .badge {
     font-size: 0.75rem;
-    padding: 0.05rem 0.45rem;
+    padding: 0.1rem 0.45rem;
     border-radius: 999px;
     border: 1px solid color-mix(in oklab, CanvasText 25%, transparent);
     color: color-mix(in oklab, CanvasText 75%, Canvas);
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
   }
   .badge--on {
     background: color-mix(in oklab, mediumseagreen 18%, Canvas);
@@ -79,7 +82,7 @@
   .progress-bar {
     flex-basis: 100%;
     height: 4px;
-    margin-top: 0.35rem;
+    margin-top: -0.15rem;
     background: color-mix(in oklab, CanvasText 12%, transparent);
     border-radius: 999px;
     overflow: hidden;
