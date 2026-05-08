@@ -128,7 +128,7 @@ export async function extractArticleViaWorker(
     let reason = `user worker returned ${res.status}`;
     try {
       const body = (await res.json()) as { error?: string };
-      if (typeof body.error === 'string') reason = body.error;
+      if (typeof body.error === 'string') reason = `${res.status} ${body.error}`;
     } catch {
       // keep default reason
     }
