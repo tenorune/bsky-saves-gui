@@ -19,6 +19,7 @@
   import { config } from '$lib/config';
   import { cancelImageBackup } from '$lib/start-image-backup';
   import { cancelArticleBackup } from '$lib/start-article-backup';
+  import { cancelThreadHydration } from '$lib/thread-hydrator';
   import { clearImageBlobs } from '$lib/image-store';
   import { clearFailures } from '$lib/failure-store';
   import { resetImageHydration, resetArticleHydration } from '$lib/hydration-state';
@@ -102,18 +103,25 @@
 
   $: toggles = $assetToggles;
 
+  // Off→on flip kicks off the matching hydrator over the existing
+  // inventory; on→off cancels any in-flight hydration so the user's
+  // intent takes effect immediately rather than after the loop drains.
+  // Mirrors the Library Hub badge behavior.
   function handleImagesToggleChange(event: Event): void {
     const checked = (event.currentTarget as HTMLInputElement).checked;
+    if (!checked) cancelImageBackup();
     void setAssetToggle('images', checked, { onImagesToggleOn: triggerImageHydration });
   }
 
   function handleArticlesToggleChange(event: Event): void {
     const checked = (event.currentTarget as HTMLInputElement).checked;
+    if (!checked) cancelArticleBackup();
     void setAssetToggle('articles', checked, { onArticlesToggleOn: triggerArticleHydration });
   }
 
   function handleThreadsToggleChange(event: Event): void {
     const checked = (event.currentTarget as HTMLInputElement).checked;
+    if (!checked) cancelThreadHydration();
     void setAssetToggle('threads', checked, { onThreadsToggleOn: triggerThreadHydration });
   }
 
