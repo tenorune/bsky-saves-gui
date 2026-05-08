@@ -19,7 +19,7 @@
 
 import { threadProgress, resetThreadProgress } from './hydration-state';
 import { hydrateThreads as defaultHydrateThreads, type FetchSavesCredentials, type HydrateThreadsResponse } from './helper-client';
-import { getSharedDriver } from './pyodide-worker-driver';
+import { getSharedDriver, cancelSharedDriver } from './pyodide-worker-driver';
 import type { PyodideWorkerDriver } from './pyodide-worker-driver';
 import { config } from './config';
 import { saveFailures } from './failure-store';
@@ -41,21 +41,29 @@ export interface ThreadHydratorDeps {
 }
 
 let _cancelled = false;
+let _activeBackend: 'helper' | 'pyodide' | null = null;
 
 /**
  * Cancel an in-flight thread hydration. The helper path checks this flag
- * between chunk fetches; the Pyodide path can't interrupt the worker mid-run
- * but discards the result on completion. Either way, the threadProgress
+ * between chunk fetches. The Pyodide path can't be interrupted cooperatively
+ * (the Python loop runs to completion in the worker, generating network
+ * traffic the whole time), so we terminate the shared worker outright when
+ * threads are the active Pyodide consumer. Either way, the threadProgress
  * store transitions to 'cancelled' so the UI flips back.
  */
 export function cancelThreadHydration(): void {
   _cancelled = true;
   threadProgress.update((p) => ({ ...p, status: 'cancelled' }));
+  if (_activeBackend === 'pyodide') {
+    _activeBackend = null;
+    cancelSharedDriver();
+  }
 }
 
 export const threadHydrator = {
   async start(input: ThreadHydratorInput, deps: ThreadHydratorDeps = {}): Promise<unknown> {
     _cancelled = false;
+    _activeBackend = input.backend.kind;
     resetThreadProgress();
     try {
       if (input.backend.kind === 'helper') {
@@ -174,6 +182,8 @@ export const threadHydrator = {
       if (_cancelled) return input.inventory;
       threadProgress.update((p) => ({ ...p, status: 'cancelled' }));
       throw e;
+    } finally {
+      _activeBackend = null;
     }
   },
 };

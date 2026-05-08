@@ -33,6 +33,7 @@ export interface SendOptions {
 
 export class PyodideWorkerDriver {
   private _initPromise: Promise<void> | null = null;
+  private _activeReject: ((e: Error) => void) | null = null;
 
   constructor(private worker: WorkerLike) {}
 
@@ -76,18 +77,21 @@ export class PyodideWorkerDriver {
 
   private send(message: unknown, opts: SendOptions): Promise<unknown> {
     return new Promise<unknown>((resolve, reject) => {
+      const cleanup = () => {
+        this.worker.removeEventListener('message', onMessage);
+        this.worker.removeEventListener('error', onMessage);
+        if (this._activeReject === reject) this._activeReject = null;
+      };
       const onMessage = (e: MessageEvent | ErrorEvent) => {
         if ('data' in e && (e as MessageEvent).data?.type === 'log') {
           opts.onLog?.((e as MessageEvent).data.line ?? '');
           return; // log messages are not terminal
         }
         if ('data' in e && (e as MessageEvent).data?.type === 'result') {
-          this.worker.removeEventListener('message', onMessage);
-          this.worker.removeEventListener('error', onMessage);
+          cleanup();
           resolve((e as MessageEvent).data.payload);
         } else if ('data' in e && (e as MessageEvent).data?.type === 'error') {
-          this.worker.removeEventListener('message', onMessage);
-          this.worker.removeEventListener('error', onMessage);
+          cleanup();
           const data = (e as MessageEvent).data as { message?: string; name?: string };
           const msg = data.message && data.message.length > 0
             ? data.message
@@ -96,11 +100,11 @@ export class PyodideWorkerDriver {
           if (data.name) err.name = data.name;
           reject(err);
         } else if (!('data' in e)) {
-          this.worker.removeEventListener('message', onMessage);
-          this.worker.removeEventListener('error', onMessage);
+          cleanup();
           reject(new Error('pyodide worker error'));
         }
       };
+      this._activeReject = reject;
       this.worker.addEventListener('message', onMessage);
       this.worker.addEventListener('error', onMessage);
       this.worker.postMessage(message);
@@ -109,6 +113,21 @@ export class PyodideWorkerDriver {
 
   terminate(): void {
     this.worker.terminate();
+  }
+
+  /**
+   * Forcibly stop whatever the worker is currently doing. Terminates the
+   * underlying Worker (Pyodide can't be interrupted from outside) and
+   * rejects any in-flight send() promise so the caller's catch path runs.
+   * The driver is not reusable afterwards — call cancelSharedDriver()
+   * which both cancels and clears the singleton so the next consumer
+   * spawns a fresh worker.
+   */
+  cancelActive(): void {
+    this.worker.terminate();
+    const r = this._activeReject;
+    this._activeReject = null;
+    if (r) r(new Error('pyodide worker cancelled'));
   }
 }
 
@@ -123,6 +142,20 @@ export function getSharedDriver(): PyodideWorkerDriver {
     _shared = new PyodideWorkerDriver(worker);
   }
   return _shared;
+}
+
+/**
+ * Terminate any in-flight worker operation and clear the shared driver
+ * so the next caller spawns a fresh worker. Called when the user cancels
+ * an asset hydration that's running on the Pyodide path — there's no
+ * cooperative cancellation inside the Python loop, so we kill the
+ * worker outright.
+ */
+export function cancelSharedDriver(): void {
+  if (_shared) {
+    _shared.cancelActive();
+    _shared = null;
+  }
 }
 
 /** For tests only — resets the shared driver. */
