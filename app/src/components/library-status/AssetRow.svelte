@@ -188,11 +188,17 @@
     50%  { transform: translateX(200%); }
     100% { transform: translateX(-100%); }
   }
-  .backend { font-size: 0.8rem; opacity: 0.7; }
-  .off-info { opacity: 0.55; }
+  .backend {
+    font-size: 0.8rem;
+    color: color-mix(in oklab, CanvasText 70%, Canvas);
+  }
+  .off-info {
+    font-size: 0.8rem;
+    color: color-mix(in oklab, CanvasText 55%, Canvas);
+  }
   .needs-setup {
+    font-size: 0.8rem;
     color: color-mix(in oklab, CanvasText 65%, Canvas);
-    font-style: italic;
   }
   .inline-error { color: color-mix(in oklab, red 75%, CanvasText); }
   .action-link {
@@ -201,8 +207,9 @@
     background: none;
     border: 0;
     padding: 0.1rem 0.25rem;
-    color: inherit;
+    color: CanvasText;
     text-decoration: underline;
     cursor: pointer;
   }
+  .action-link.inline-error { color: color-mix(in oklab, red 75%, CanvasText); }
 </style>
