@@ -21,9 +21,11 @@
   import { rkeyOf } from '../reader/inventory-shape';
   import type { Save } from '../reader/inventory-shape';
   import { restoreHydrationFromInventory } from '$lib/restore-hydration';
+  import { saveLibraryScroll, consumeLibraryScroll } from '$lib/library-scroll';
 
   let setupOpen = false;
   let failuresOpen: 'images' | 'articles' | 'threads' | null = null;
+  let didRestoreScroll = false;
 
   onMount(async () => {
     if (get(inventoryState).status === 'loading') {
@@ -35,7 +37,21 @@
     }
   });
 
+  // Restore window scroll once the inventory is ready and the post list
+  // has rendered. rAF defers to after layout so window.scrollTo isn't
+  // clamped against a 0-height list. didRestoreScroll guards the reactive
+  // block so a later store update (e.g., refresh completing) doesn't
+  // re-yank scroll back to the saved position.
+  $: if (!didRestoreScroll && $inventoryState.status === 'ready') {
+    didRestoreScroll = true;
+    const y = consumeLibraryScroll();
+    if (y !== null && y > 0) {
+      requestAnimationFrame(() => window.scrollTo(0, y));
+    }
+  }
+
   function open(save: Save): void {
+    saveLibraryScroll();
     navigate(`/post/${rkeyOf(save.uri)}`);
   }
 
