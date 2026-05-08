@@ -7,6 +7,7 @@
   import { computeDominantBackend, prospectiveBackendName } from '$lib/dominant-backend';
   import { isHelperOutdated } from '$lib/min-helper-version';
   import { triggerThreadHydration, triggerImageHydration, triggerArticleHydration } from '$lib/asset-trigger';
+  import { disableOperatorProxy } from '$lib/disable-operator-proxy';
   import AssetRow from './library-status/AssetRow.svelte';
   import AuthErrorBanner from './library-status/AuthErrorBanner.svelte';
   import OutdatedHelperBanner from './library-status/OutdatedHelperBanner.svelte';
@@ -112,6 +113,14 @@
   }
   $: imagesOffTooltip = offTooltipFor(snap.images.kind);
   $: articlesOffTooltip = offTooltipFor(snap.articles.kind);
+
+  // When images are routed (or would be routed) through the operator's
+  // worker proxy, surface a one-click "Don't use" affordance — same
+  // effect as the matching checkbox in Settings > Advanced.
+  $: imagesProxyOptOut =
+    snap.images.kind === 'operator-worker'
+      ? { name: "operator's worker proxy", onDisable: () => void disableOperatorProxy() }
+      : null;
   // Threads only ever routes through helper or pyodide — no proxy info to surface.
 </script>
 
@@ -148,6 +157,7 @@
     onViewFailures={onViewImageFailures}
     onToggle={toggleImages}
     offTooltip={imagesOffTooltip}
+    proxyOptOut={imagesProxyOptOut}
   />
   <AssetRow
     label="Articles"

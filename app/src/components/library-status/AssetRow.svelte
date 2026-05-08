@@ -30,6 +30,14 @@
    * Null means no tooltip.
    */
   export let offTooltip: string | null = null;
+  /**
+   * When set, renders the backend name inline ("via X" when on, "would
+   * use X" when off) followed by a "Don't use" link that calls onDisable.
+   * Replaces backendLabel for this row and the link form of the off-state
+   * tooltip text. Used to give the user a one-click way to opt out of
+   * the operator's image proxy without opening Settings > Advanced.
+   */
+  export let proxyOptOut: { name: string; onDisable: () => void } | null = null;
 
   function handleToggle() {
     onToggle?.(!on);
@@ -70,7 +78,9 @@
         {/if}
       </span>
     {/if}
-    {#if backendLabel}
+    {#if proxyOptOut}
+      <span class="backend">via {proxyOptOut.name} <button type="button" class="action-link" on:click={proxyOptOut.onDisable}>Don't use</button></span>
+    {:else if backendLabel}
       <span class="backend">via {backendLabel}</span>
     {/if}
   {:else if !on && (fetched !== null || (failed && failed > 0))}
@@ -89,6 +99,9 @@
         </span>
       {/if}
     </span>
+  {/if}
+  {#if !on && proxyOptOut}
+    <span class="off-info">would use {proxyOptOut.name} <button type="button" class="action-link" on:click={proxyOptOut.onDisable}>Don't use</button></span>
   {/if}
   <!-- Progress-bar slot is rendered for every row state — off, no-backend,
        on-running, on-idle — so the row's height is constant. Track + fill

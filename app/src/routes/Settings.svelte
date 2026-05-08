@@ -9,6 +9,7 @@
   import { lastSession, clearLastSession } from '$lib/last-session';
   import { clearBeaconSent } from '$lib/beacon';
   import { loadProxyConfig, clearProxyConfig } from '$lib/proxy-config';
+  import { disableOperatorProxy } from '$lib/disable-operator-proxy';
   import {
     loadBackupPrefs,
     setOperatorProxyOptOut,
@@ -88,6 +89,11 @@
     // Recompute the capability snapshot so Library reflects the new
     // image-backend selection (operator-worker → none when opting out).
     await initCapabilitySnapshot();
+  }
+
+  async function handleDisableOperatorProxyClick() {
+    await disableOperatorProxy();
+    await reloadBackupPrefs();
   }
 
   async function reloadBackupPrefs() {
@@ -263,7 +269,7 @@
       {#if $capabilitySnapshot.images.kind === 'none'}
         <span class="backend-note">— no backend available <button type="button" class="setup-link" on:click={() => (setupModalOpen = true)}>Set up</button></span>
       {:else if prospectiveBackendName($capabilitySnapshot.images.kind)}
-        <span class="backend-note">— {toggles.images ? 'via' : 'would use'} {prospectiveBackendName($capabilitySnapshot.images.kind)}</span>
+        <span class="backend-note">— {toggles.images ? 'via' : 'would use'} {prospectiveBackendName($capabilitySnapshot.images.kind)}{#if $capabilitySnapshot.images.kind === 'operator-worker'} <button type="button" class="setup-link" on:click={handleDisableOperatorProxyClick}>Don't use</button>{/if}</span>
       {/if}
     </label>
     <label class="checkbox">
