@@ -55,7 +55,7 @@ type Inbound =
   | { type: 'fetchOnly'; input: FetchOnlyInput }
   | { type: 'enrichOnly'; input: EnrichOnlyInput }
   | { type: 'threadsOnly'; input: ThreadsOnlyInput }
-  | { type: 'snapshot-request' };
+  | { type: 'cancel-hydration' };
 
 interface InitReadyMessage {
   readonly type: 'init-ready';
@@ -72,16 +72,18 @@ interface ResultMessage {
   readonly type: 'result';
   readonly payload: unknown;
 }
-interface SnapshotMessage {
-  readonly type: 'snapshot';
-  readonly inventory: unknown | null;
+interface ProgressMessage {
+  readonly type: 'progress';
+  readonly succeeded: number;
+  readonly failed: number;
+  readonly remaining: number;
 }
 interface ErrorMessage {
   readonly type: 'error';
   readonly message: string;
   readonly name: string;
 }
-type Outbound = InitReadyMessage | LogMessage | FetchResultMessage | ResultMessage | SnapshotMessage | ErrorMessage;
+type Outbound = InitReadyMessage | LogMessage | FetchResultMessage | ResultMessage | ProgressMessage | ErrorMessage;
 
 interface PyodideLike {
   runPythonAsync(code: string): Promise<unknown>;
@@ -94,6 +96,13 @@ interface PyodideLike {
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 let pyodide: PyodideLike | null = null;
+
+// Set by `cancel-hydration` messages and read between batches in
+// runThreadsOnly's JS-driven loop. The worker's JS event loop is blocked
+// while Python is mid-fetch via the sync-XHR shim, so cancellation is
+// processed at the next batch boundary (one fetch's worth of latency,
+// typically <2s, up to ~30s on AppView timeout).
+let _hydrationCancelled = false;
 
 const post = (msg: Outbound) => ctx.postMessage(msg);
 const log = (line: string) => post({ type: 'log', line });
@@ -163,7 +172,7 @@ await micropip.install('pyodide-http')
 import pyodide_http
 pyodide_http.patch_all()
 await micropip.install('httpx')
-await micropip.install('bsky-saves==0.4.2', deps=False)
+await micropip.install('bsky-saves==0.4.3', deps=False)
 
 # pyodide-http patches urllib/urllib3/requests but NOT httpx, which uses
 # httpcore that tries raw sockets. Replace the httpx surface bsky-saves
@@ -406,6 +415,14 @@ _bsky_enrich.enrich_inventory(Path('${INVENTORY_PATH}'))
   return result;
 }
 
+// Batch size for the JS-driven hydrate_threads loop. Each batch runs one
+// fetch + atomic flush in Python, then JS yields via setTimeout(0) so the
+// worker's message queue (cancel-hydration, etc.) can drain. Larger batches
+// amortize per-call overhead; smaller batches mean more responsive cancel.
+// 3 is a balance: typical cancel waits ~1-3 fetches, worst-case bounded by
+// bsky-saves' httpx TIMEOUT (30s) per in-flight fetch.
+const THREADS_BATCH_SIZE = 3;
+
 async function runThreadsOnly(input: ThreadsOnlyInput): Promise<unknown> {
   if (!pyodide) throw new Error('Worker not initialised');
 
@@ -419,12 +436,35 @@ with open('${INVENTORY_PATH}', 'w') as _f:
 `);
 
   log('Hydrating threads…');
+  _hydrationCancelled = false;
+
+  // Stage the path / module import once; each batch then just calls
+  // hydrate_threads(_inv_path, limit=N) and JSON-serializes the 3-tuple
+  // return so it crosses the JS↔Python boundary as a plain string (no
+  // PyProxy lifetime to manage).
   await pyodide.runPythonAsync(`
 from pathlib import Path
 import bsky_saves.threads as _bsky_threads
-hydrated, skipped = _bsky_threads.hydrate_threads(Path('${INVENTORY_PATH}'))
-print(f'bsky-saves: thread hydration done — {hydrated} hydrated, {skipped} skipped')
+import json as _bsj
+_inv_path = Path('${INVENTORY_PATH}')
 `);
+
+  let totalSucceeded = 0;
+  let totalFailed = 0;
+  while (!_hydrationCancelled) {
+    const json = (await pyodide.runPythonAsync(
+      `_bsj.dumps(list(_bsky_threads.hydrate_threads(_inv_path, limit=${THREADS_BATCH_SIZE})))`,
+    )) as string;
+    const [s, f, r] = JSON.parse(json) as [number, number, number];
+    totalSucceeded += s;
+    totalFailed += f;
+    post({ type: 'progress', succeeded: totalSucceeded, failed: totalFailed, remaining: r });
+    if (r === 0) break;
+    // Yield to the worker's message queue so cancel-hydration messages can
+    // be processed between batches. setTimeout(0) queues a macrotask, which
+    // runs after pending message events.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  }
 
   log('Reading inventory…');
   const result = readInventoryFromDisk();
@@ -435,22 +475,12 @@ print(f'bsky-saves: thread hydration done — {hydrated} hydrated, {skipped} ski
 ctx.addEventListener('message', async (event: MessageEvent<Inbound>) => {
   try {
     const msg = event.data;
-    if (msg.type === 'snapshot-request') {
-      // Read the on-disk inventory and post it back. bsky-saves >=0.4.2
-      // flushes the inventory file after each save in hydrate_threads, so
-      // this snapshot reflects everything completed up to the most recent
-      // yield-point in the loop. Returns null if no inventory has been
-      // written yet (pre-init or before the first iteration).
-      let inventory: unknown = null;
-      try {
-        if (pyodide) {
-          const raw = pyodide.FS.readFile(INVENTORY_PATH, { encoding: 'utf8' });
-          inventory = JSON.parse(raw);
-        }
-      } catch {
-        inventory = null;
-      }
-      post({ type: 'snapshot', inventory });
+    if (msg.type === 'cancel-hydration') {
+      // Set the flag synchronously; runThreadsOnly's JS-driven loop reads
+      // it between batches and breaks out, then reads the (already-flushed)
+      // inventory from disk and posts a normal `result` with the partial
+      // progress. No worker termination required.
+      _hydrationCancelled = true;
       return;
     }
     if (msg.type === 'init') {

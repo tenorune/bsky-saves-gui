@@ -19,7 +19,7 @@
 
 import { threadProgress, resetThreadProgress } from './hydration-state';
 import { hydrateThreads as defaultHydrateThreads, type FetchSavesCredentials, type HydrateThreadsResponse } from './helper-client';
-import { getSharedDriver, snapshotAndCancelSharedDriver } from './pyodide-worker-driver';
+import { getSharedDriver, requestCancelSharedDriver } from './pyodide-worker-driver';
 import type { PyodideWorkerDriver } from './pyodide-worker-driver';
 import { config } from './config';
 import { saveFailures, loadFailures } from './failure-store';
@@ -43,32 +43,27 @@ export interface ThreadHydratorDeps {
 let _cancelled = false;
 let _activeBackend: 'helper' | 'pyodide' | null = null;
 let _activeDriver: PyodideWorkerDriver | null = null;
-let _pendingSnapshot: Promise<unknown | null> | null = null;
 
 /**
- * Cancel an in-flight thread hydration. The helper path checks this flag
- * between chunk fetches and flips to 'cancelled' immediately. The Pyodide
- * path can't be interrupted cooperatively (the worker's JS event loop is
- * blocked while Python is mid-fetch via sync XHR), so we set 'cancelling'
- * and ask the worker for its on-disk inventory snapshot (bsky-saves
- * >=0.4.2 flushes after each save). The snapshot-request is processed
- * once Python yields between iterations — typically <3s, up to ~30s if
- * a request is timing out. `start()`'s catch path awaits the snapshot,
- * persists the partial inventory, and flips status to 'cancelled'.
+ * Cancel an in-flight thread hydration. The helper path checks `_cancelled`
+ * between chunk fetches and flips straight to 'cancelled'. The Pyodide path
+ * uses cooperative cancel (bsky-saves >=0.4.3): we post `cancel-hydration`
+ * to the worker and set status to 'cancelling'. The worker's JS-driven
+ * batched loop reads the flag between batches, breaks out, reads the
+ * (already-flushed) inventory from disk, and resolves the in-flight
+ * runThreadsOnly call with that partial inventory as a normal result.
+ * Cancel latency is one batch's worth of fetches — typically <3s, worst
+ * case bounded by bsky-saves' httpx TIMEOUT per in-flight fetch.
  */
 export function cancelThreadHydration(): void {
   _cancelled = true;
   if (_activeBackend === 'pyodide') {
-    _activeBackend = null;
     threadProgress.update((p) => ({ ...p, status: 'cancelling' }));
-    const drv = _activeDriver;
-    _activeDriver = null;
-    // Test-injected drivers don't go through the singleton; cancel them
-    // directly. Production callers go through the singleton helper which
-    // both snapshots the worker and clears the singleton ref.
-    _pendingSnapshot = drv
-      ? drv.requestSnapshotThenCancel()
-      : snapshotAndCancelSharedDriver();
+    if (_activeDriver) {
+      _activeDriver.requestCancel();
+    } else {
+      requestCancelSharedDriver();
+    }
   } else {
     threadProgress.update((p) => ({ ...p, status: 'cancelled' }));
   }
@@ -79,7 +74,6 @@ export const threadHydrator = {
     _cancelled = false;
     _activeBackend = input.backend.kind;
     _activeDriver = null;
-    _pendingSnapshot = null;
     resetThreadProgress();
     try {
       if (input.backend.kind === 'helper') {
@@ -169,12 +163,13 @@ export const threadHydrator = {
       const allSavesPy = input.inventory.saves;
       const skippedPy = allSavesPy.filter((s) => s.thread_replies !== undefined).length;
       const persistedPy = await loadFailures('threads');
+      const carriedFailedCount = persistedPy.length;
       threadProgress.set({
         status: 'running',
         total: allSavesPy.length,
         fetched: 0,
         skipped: skippedPy,
-        failed: persistedPy.length,
+        failed: carriedFailedCount,
         failures: [...persistedPy],
       });
       const driver = deps.driver ?? getSharedDriver();
@@ -201,46 +196,30 @@ export const threadHydrator = {
         pds: pyPds,
         preauthSession: input.preauthSession,
       }, {
-        // bsky-saves' hydrate_threads CLI loop prints `[N/M] at://...` per
-        // entry. We capture that to drive the threads progress bar in real
-        // time. Also handles `bsky-saves: K hydrated, F failed` summary at
-        // end (informational; the merged inventory drives the final state).
-        onLog: (line: string) => {
-          // bsky-saves prints "[N/M]" with M = saves needing hydration this
-          // run. We expose `fetched = N` (this-run progress) but DO NOT
-          // overwrite `total` — that's the full inventory size, set above
-          // so the cumulative display reads (fetched+skipped) of total.
-          const m = /^\s*\[(\d+)\/(\d+)\]/.exec(line);
-          if (m) {
-            const fetched = parseInt(m[1], 10);
-            if (!Number.isNaN(fetched)) {
-              threadProgress.update((p) => ({ ...p, fetched }));
-            }
-          }
+        // The worker emits a progress message after each batch of the
+        // JS-driven hydrate_threads loop with cumulative succeeded/failed
+        // and remaining-pending counts. Drive the progress store directly
+        // from these so display is accurate without parsing stdout.
+        onProgress: ({ succeeded, failed }) => {
+          threadProgress.update((p) => ({
+            ...p,
+            fetched: succeeded,
+            failed: carriedFailedCount + failed,
+          }));
         },
       });
       if (_cancelled) {
-        // Cancel raced with completion: the worker actually finished but
-        // the user asked to stop. Prefer the completed `out` (or the
-        // snapshot if the worker was already torn down) over the original
-        // input, so we don't drop the just-finished work.
-        const merged = (await consumePendingSnapshot()) ?? out;
+        // Worker resolved with the partial inventory it had on disk when
+        // the cancel flag was observed between batches. Surface that as the
+        // result; the run page persists it and refreshes the library.
         threadProgress.update((p) => ({ ...p, status: 'cancelled' }));
-        return merged;
+        return out;
       }
       // On clean completion, this run hydrated every save that needed it.
       // fetched = total - skipped - failed (failed stays as carried + new).
       threadProgress.update((p) => ({ ...p, status: 'done', fetched: Math.max(0, p.total - p.skipped - p.failed) }));
       return out;
     } catch (e) {
-      if (_cancelled) {
-        // Surface partial progress from the worker's last on-disk flush
-        // (bsky-saves >=0.4.2 writes after each save). Fall back to the
-        // input inventory if the snapshot timed out or wasn't requested.
-        const merged = (await consumePendingSnapshot()) ?? input.inventory;
-        threadProgress.update((p) => ({ ...p, status: 'cancelled' }));
-        return merged;
-      }
       threadProgress.update((p) => ({ ...p, status: 'cancelled' }));
       throw e;
     } finally {
@@ -249,28 +228,6 @@ export const threadHydrator = {
     }
   },
 };
-
-/**
- * Await and clear the in-flight snapshot promise stashed by
- * cancelThreadHydration. Returns the snapshot inventory if it has the
- * expected `saves` array, else null. Catches any error from the worker
- * round-trip so cancel paths never throw.
- */
-async function consumePendingSnapshot(): Promise<unknown | null> {
-  const p = _pendingSnapshot;
-  _pendingSnapshot = null;
-  if (!p) return null;
-  let snap: unknown | null = null;
-  try {
-    snap = await p;
-  } catch {
-    return null;
-  }
-  if (snap && typeof snap === 'object' && Array.isArray((snap as { saves?: unknown }).saves)) {
-    return snap;
-  }
-  return null;
-}
 
 function mergeThreaded(
   inv: ThreadHydratorInput['inventory'],
