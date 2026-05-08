@@ -25,8 +25,20 @@ function detectBuildBranch(): string {
 
 export default defineConfig(({ mode }) => {
   const projectRoot = fileURLToPath(new URL('.', import.meta.url));
-  const env = loadEnv(mode, projectRoot, 'VITE_');
+  // Include the PREVIEW_ prefix so PREVIEW_ALLOWED_HOSTS is picked up
+  // from `.env` files in addition to the VITE_ vars exposed to the app.
+  const env = loadEnv(mode, projectRoot, ['VITE_', 'PREVIEW_']);
   const domain = env.VITE_APP_DOMAIN ?? '';
+
+  // Comma-separated host allowlist for `pnpm preview` and `pnpm dev`.
+  // A leading dot allows any subdomain of that host. Localhost variants
+  // are always allowed regardless of this setting. Default covers
+  // `cloudflared tunnel --url http://localhost:4173`, the documented
+  // way to test a build from a phone or other off-LAN device.
+  const allowedHosts = (env.PREVIEW_ALLOWED_HOSTS ?? '.trycloudflare.com')
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
 
   return {
     root: projectRoot,
@@ -52,6 +64,8 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
+    server: { allowedHosts },
+    preview: { allowedHosts },
     resolve: {
       alias: {
         $lib: resolve(projectRoot, 'app/src/lib'),
