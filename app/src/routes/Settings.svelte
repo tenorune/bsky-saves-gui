@@ -269,7 +269,7 @@
       {#if $capabilitySnapshot.images.kind === 'none'}
         <span class="backend-note">— no backend available <button type="button" class="setup-link" on:click={() => (setupModalOpen = true)}>Set up</button></span>
       {:else if prospectiveBackendName($capabilitySnapshot.images.kind)}
-        <span class="backend-note">— {toggles.images ? 'via' : 'would use'} {prospectiveBackendName($capabilitySnapshot.images.kind)}{#if $capabilitySnapshot.images.kind === 'operator-worker'} <button type="button" class="setup-link" on:click={handleDisableOperatorProxyClick}>Don't use</button>{/if}</span>
+        <span class="backend-note">— {toggles.images ? 'via' : 'would use'} {prospectiveBackendName($capabilitySnapshot.images.kind)}{#if $capabilitySnapshot.images.kind === 'operator-worker'}{' '}<button type="button" class="setup-link" on:click={handleDisableOperatorProxyClick}>Don't use</button>{/if}</span>
       {/if}
     </label>
     <label class="checkbox">

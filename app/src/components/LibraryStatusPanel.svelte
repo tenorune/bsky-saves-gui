@@ -8,6 +8,9 @@
   import { isHelperOutdated } from '$lib/min-helper-version';
   import { triggerThreadHydration, triggerImageHydration, triggerArticleHydration } from '$lib/asset-trigger';
   import { disableOperatorProxy } from '$lib/disable-operator-proxy';
+  import { cancelImageBackup } from '$lib/start-image-backup';
+  import { cancelArticleBackup } from '$lib/start-article-backup';
+  import { cancelThreadHydration } from '$lib/thread-hydrator';
   import AssetRow from './library-status/AssetRow.svelte';
   import AuthErrorBanner from './library-status/AuthErrorBanner.svelte';
   import OutdatedHelperBanner from './library-status/OutdatedHelperBanner.svelte';
@@ -22,14 +25,19 @@
 
   // Wire row badges to the same persistent state Settings's checkboxes use.
   // Off→on flip kicks off the matching hydrator over the existing inventory
-  // (mirrors Settings's behavior).
+  // (mirrors Settings's behavior); on→off cancels any in-flight hydration
+  // for that asset so the user's intent ("don't back this up") takes effect
+  // immediately rather than after the current loop drains.
   function toggleThreads(next: boolean) {
+    if (!next) cancelThreadHydration();
     void setAssetToggle('threads', next, { onThreadsToggleOn: triggerThreadHydration });
   }
   function toggleImages(next: boolean) {
+    if (!next) cancelImageBackup();
     void setAssetToggle('images', next, { onImagesToggleOn: triggerImageHydration });
   }
   function toggleArticles(next: boolean) {
+    if (!next) cancelArticleBackup();
     void setAssetToggle('articles', next, { onArticlesToggleOn: triggerArticleHydration });
   }
 
