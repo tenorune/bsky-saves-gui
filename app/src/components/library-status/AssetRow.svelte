@@ -38,6 +38,12 @@
    * the operator's image proxy without opening Settings > Advanced.
    */
   export let proxyOptOut: { name: string; onDisable: () => void } | null = null;
+  /**
+   * Optional inline status hint (e.g. "Saving partial progress…") rendered
+   * regardless of on/off state. Used by the threads row during the
+   * 'cancelling' window where Pyodide is still flushing the inventory.
+   */
+  export let statusHint: string | null = null;
 
   function handleToggle() {
     onToggle?.(!on);
@@ -102,6 +108,9 @@
   {/if}
   {#if !on && proxyOptOut}
     <span class="off-info">would use {proxyOptOut.name} <button type="button" class="action-link" on:click={proxyOptOut.onDisable}>Don't use</button></span>
+  {/if}
+  {#if statusHint}
+    <span class="status-hint" aria-live="polite">{statusHint}</span>
   {/if}
   <!-- Progress-bar slot is rendered for every row state — off, no-backend,
        on-running, on-idle — so the row's height is constant. Track + fill
@@ -195,6 +204,11 @@
   .off-info {
     font-size: 0.8rem;
     color: color-mix(in oklab, CanvasText 55%, Canvas);
+  }
+  .status-hint {
+    font-size: 0.8rem;
+    font-style: italic;
+    color: color-mix(in oklab, CanvasText 60%, Canvas);
   }
   .needs-setup {
     font-size: 0.8rem;

@@ -52,12 +52,13 @@ describe('threadHydrator (pyodide path)', () => {
     // runThreadsOnly stays pending until the cancel rejects it (mirrors
     // production: cancelActive() rejects the in-flight send()).
     let rejectRun: ((e: Error) => void) | null = null;
+    let resolveSnapshot: (v: unknown | null) => void = () => {};
     const fakeDriver = {
       initialise: vi.fn().mockResolvedValue(undefined),
       runThreadsOnly: vi.fn(() => new Promise((_resolve, reject) => { rejectRun = reject; })),
-      requestSnapshotThenCancel: vi.fn().mockImplementation(async () => {
+      requestSnapshotThenCancel: vi.fn().mockImplementation((): Promise<unknown | null> => {
         rejectRun?.(new Error('pyodide worker cancelled'));
-        return partialSnapshot;
+        return new Promise<unknown | null>((resolve) => { resolveSnapshot = resolve; });
       }),
     };
     const inputInventory = { saves: [{ uri: 'at://a' }, { uri: 'at://b' }] };
@@ -73,9 +74,15 @@ describe('threadHydrator (pyodide path)', () => {
       await new Promise((r) => setTimeout(r, 5));
     }
     cancelThreadHydration();
+    // Status flips to 'cancelling' immediately while we wait for the
+    // worker's on-disk snapshot.
+    expect(get(threadProgress).status).toBe('cancelling');
+    // Now let the snapshot land — start() resumes, persists, flips to 'cancelled'.
+    resolveSnapshot(partialSnapshot);
     const out = await startPromise;
     expect(fakeDriver.requestSnapshotThenCancel).toHaveBeenCalled();
     expect(out).toEqual(partialSnapshot);
+    expect(get(threadProgress).status).toBe('cancelled');
   });
 
   it('falls back to input inventory when snapshot is unavailable', async () => {
@@ -101,5 +108,21 @@ describe('threadHydrator (pyodide path)', () => {
     cancelThreadHydration();
     const out = await startPromise;
     expect(out).toBe(inputInventory);
+    expect(get(threadProgress).status).toBe('cancelled');
+  });
+
+  it('helper-path cancel flips status straight to cancelled (no cancelling state)', async () => {
+    // Helper path uses a different cancel mechanism from pyodide — assert
+    // only that the cancel call flips status directly to 'cancelled'
+    // without going through the 'cancelling' intermediate state.
+    threadProgress.set({ status: 'running', total: 1, fetched: 0, skipped: 0, failed: 0, failures: [] });
+    // Simulate an in-flight helper run by setting the module's active
+    // backend via a no-op start() that hasn't reset things — but the
+    // simpler check is just that cancelThreadHydration on a non-pyodide
+    // active backend sets 'cancelled'. _activeBackend is null here, which
+    // hits the same else branch. (Production callers always have an active
+    // backend when they cancel; both code paths take the else branch.)
+    cancelThreadHydration();
+    expect(get(threadProgress).status).toBe('cancelled');
   });
 });

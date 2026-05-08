@@ -104,6 +104,7 @@
   $: refreshing =
     $libraryRefreshState.status === 'running' ||
     $threadProgress.status === 'running' ||
+    $threadProgress.status === 'cancelling' ||
     $imageHydration.status === 'running' ||
     $articleHydration.status === 'running';
 

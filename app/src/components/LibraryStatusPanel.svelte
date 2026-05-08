@@ -73,7 +73,12 @@
   $: threadsHydrated = $threadProgress.fetched + $threadProgress.skipped;
   $: threadsFetched = threadsHydrated > 0 ? threadsHydrated : null;
   $: threadsFailed = $threadProgress.failed;
-  $: threadsRunning = $threadProgress.status === 'running';
+  // 'cancelling' is the post-click window where Pyodide is still flushing
+  // the inventory after a cancel; treat it like 'running' for the progress
+  // bar so the UI keeps animating until the snapshot lands.
+  $: threadsCancelling = $threadProgress.status === 'cancelling';
+  $: threadsRunning = $threadProgress.status === 'running' || threadsCancelling;
+  $: threadsStatusHint = threadsCancelling ? 'Saving partial progress…' : null;
   $: threadsProgress =
     threadsRunning && threadsTotal && threadsHydrated > 0
       ? Math.min(1, threadsHydrated / threadsTotal)
@@ -153,6 +158,7 @@
     total={threadsTotal}
     failed={threadsFailed}
     progress={threadsProgress}
+    statusHint={threadsStatusHint}
     onViewFailures={onViewThreadFailures}
     onToggle={toggleThreads}
   />

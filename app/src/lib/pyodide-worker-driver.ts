@@ -139,10 +139,16 @@ export class PyodideWorkerDriver {
    * Ask the worker for the current on-disk inventory. Used by the cancel
    * path of the threads hydrator: bsky-saves >=0.4.2 flushes inventory
    * after each save, so this returns whatever's been completed so far.
-   * Resolves with `null` on timeout (worker stuck in non-yielding Python)
-   * or if no inventory has been written yet.
+   *
+   * Default timeout is 35s — the worker's JS event loop is blocked while
+   * Python is mid-fetch via the synchronous-XHR shim, so the snapshot-request
+   * handler can't run until Python yields between iterations. Typical fetches
+   * complete in <2s; bsky-saves' httpx `TIMEOUT = 30.0` is the worst case
+   * (plus rate-limit sleep). Resolves with `null` on timeout or if no
+   * inventory has been written yet.
    */
-  requestSnapshot(timeoutMs = 2000): Promise<unknown | null> {
+  requestSnapshot(timeoutMs = 35000): Promise<unknown | null> {
+    const t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
     return new Promise<unknown | null>((resolve) => {
       let settled = false;
       const cleanup = () => {
@@ -150,11 +156,14 @@ export class PyodideWorkerDriver {
         this.worker.removeEventListener('error', onMessage);
         clearTimeout(timer);
       };
+      const elapsed = () => Math.round(((typeof performance !== 'undefined' ? performance.now() : Date.now())) - t0);
       const onMessage = (e: MessageEvent | ErrorEvent) => {
         if ('data' in e && (e as MessageEvent).data?.type === 'snapshot') {
           if (settled) return;
           settled = true;
           cleanup();
+          // eslint-disable-next-line no-console
+          console.info(`[pyodide-worker] snapshot received after ${elapsed()}ms`);
           resolve((e as MessageEvent).data.inventory ?? null);
         }
       };
@@ -162,6 +171,8 @@ export class PyodideWorkerDriver {
         if (settled) return;
         settled = true;
         cleanup();
+        // eslint-disable-next-line no-console
+        console.warn(`[pyodide-worker] snapshot request timed out after ${elapsed()}ms`);
         resolve(null);
       }, timeoutMs);
       this.worker.addEventListener('message', onMessage);
@@ -175,7 +186,7 @@ export class PyodideWorkerDriver {
    * terminate the worker. Returns the snapshot (or null on timeout).
    * The driver is not reusable afterwards.
    */
-  async requestSnapshotThenCancel(timeoutMs = 2000): Promise<unknown | null> {
+  async requestSnapshotThenCancel(timeoutMs = 35000): Promise<unknown | null> {
     let snapshot: unknown | null = null;
     try {
       snapshot = await this.requestSnapshot(timeoutMs);
@@ -219,7 +230,7 @@ export function cancelSharedDriver(): void {
  * cancel path so partial progress (per-iteration flushes from
  * bsky-saves >=0.4.2) is preserved instead of discarded.
  */
-export async function snapshotAndCancelSharedDriver(timeoutMs = 2000): Promise<unknown | null> {
+export async function snapshotAndCancelSharedDriver(timeoutMs = 35000): Promise<unknown | null> {
   if (!_shared) return null;
   const drv = _shared;
   _shared = null;
