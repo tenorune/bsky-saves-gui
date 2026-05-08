@@ -95,6 +95,11 @@ describe('stopLibraryRefresh', () => {
       },
     );
     expect(get(libraryRefreshState).status).toBe('running');
+    // library-refresh now does an `await loadInventory()` before orchestrate
+    // (to snapshot prior hydrated fields). Yield a microtask so orchestrate's
+    // mock has been invoked and resolveOrchestrate is set.
+    await Promise.resolve();
+    await Promise.resolve();
     stopLibraryRefresh();
     expect(get(libraryRefreshState).status).toBe('idle');
     resolveOrchestrate!(partial);

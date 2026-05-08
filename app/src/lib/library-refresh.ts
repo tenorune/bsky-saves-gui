@@ -47,6 +47,13 @@ export async function startLibraryRefresh(
   const loadInventory = deps.loadInventory ?? defaultLoadInventory;
   _cancelled = false;
   store.set({ status: 'running' });
+  // Snapshot the previously-saved inventory before fetch wipes hydrated
+  // fields. Each fresh /fetch returns saves without article_text, local_images,
+  // thread_replies, etc. — those are local-only annotations from prior
+  // hydrator runs. We merge them back in mid-pipeline (after enrich, before
+  // threads) so the threads/articles/images hydrators correctly skip work
+  // that was already done.
+  const priorInventory = await loadInventory();
   try {
     const inv = await orchestrate({
       credentials: input.credentials,
@@ -57,6 +64,7 @@ export async function startLibraryRefresh(
     }, {
       onAfterEnrich: async (partialInv) => {
         if (_cancelled) return;
+        mergeHydratedFields(partialInv, priorInventory);
         await saveInventory(partialInv);
         await loadFromDb();
       },
@@ -92,6 +100,57 @@ export async function startLibraryRefresh(
     // eslint-disable-next-line no-console
     console.error('[library-refresh] orchestrate failed:', msg, e);
     store.set({ status: 'error', error: msg });
+  }
+}
+
+/**
+ * Merge hydrated fields from priorInv onto saves in newInv (in place).
+ * Carries forward annotations the user accumulated across prior runs:
+ * article_text/article_title/article, thread_replies +
+ * thread_schema_version + thread_fetched_at, local_images.
+ *
+ * Only fills fields that aren't already set on the new save — never
+ * overwrites fresh data from the just-completed fetch.
+ */
+function mergeHydratedFields(newInv: unknown, priorInv: unknown): void {
+  if (!newInv || typeof newInv !== 'object') return;
+  if (!priorInv || typeof priorInv !== 'object') return;
+  const newSaves = (newInv as { saves?: unknown }).saves;
+  const priorSaves = (priorInv as { saves?: unknown }).saves;
+  if (!Array.isArray(newSaves) || !Array.isArray(priorSaves)) return;
+  const priorByUri = new Map<string, Record<string, unknown>>();
+  for (const s of priorSaves) {
+    if (s && typeof s === 'object' && typeof (s as { uri?: unknown }).uri === 'string') {
+      priorByUri.set((s as { uri: string }).uri, s as Record<string, unknown>);
+    }
+  }
+  for (const save of newSaves) {
+    if (!save || typeof save !== 'object') continue;
+    const s = save as Record<string, unknown>;
+    if (typeof s.uri !== 'string') continue;
+    const prev = priorByUri.get(s.uri);
+    if (!prev) continue;
+    if (typeof prev.article_text === 'string' && typeof s.article_text !== 'string') {
+      s.article_text = prev.article_text;
+    }
+    if (typeof prev.article_title === 'string' && typeof s.article_title !== 'string') {
+      s.article_title = prev.article_title;
+    }
+    if (prev.article && typeof prev.article === 'object' && !s.article) {
+      s.article = prev.article;
+    }
+    if (Array.isArray(prev.local_images) && !Array.isArray(s.local_images)) {
+      s.local_images = prev.local_images;
+    }
+    if (Array.isArray(prev.thread_replies) && !Array.isArray(s.thread_replies)) {
+      s.thread_replies = prev.thread_replies;
+      if (prev.thread_schema_version !== undefined) {
+        s.thread_schema_version = prev.thread_schema_version;
+      }
+      if (prev.thread_fetched_at !== undefined) {
+        s.thread_fetched_at = prev.thread_fetched_at;
+      }
+    }
   }
 }
 
