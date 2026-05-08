@@ -7,7 +7,7 @@
 
 import { writable, type Writable } from 'svelte/store';
 
-export type HydrationStatus = 'idle' | 'running' | 'paused' | 'done' | 'cancelled';
+export type HydrationStatus = 'idle' | 'running' | 'paused' | 'cancelling' | 'done' | 'cancelled';
 
 export interface HydrationFailure {
   readonly url: string;
