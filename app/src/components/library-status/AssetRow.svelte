@@ -23,6 +23,13 @@
    * requesting. Same effect as flipping the matching Settings checkbox.
    */
   export let onToggle: ((next: boolean) => void) | null = null;
+  /**
+   * Tooltip text shown on the OFF badge (rollover state). Surfaces the
+   * prospective backend that would be used if the asset were turned on
+   * — e.g. "would use operator's worker proxy" or "no backend available".
+   * Null means no tooltip.
+   */
+  export let offTooltip: string | null = null;
 
   function handleToggle() {
     onToggle?.(!on);
@@ -40,11 +47,12 @@
       on:click={handleToggle}
       aria-pressed={on}
       aria-label={`${label} backup: ${on ? 'on' : 'off'} — click to toggle`}
+      title={!on && offTooltip ? offTooltip : undefined}
     >{on ? 'on' : 'off'}</button>
   {:else if on}
     <span class="badge badge--on">on</span>
   {:else}
-    <span class="badge badge--off">off</span>
+    <span class="badge badge--off" title={offTooltip ?? undefined}>off</span>
   {/if}
   {#if on && !backendAvailable}
     <span class="needs-setup">no backend available</span>

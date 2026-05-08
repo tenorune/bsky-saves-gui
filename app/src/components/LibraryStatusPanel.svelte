@@ -4,7 +4,7 @@
   import { installHintDismissed } from '$lib/install-hint-pref';
   import { libraryRefreshState } from '$lib/library-refresh';
   import { imageHydration, articleHydration, threadProgress } from '$lib/hydration-state';
-  import { computeDominantBackend } from '$lib/dominant-backend';
+  import { computeDominantBackend, prospectiveBackendName } from '$lib/dominant-backend';
   import { isHelperOutdated } from '$lib/min-helper-version';
   import { triggerThreadHydration, triggerImageHydration, triggerArticleHydration } from '$lib/asset-trigger';
   import AssetRow from './library-status/AssetRow.svelte';
@@ -100,6 +100,19 @@
       : null;
 
   $: refreshState = $libraryRefreshState;
+
+  // Tooltip text shown on the OFF badge: "would use {proxy}" for proxy
+  // backends, or "no backend available" when articles routes to 'none'.
+  // Null when the asset would route through helper or pyodide (those are
+  // the implicit "just works" cases the user doesn't need to think about).
+  function offTooltipFor(kind: string): string | null {
+    if (kind === 'none') return 'no backend available';
+    const name = prospectiveBackendName(kind);
+    return name ? `would use ${name}` : null;
+  }
+  $: imagesOffTooltip = offTooltipFor(snap.images.kind);
+  $: articlesOffTooltip = offTooltipFor(snap.articles.kind);
+  // Threads only ever routes through helper or pyodide — no proxy info to surface.
 </script>
 
 <section class="status-panel" aria-label="Library status">
@@ -134,6 +147,7 @@
     onSetup={onSetupImages}
     onViewFailures={onViewImageFailures}
     onToggle={toggleImages}
+    offTooltip={imagesOffTooltip}
   />
   <AssetRow
     label="Articles"
@@ -147,6 +161,7 @@
     onSetup={onSetupArticles}
     onViewFailures={onViewArticleFailures}
     onToggle={toggleArticles}
+    offTooltip={articlesOffTooltip}
   />
 
   {#if pyodideOnly && !$installHintDismissed}

@@ -30,6 +30,7 @@
   import { installHintDismissed, loadInstallHintPref } from '$lib/install-hint-pref';
   import InstallHelperHint from '../components/library-status/InstallHelperHint.svelte';
   import { capabilitySnapshot, initCapabilitySnapshot } from '$lib/capability-snapshot';
+  import { prospectiveBackendName } from '$lib/dominant-backend';
 
   let status = '';
   let error = '';
@@ -250,6 +251,7 @@
         on:change={handleThreadsToggleChange}
       />
       <span>Back up threads</span>
+      <!-- Threads only ever route through helper or pyodide; nothing to surface. -->
     </label>
     <label class="checkbox">
       <input
@@ -258,6 +260,11 @@
         on:change={handleImagesToggleChange}
       />
       <span>Back up images</span>
+      {#if $capabilitySnapshot.images.kind === 'none'}
+        <span class="backend-note">— no backend available <button type="button" class="setup-link" on:click={() => (setupModalOpen = true)}>Set up</button></span>
+      {:else if prospectiveBackendName($capabilitySnapshot.images.kind)}
+        <span class="backend-note">— {toggles.images ? 'via' : 'would use'} {prospectiveBackendName($capabilitySnapshot.images.kind)}</span>
+      {/if}
     </label>
     <label class="checkbox">
       <input
@@ -266,6 +273,11 @@
         on:change={handleArticlesToggleChange}
       />
       <span>Back up articles</span>
+      {#if $capabilitySnapshot.articles.kind === 'none'}
+        <span class="backend-note">— no backend available <button type="button" class="setup-link" on:click={() => (setupModalOpen = true)}>Set up</button></span>
+      {:else if prospectiveBackendName($capabilitySnapshot.articles.kind)}
+        <span class="backend-note">— {toggles.articles ? 'via' : 'would use'} {prospectiveBackendName($capabilitySnapshot.articles.kind)}</span>
+      {/if}
     </label>
 
     <details
@@ -366,6 +378,19 @@
     font-weight: normal;
     font-size: 0.875rem;
     opacity: 0.85;
+  }
+  .backend-note {
+    font-size: 0.85em;
+    opacity: 0.75;
+  }
+  .backend-note .setup-link {
+    font: inherit;
+    background: none;
+    border: 0;
+    padding: 0;
+    color: inherit;
+    text-decoration: underline;
+    cursor: pointer;
   }
   .settings-section code {
     background: color-mix(in oklab, CanvasText 5%, Canvas);
