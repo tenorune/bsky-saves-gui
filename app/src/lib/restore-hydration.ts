@@ -3,17 +3,16 @@ import { extractImageUrls } from './extract-image-urls';
 import { extractArticleUrls } from './extract-article-urls';
 import { hasImageBlob } from './image-store';
 import { imageHydration, articleHydration, threadProgress } from './hydration-state';
-import { loadBackupPrefs } from './backup-prefs';
 import { loadFailures } from './failure-store';
-import { assetToggles } from './asset-toggles';
 
 /**
  * On Library mount after a page reload, the hydration stores are reset to
  * their initial idle state. The actual saved data persists (image blobs in
- * IDB, article_text in the inventory itself), so for domains the user has
- * already opted into we reconstruct per-asset counts and set the stores to
- * a 'done'-with-counts state. Domains the user hasn't yet triggered stay
- * idle so the discovery banner can still show.
+ * IDB, article_text in the inventory itself), so we reconstruct per-asset
+ * counts and set the stores to a 'done'-with-counts state. The Library Hub
+ * renders disabled rows with a greyed "X of Y" so the user can see prior
+ * coverage even when the toggle is off — meaning the restore must NOT be
+ * gated on toggle/prefs state.
  *
  * If the in-memory store already has non-initial state (e.g., the user
  * navigated within the SPA — Library mounted, ran a backup, navigated to
@@ -26,13 +25,12 @@ import { assetToggles } from './asset-toggles';
 export async function restoreHydrationFromInventory(
   inventory: unknown,
 ): Promise<void> {
-  const prefs = await loadBackupPrefs();
-
-  // Images: only restore when the user has opted into image backup AND the
-  // store is currently at its initial idle/empty state.
+  // Images: restore whenever the in-memory store is at its initial idle
+  // state. The toggle/prefs no longer gate restoration — the row UI
+  // handles the off-with-counts case itself.
   const currentImage = get(imageHydration);
   const imageStoreIsInitial = currentImage.status === 'idle' && currentImage.total === 0;
-  if (prefs.images.enabled && imageStoreIsInitial) {
+  if (imageStoreIsInitial) {
     const imageUrls = extractImageUrls(inventory);
     if (imageUrls.length > 0) {
       let fetched = 0;
@@ -57,7 +55,7 @@ export async function restoreHydrationFromInventory(
   // Articles: same guard.
   const currentArticle = get(articleHydration);
   const articleStoreIsInitial = currentArticle.status === 'idle' && currentArticle.total === 0;
-  if (prefs.articles.enabled && articleStoreIsInitial) {
+  if (articleStoreIsInitial) {
     let articleTotal = 0;
     let articleFetched = 0;
     if (inventory && typeof inventory === 'object') {
@@ -105,12 +103,11 @@ export async function restoreHydrationFromInventory(
   void extractArticleUrls;
 
   // Threads: count saves with thread_replies populated as 'fetched',
-  // restore the persisted failure list. Only restore when threads-toggle
-  // is on AND the in-memory store hasn't already been touched this session.
-  const togglesNow = get(assetToggles);
+  // restore the persisted failure list. Same as images/articles —
+  // restore whenever the store is initial; the row UI handles off state.
   const currentThread = get(threadProgress);
   const threadStoreIsInitial = currentThread.status === 'idle' && currentThread.total === 0;
-  if (togglesNow.threads && threadStoreIsInitial) {
+  if (threadStoreIsInitial) {
     let threadTotal = 0;
     let threadFetched = 0;
     if (inventory && typeof inventory === 'object') {

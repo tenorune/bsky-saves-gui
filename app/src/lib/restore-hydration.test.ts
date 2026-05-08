@@ -52,7 +52,7 @@ describe('restoreHydrationFromInventory', () => {
     expect(s.fetched).toBe(1);
   });
 
-  it('leaves stores idle when image backup has not been enabled (so the banner can show)', async () => {
+  it('restores image counts even when image backup is not enabled (off-state row needs them)', async () => {
     const { restoreHydrationFromInventory } = await import('./restore-hydration');
     const { imageHydration } = await import('./hydration-state');
     const inv = {
@@ -61,17 +61,22 @@ describe('restoreHydrationFromInventory', () => {
       ],
     };
     await restoreHydrationFromInventory(inv);
-    expect(get(imageHydration).status).toBe('idle');
+    const s = get(imageHydration);
+    expect(s.status).toBe('done');
+    expect(s.total).toBe(3);
   });
 
-  it('leaves stores idle when article backup has not been enabled', async () => {
+  it('restores article counts even when article backup is not enabled', async () => {
     const { restoreHydrationFromInventory } = await import('./restore-hydration');
     const { articleHydration } = await import('./hydration-state');
     const inv = {
       saves: [{ uri: '1', embed: { url: 'https://a/1' }, article_text: 'body' }],
     };
     await restoreHydrationFromInventory(inv);
-    expect(get(articleHydration).status).toBe('idle');
+    const s = get(articleHydration);
+    expect(s.status).toBe('done');
+    expect(s.total).toBe(1);
+    expect(s.fetched).toBe(1);
   });
 
   it('leaves stores in idle state when inventory has no assets even if enabled', async () => {
