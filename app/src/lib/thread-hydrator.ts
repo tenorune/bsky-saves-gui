@@ -1,3 +1,22 @@
+// Thread hydration: walks the inventory's saves and fills thread_replies
+// (same-author reply chains) on each one via the helper's /hydrate-threads
+// endpoint or via Pyodide.
+//
+// HYDRATION INVARIANT (applies to every hydrator in this app):
+//   - Never re-fetch what we already have.
+//   - The displayed count must reflect cumulative coverage from frame
+//     zero of every run — pre-compute `skipped` BEFORE setting the store,
+//     and seed `failures` from the persisted list.
+// Implementation: filter input saves to only those missing thread_replies
+// (matching bsky-saves CLI's hydrate-threads behavior). Saves whose
+// thread_replies were carried forward by library-refresh.mergeHydratedFields
+// are skipped here; only newly-fetched saves go through the hydrator.
+//
+// thread_replies / thread_schema_version / thread_fetched_at are stored
+// directly on each save in the inventory (a fresh /fetch wipes them);
+// see library-refresh.mergeHydratedFields for the canonical list of
+// local-only annotations carried across each refresh.
+
 import { threadProgress, resetThreadProgress } from './hydration-state';
 import { hydrateThreads as defaultHydrateThreads, type FetchSavesCredentials, type HydrateThreadsResponse } from './helper-client';
 import { getSharedDriver } from './pyodide-worker-driver';

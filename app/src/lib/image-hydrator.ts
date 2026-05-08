@@ -2,6 +2,15 @@
 // Plan 3 dispatcher, writes successful blobs to image-store, and reports
 // progress through the hydration-state store.
 //
+// HYDRATION INVARIANT (applies to every hydrator in this app):
+//   - Never re-fetch what we already have.
+//   - The displayed count must reflect cumulative coverage from frame
+//     zero of every run — pre-compute `skipped` BEFORE setting the store,
+//     and seed `failures` from the persisted list.
+// Implementation: at the top of the run we Promise.all the IDB checks,
+// derive the list of URLs needing fetch, set the store to its final
+// `skipped`/`failed` values immediately, then iterate only the fetch list.
+//
 // Designed for foreground-friendly background execution: each await on the
 // fetcher yields control to the event loop, so the rest of the app stays
 // responsive while hydration runs. AbortSignal allows clean cancellation

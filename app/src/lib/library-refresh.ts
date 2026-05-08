@@ -105,12 +105,28 @@ export async function startLibraryRefresh(
 
 /**
  * Merge hydrated fields from priorInv onto saves in newInv (in place).
- * Carries forward annotations the user accumulated across prior runs:
- * article_text/article_title/article, thread_replies +
- * thread_schema_version + thread_fetched_at, local_images.
+ * This is the SINGLE SOURCE OF TRUTH for which save-level fields are
+ * "local-only annotations" — values produced by hydrators on this device
+ * that a fresh /fetch wipes off the wire.
  *
- * Only fills fields that aren't already set on the new save — never
- * overwrites fresh data from the just-completed fetch.
+ * Hydration invariant: never re-fetch what we already have. Each fresh
+ * /fetch returns only the upstream save shape (uri, post_text, embed,
+ * etc.); local annotations live ONLY on disk. Without this merge, every
+ * Refresh would clobber accumulated state and the hydrators would treat
+ * everything as needing work.
+ *
+ * Currently carried forward (key: rationale):
+ *   - article_text     — body text written by hydrate-articles
+ *   - article_title    — title written by hydrate-articles
+ *   - article          — synthesized article object (url + text + title)
+ *   - local_images     — pointer to image blobs in image-store IDB
+ *   - thread_replies         — list of self-thread replies
+ *   - thread_schema_version  — version of the reply-collection algorithm
+ *   - thread_fetched_at      — ISO timestamp of the hydration
+ *
+ * Adding a new local-only annotation? Add it here too — same shape:
+ * type-check the prior value and only fill the field on the new save when
+ * it isn't already set. Never overwrite fresh data from the new fetch.
  */
 function mergeHydratedFields(newInv: unknown, priorInv: unknown): void {
   if (!newInv || typeof newInv !== 'object') return;

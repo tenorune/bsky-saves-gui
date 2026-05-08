@@ -4,8 +4,21 @@
 // updated inventory back to IDB once the run completes. Updates
 // articleHydration as it goes.
 //
+// HYDRATION INVARIANT (applies to every hydrator in this app):
+//   - Never re-fetch what we already have.
+//   - The displayed count must reflect cumulative coverage from frame
+//     zero of every run — pre-compute `skipped` BEFORE setting the store,
+//     and seed `failures` from the persisted list.
+// Implementation: extractArticleUrls returns saves missing article_text;
+// the count of already-hydrated saves is `allUrls - urlsToFetch`. The
+// store is set with that `skipped` value before the iteration starts.
+//
 // Articles are stored INSIDE the inventory (not a separate store) to match
-// bsky-saves' CLI shape and the existing parser's article synthesis.
+// bsky-saves' CLI shape and the existing parser's article synthesis. As a
+// consequence, fresh /fetch calls would otherwise wipe article_text on
+// every save — `library-refresh.mergeHydratedFields` carries it forward
+// across each fetch (see that function for the canonical list of
+// local-only annotations).
 //
 // Routing decision is driven by CapabilitySnapshot.articles (read once per
 // hydrateArticles call).

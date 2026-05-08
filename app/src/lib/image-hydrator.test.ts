@@ -186,3 +186,42 @@ describe('hydrateImages snapshot routing: operator-worker', () => {
     );
   });
 });
+
+describe('hydration invariant: count never resets across runs', () => {
+  // Regression for the "count resets to 0 each Refresh" bug. The displayed
+  // value (fetched + skipped) must reflect cumulative coverage from the
+  // first frame of every run. Concretely: if a previous run hydrated K
+  // images, a fresh run must report skipped >= K immediately on its first
+  // store update — never start at skipped=0 and climb.
+  it('reports skipped >= already-hydrated from the very first store update', async () => {
+    const { hydrateImages } = await import('./image-hydrator');
+    const { imageHydration } = await import('./hydration-state');
+
+    // First run: fetch and persist all three image blobs.
+    const fetcher1 = vi.fn(async (url: string) => okBlob(url.length));
+    await hydrateImages(inv, { fetcher: fetcher1 });
+    expect(get(imageHydration).fetched).toBe(3);
+
+    // Capture every imageHydration.set/update during the second run.
+    const observed: Array<{ skipped: number; fetched: number }> = [];
+    const unsub = imageHydration.subscribe((s) =>
+      observed.push({ skipped: s.skipped, fetched: s.fetched }),
+    );
+
+    const fetcher2 = vi.fn(async (url: string) => okBlob(url.length));
+    await hydrateImages(inv, { fetcher: fetcher2 });
+    unsub();
+
+    // Strip the initial 'idle' subscription value (skipped=0, fetched=0)
+    // that fired synchronously on subscribe BEFORE hydrateImages ran.
+    // After that, every value must reflect skipped >= 3 (all blobs from
+    // run 1 are already present).
+    const duringRun = observed.slice(1);
+    for (const v of duringRun) {
+      expect(v.skipped).toBeGreaterThanOrEqual(3);
+    }
+    // And the fetcher should not have been called for any URL — the run
+    // had nothing new to do.
+    expect(fetcher2).not.toHaveBeenCalled();
+  });
+});
