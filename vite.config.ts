@@ -2,7 +2,26 @@ import { defineConfig, loadEnv } from 'vite';
 import { svelte, vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 import { fileURLToPath, URL } from 'node:url';
 import { resolve } from 'node:path';
+import { execSync } from 'node:child_process';
 import { cnamePlugin } from './tools/vite-plugin-cname';
+
+function detectBuildBranch(): string {
+  // GitHub Actions sets GITHUB_REF_NAME to the branch/tag name on push and
+  // workflow_dispatch runs. Prefer it because actions/checkout often leaves
+  // the worktree on a detached HEAD where `git rev-parse --abbrev-ref HEAD`
+  // just returns "HEAD".
+  const ci = process.env.GITHUB_REF_NAME;
+  if (ci) return ci;
+  try {
+    const branch = execSync('git rev-parse --abbrev-ref HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+    if (branch && branch !== 'HEAD') return branch;
+    const sha = execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+    if (sha) return sha;
+  } catch {
+    // git not available (e.g. tarball build) — fall through
+  }
+  return 'unknown';
+}
 
 export default defineConfig(({ mode }) => {
   const projectRoot = fileURLToPath(new URL('.', import.meta.url));
@@ -21,6 +40,7 @@ export default defineConfig(({ mode }) => {
           timeZoneName: 'short',
         }).format(new Date()),
       ),
+      __BUILD_BRANCH__: JSON.stringify(detectBuildBranch()),
     },
     build: {
       outDir: 'dist',

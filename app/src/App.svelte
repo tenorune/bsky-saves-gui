@@ -5,7 +5,7 @@
   import { decideEntryRoute } from '$lib/return-visit';
   import ExportMenu from './components/ExportMenu.svelte';
   // import BeaconButton from './components/BeaconButton.svelte';
-  import { BUILD_TIME } from '$lib/build-info';
+  import { BUILD_TIME, BUILD_BRANCH } from '$lib/build-info';
   import { lastSession } from '$lib/last-session';
   import { inventoryState } from '$lib/inventory-loader';
 
@@ -59,8 +59,8 @@
       ·
       <a href="#/privacy">Privacy</a>
     </p>
-    <p class="app-footer__build" title="Build timestamp">
-      <code>build {BUILD_TIME}</code>
+    <p class="app-footer__build" title="Build timestamp and source branch">
+      <code>build {BUILD_TIME} -- ({BUILD_BRANCH})</code>
     </p>
   </footer>
 </div>
