@@ -73,6 +73,22 @@
     {#if backendLabel}
       <span class="backend">via {backendLabel}</span>
     {/if}
+  {:else if !on && (fetched !== null || (failed && failed > 0))}
+    <!-- When off, still surface what we have on disk so the user knows
+         turning it back on won't start from zero. Greyed out to signal
+         the asset isn't actively being backed up right now. -->
+    <span class="off-info">
+      {#if fetched !== null && total !== null}
+        {fetched} of {total}
+      {:else if fetched !== null}
+        {fetched}
+      {/if}
+      {#if failed && failed > 0}
+        <span class="muted">
+          ({#if onViewFailures}<button type="button" class="action-link inline-error" on:click={onViewFailures}>{failed} failed</button>{:else}<span class="inline-error">{failed} failed</span>{/if})
+        </span>
+      {/if}
+    </span>
   {/if}
   <!-- Progress-bar slot is rendered for every row state — off, no-backend,
        on-running, on-idle — so the row's height is constant. Track + fill
@@ -160,6 +176,7 @@
     100% { transform: translateX(-100%); }
   }
   .backend { font-size: 0.8rem; opacity: 0.7; }
+  .off-info { opacity: 0.55; }
   .needs-setup {
     color: color-mix(in oklab, CanvasText 65%, Canvas);
     font-style: italic;
