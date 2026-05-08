@@ -88,6 +88,14 @@ function bytesToUtf8(buf: ArrayBuffer): string {
 
 async function handleFetch(request: Request, env: Env, cors: Record<string, string>): Promise<Response> {
   const secret = request.headers.get('X-Proxy-Secret') ?? '';
+  // TEMP DEBUG — remove after diagnosing /extract-article 401 asymmetry.
+  console.log('fetch auth:', {
+    gotPrefix: secret.slice(0, 4),
+    expPrefix: (env.SHARED_SECRET ?? '').slice(0, 4),
+    gotLen: secret.length,
+    expLen: (env.SHARED_SECRET ?? '').length,
+    match: secret === env.SHARED_SECRET,
+  });
   if (secret !== env.SHARED_SECRET) return jsonError('Unauthorized', 401, cors);
 
   let body: unknown;
@@ -136,6 +144,14 @@ async function handleFetch(request: Request, env: Env, cors: Record<string, stri
 
 async function handleExtractArticle(request: Request, env: Env, cors: Record<string, string>): Promise<Response> {
   const secret = request.headers.get('X-Proxy-Secret') ?? '';
+  // TEMP DEBUG — remove after diagnosing /extract-article 401 asymmetry.
+  console.log('extract-article auth:', {
+    gotPrefix: secret.slice(0, 4),
+    expPrefix: (env.SHARED_SECRET ?? '').slice(0, 4),
+    gotLen: secret.length,
+    expLen: (env.SHARED_SECRET ?? '').length,
+    match: secret === env.SHARED_SECRET,
+  });
   if (secret !== env.SHARED_SECRET) return jsonError('Unauthorized', 401, cors);
 
   let body: unknown;
