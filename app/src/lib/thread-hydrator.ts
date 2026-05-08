@@ -19,7 +19,7 @@
 
 import { threadProgress, resetThreadProgress } from './hydration-state';
 import { hydrateThreads as defaultHydrateThreads, type FetchSavesCredentials, type HydrateThreadsResponse } from './helper-client';
-import { getSharedDriver, cancelSharedDriver } from './pyodide-worker-driver';
+import { getSharedDriver, snapshotAndCancelSharedDriver } from './pyodide-worker-driver';
 import type { PyodideWorkerDriver } from './pyodide-worker-driver';
 import { config } from './config';
 import { saveFailures, loadFailures } from './failure-store';
@@ -42,21 +42,31 @@ export interface ThreadHydratorDeps {
 
 let _cancelled = false;
 let _activeBackend: 'helper' | 'pyodide' | null = null;
+let _activeDriver: PyodideWorkerDriver | null = null;
+let _pendingSnapshot: Promise<unknown | null> | null = null;
 
 /**
  * Cancel an in-flight thread hydration. The helper path checks this flag
- * between chunk fetches. The Pyodide path can't be interrupted cooperatively
- * (the Python loop runs to completion in the worker, generating network
- * traffic the whole time), so we terminate the shared worker outright when
- * threads are the active Pyodide consumer. Either way, the threadProgress
- * store transitions to 'cancelled' so the UI flips back.
+ * between chunk fetches. The Pyodide path can't be interrupted cooperatively,
+ * so we ask the worker for its current on-disk inventory snapshot
+ * (bsky-saves >=0.4.2 flushes it after each save) and then terminate the
+ * worker. The snapshot is stashed in `_pendingSnapshot` for `start()`'s
+ * catch path to merge instead of discarding partial progress. Either way,
+ * the threadProgress store transitions to 'cancelled' so the UI flips back.
  */
 export function cancelThreadHydration(): void {
   _cancelled = true;
   threadProgress.update((p) => ({ ...p, status: 'cancelled' }));
   if (_activeBackend === 'pyodide') {
     _activeBackend = null;
-    cancelSharedDriver();
+    const drv = _activeDriver;
+    _activeDriver = null;
+    // Test-injected drivers don't go through the singleton; cancel them
+    // directly. Production callers go through the singleton helper which
+    // both snapshots the worker and clears the singleton ref.
+    _pendingSnapshot = drv
+      ? drv.requestSnapshotThenCancel()
+      : snapshotAndCancelSharedDriver();
   }
 }
 
@@ -64,6 +74,8 @@ export const threadHydrator = {
   async start(input: ThreadHydratorInput, deps: ThreadHydratorDeps = {}): Promise<unknown> {
     _cancelled = false;
     _activeBackend = input.backend.kind;
+    _activeDriver = null;
+    _pendingSnapshot = null;
     resetThreadProgress();
     try {
       if (input.backend.kind === 'helper') {
@@ -162,6 +174,9 @@ export const threadHydrator = {
         failures: [...persistedPy],
       });
       const driver = deps.driver ?? getSharedDriver();
+      // Stash the injected driver only — production goes through the
+      // shared-driver singleton helper on cancel.
+      _activeDriver = deps.driver ?? null;
       await driver.initialise(config.pyodideVersion);
       // With preauthSession in hand the worker's monkey-patch bypasses
       // createSession; appPassword is then unused, so JWT-pair credentials
@@ -201,23 +216,53 @@ export const threadHydrator = {
         },
       });
       if (_cancelled) {
-        // Pyodide can't stop mid-run; the worker finished, but discard the
-        // result so we don't overwrite the existing inventory with a stale run.
-        return input.inventory;
+        // Cancel raced with completion: the worker actually finished but
+        // the user asked to stop. Prefer the completed `out` (or the
+        // snapshot if the worker was already torn down) over the original
+        // input, so we don't drop the just-finished work.
+        return (await consumePendingSnapshot()) ?? out;
       }
       // On clean completion, this run hydrated every save that needed it.
       // fetched = total - skipped - failed (failed stays as carried + new).
       threadProgress.update((p) => ({ ...p, status: 'done', fetched: Math.max(0, p.total - p.skipped - p.failed) }));
       return out;
     } catch (e) {
-      if (_cancelled) return input.inventory;
+      if (_cancelled) {
+        // Surface partial progress from the worker's last on-disk flush
+        // (bsky-saves >=0.4.2 writes after each save). Fall back to the
+        // input inventory if the snapshot timed out or wasn't requested.
+        return (await consumePendingSnapshot()) ?? input.inventory;
+      }
       threadProgress.update((p) => ({ ...p, status: 'cancelled' }));
       throw e;
     } finally {
       _activeBackend = null;
+      _activeDriver = null;
     }
   },
 };
+
+/**
+ * Await and clear the in-flight snapshot promise stashed by
+ * cancelThreadHydration. Returns the snapshot inventory if it has the
+ * expected `saves` array, else null. Catches any error from the worker
+ * round-trip so cancel paths never throw.
+ */
+async function consumePendingSnapshot(): Promise<unknown | null> {
+  const p = _pendingSnapshot;
+  _pendingSnapshot = null;
+  if (!p) return null;
+  let snap: unknown | null = null;
+  try {
+    snap = await p;
+  } catch {
+    return null;
+  }
+  if (snap && typeof snap === 'object' && Array.isArray((snap as { saves?: unknown }).saves)) {
+    return snap;
+  }
+  return null;
+}
 
 function mergeThreaded(
   inv: ThreadHydratorInput['inventory'],
