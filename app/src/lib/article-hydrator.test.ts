@@ -83,7 +83,10 @@ describe('hydrateArticles happy path', () => {
     await hydrateArticles(makeInventory(), { fetcher });
     const final = get(articleHydration);
     expect(final.status).toBe('done');
-    expect(final.total).toBe(2);
+    // total is the full article-eligible set (allUrls), so already-hydrated
+    // articles are counted toward total too. fetched + skipped reflects the
+    // cumulative-hydrated coverage.
+    expect(final.total).toBe(3);
     expect(final.fetched).toBe(2);
     expect(final.skipped).toBe(1);
   });

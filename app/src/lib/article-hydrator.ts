@@ -130,7 +130,11 @@ export async function hydrateArticles(
 
   articleHydration.set({
     status: urlsToFetch.length === 0 ? 'done' : 'running',
-    total: urlsToFetch.length,
+    // Use the full article-eligible set as `total` so the LibraryHub
+    // display ("X of total") reflects cumulative coverage rather than
+    // just this run's slice. Images uses the same shape (total = all
+    // image URLs, skipped = already-hydrated).
+    total: allUrls.length,
     fetched: 0,
     skipped,
     failed: 0,
