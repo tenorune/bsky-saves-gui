@@ -23,6 +23,7 @@
   import { clearImageBlobs } from '$lib/image-store';
   import { clearFailures } from '$lib/failure-store';
   import { resetImageHydration, resetArticleHydration } from '$lib/hydration-state';
+  import { resetLibraryFilters } from '$lib/library-filters';
   import { exportJson } from '../exporters/json-exporter';
   import { downloadFile } from '../exporters/file-download';
   import { parseInventory } from '../reader/inventory-shape';
@@ -184,6 +185,7 @@
     clearLastSession();
     resetImageHydration();
     resetArticleHydration();
+    resetLibraryFilters();
     // Refresh local UI state so the Backup section disappears immediately.
     backupPrefs = await loadBackupPrefs();
     customProxyConfigured = false;
