@@ -94,9 +94,10 @@ function fetcherFromSnapshot(
   }
   if (backend.kind === 'user-worker') {
     const workerUrl = backend.url;
+    const sharedSecret = backend.sharedSecret;
     return (articleUrl) =>
       extractArticleViaWorker(
-        { url: workerUrl, sharedSecret: '', supportsArticles: true },
+        { url: workerUrl, sharedSecret, supportsArticles: true },
         articleUrl,
         { signal },
       );

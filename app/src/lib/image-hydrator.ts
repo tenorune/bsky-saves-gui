@@ -72,8 +72,9 @@ function fetcherFromSnapshot(snapshot: CapabilitySnapshot): (url: string) => Pro
   }
   if (backend.kind === 'user-worker') {
     const workerUrl = backend.url;
+    const sharedSecret = backend.sharedSecret;
     return (imageUrl) =>
-      fetchImageViaUserWorker({ url: workerUrl, sharedSecret: config.operatorImageProxySecret, supportsArticles: false }, imageUrl);
+      fetchImageViaUserWorker({ url: workerUrl, sharedSecret, supportsArticles: false }, imageUrl);
   }
   // operator-worker: use build-time-configured operator proxy credentials
   return (imageUrl) =>

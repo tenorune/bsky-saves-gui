@@ -158,7 +158,7 @@ describe('hydrateImages snapshot routing: user-worker', () => {
 
     const { hydrateImages } = await import('./image-hydrator');
     const result = await hydrateImages(singleImageInv, {
-      getSnapshot: () => fakeSnapshot({ kind: 'user-worker', url: 'https://worker.example.com' }),
+      getSnapshot: () => fakeSnapshot({ kind: 'user-worker', url: 'https://worker.example.com', sharedSecret: 'test-secret' }),
     });
 
     expect(result.fetched).toBe(1);

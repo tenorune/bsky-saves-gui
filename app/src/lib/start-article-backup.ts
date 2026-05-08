@@ -28,9 +28,9 @@ let activeController: AbortController | null = null;
  * extraction. This prevents routing articles to a worker that doesn't have
  * the `/extract-article` endpoint.
  */
-async function loadArticleCapableUserWorker(): Promise<{ readonly url: string } | null> {
+async function loadArticleCapableUserWorker(): Promise<{ readonly url: string; readonly sharedSecret: string } | null> {
   const cfg = await loadProxyConfig();
-  return cfg && cfg.url && cfg.supportsArticles ? { url: cfg.url } : null;
+  return cfg && cfg.url && cfg.supportsArticles ? { url: cfg.url, sharedSecret: cfg.sharedSecret } : null;
 }
 
 export async function startArticleBackup(inventory: unknown): Promise<StartArticleResult> {

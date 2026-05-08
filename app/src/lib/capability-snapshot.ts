@@ -15,12 +15,12 @@ export type CapabilitySnapshot = {
   readonly threads:  { readonly kind: 'helper' } | { readonly kind: 'pyodide' };
   readonly images:
     | { readonly kind: 'helper' }
-    | { readonly kind: 'user-worker'; readonly url: string }
+    | { readonly kind: 'user-worker'; readonly url: string; readonly sharedSecret: string }
     | { readonly kind: 'operator-worker' }
     | { readonly kind: 'none' };
   readonly articles:
     | { readonly kind: 'helper' }
-    | { readonly kind: 'user-worker'; readonly url: string }
+    | { readonly kind: 'user-worker'; readonly url: string; readonly sharedSecret: string }
     | { readonly kind: 'none' };
 };
 
@@ -35,7 +35,7 @@ export const EMPTY_SNAPSHOT: CapabilitySnapshot = {
 
 export interface CapabilitySnapshotInputs {
   readonly helper: HelperStatus;
-  readonly userWorker: { readonly url: string } | null;
+  readonly userWorker: { readonly url: string; readonly sharedSecret: string } | null;
   readonly operatorProxyOptOut: boolean;
 }
 
@@ -46,11 +46,14 @@ export function computeCapabilitySnapshot(
   const operatorOrNone = operatorProxyOptOut
     ? { kind: 'none' as const }
     : { kind: 'operator-worker' as const };
+  const userWorkerVariant = userWorker
+    ? { kind: 'user-worker' as const, url: userWorker.url, sharedSecret: userWorker.sharedSecret }
+    : null;
   if (helper.status !== 'available') {
     return {
       ...EMPTY_SNAPSHOT,
-      images:   userWorker ? { kind: 'user-worker', url: userWorker.url } : operatorOrNone,
-      articles: userWorker ? { kind: 'user-worker', url: userWorker.url } : { kind: 'none' },
+      images:   userWorkerVariant ?? operatorOrNone,
+      articles: userWorkerVariant ?? { kind: 'none' },
     };
   }
   const f = new Set(helper.features);
@@ -62,12 +65,10 @@ export function computeCapabilitySnapshot(
     threads: fetchOk ? { kind: 'helper' } : { kind: 'pyodide' },
     images:
       f.has('fetch-image') ? { kind: 'helper' }
-      : userWorker        ? { kind: 'user-worker', url: userWorker.url }
-      : operatorOrNone,
+      : userWorkerVariant ?? operatorOrNone,
     articles:
       f.has('extract-article') ? { kind: 'helper' }
-      : userWorker             ? { kind: 'user-worker', url: userWorker.url }
-      : { kind: 'none' },
+      : userWorkerVariant ?? { kind: 'none' },
   };
 }
 
@@ -81,7 +82,7 @@ export const capabilitySnapshot: Readable<CapabilitySnapshot> = { subscribe: sto
 
 export interface InitDeps {
   readonly probe?: () => Promise<HelperStatus>;
-  readonly loadUserWorker?: () => Promise<{ readonly url: string } | null>;
+  readonly loadUserWorker?: () => Promise<{ readonly url: string; readonly sharedSecret: string } | null>;
   readonly loadOperatorProxyOptOut?: () => Promise<boolean>;
 }
 
@@ -95,7 +96,7 @@ export async function initCapabilitySnapshot(deps: InitDeps = {}): Promise<void>
   } catch {
     helper = { status: 'unavailable' };
   }
-  let userWorker: { readonly url: string } | null;
+  let userWorker: { readonly url: string; readonly sharedSecret: string } | null;
   try {
     userWorker = await loadUserWorker();
   } catch {
@@ -110,9 +111,9 @@ export async function initCapabilitySnapshot(deps: InitDeps = {}): Promise<void>
   store.set(computeCapabilitySnapshot({ helper, userWorker, operatorProxyOptOut }));
 }
 
-async function loadUserWorkerFromProxyConfig(): Promise<{ readonly url: string } | null> {
+async function loadUserWorkerFromProxyConfig(): Promise<{ readonly url: string; readonly sharedSecret: string } | null> {
   const cfg = await loadProxyConfig();
-  return cfg && cfg.url ? { url: cfg.url } : null;
+  return cfg && cfg.url ? { url: cfg.url, sharedSecret: cfg.sharedSecret } : null;
 }
 
 async function defaultLoadOperatorProxyOptOut(): Promise<boolean> {

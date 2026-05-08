@@ -58,10 +58,10 @@ describe('computeCapabilitySnapshot', () => {
   it('routes images to user-worker when configured and helper lacks fetch-image', () => {
     const snap = computeCapabilitySnapshot({
       helper: helperWith(['fetch']),
-      userWorker: { url: 'https://my.worker.dev' },
+      userWorker: { url: 'https://my.worker.dev', sharedSecret: 'test-secret' },
       operatorProxyOptOut: false,
     });
-    expect(snap.images).toEqual({ kind: 'user-worker', url: 'https://my.worker.dev' });
+    expect(snap.images).toEqual({ kind: 'user-worker', url: 'https://my.worker.dev', sharedSecret: 'test-secret' });
   });
 
   it('routes images to operator-worker when no helper image support and no user worker', () => {
@@ -85,10 +85,10 @@ describe('computeCapabilitySnapshot', () => {
   it('routes articles to user-worker when configured and helper lacks extract-article', () => {
     const snap = computeCapabilitySnapshot({
       helper: helperWith([]),
-      userWorker: { url: 'https://my.worker.dev' },
+      userWorker: { url: 'https://my.worker.dev', sharedSecret: 'test-secret' },
       operatorProxyOptOut: false,
     });
-    expect(snap.articles).toEqual({ kind: 'user-worker', url: 'https://my.worker.dev' });
+    expect(snap.articles).toEqual({ kind: 'user-worker', url: 'https://my.worker.dev', sharedSecret: 'test-secret' });
   });
 
   it('falls back entirely when helper unavailable', () => {
@@ -104,11 +104,11 @@ describe('computeCapabilitySnapshot', () => {
   it('respects user-worker when helper unavailable', () => {
     const snap = computeCapabilitySnapshot({
       helper: { status: 'unavailable' },
-      userWorker: { url: 'https://my.worker.dev' },
+      userWorker: { url: 'https://my.worker.dev', sharedSecret: 'test-secret' },
       operatorProxyOptOut: false,
     });
-    expect(snap.images).toEqual({ kind: 'user-worker', url: 'https://my.worker.dev' });
-    expect(snap.articles).toEqual({ kind: 'user-worker', url: 'https://my.worker.dev' });
+    expect(snap.images).toEqual({ kind: 'user-worker', url: 'https://my.worker.dev', sharedSecret: 'test-secret' });
+    expect(snap.articles).toEqual({ kind: 'user-worker', url: 'https://my.worker.dev', sharedSecret: 'test-secret' });
   });
 });
 

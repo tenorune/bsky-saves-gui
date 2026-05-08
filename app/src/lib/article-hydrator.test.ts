@@ -198,7 +198,7 @@ describe('hydrateArticles snapshot-based dispatch', () => {
         enrich: { kind: 'pyodide' },
         threads: { kind: 'pyodide' },
         images: { kind: 'operator-worker' },
-        articles: { kind: 'user-worker', url: 'https://w.example/' },
+        articles: { kind: 'user-worker', url: 'https://w.example/', sharedSecret: 'test-secret' },
       }),
     });
     expect(r.fetched).toBe(1);
@@ -276,7 +276,7 @@ describe('hydrateArticles snapshot routing: user-worker', () => {
 
     const { hydrateArticles } = await import('./article-hydrator');
     const result = await hydrateArticles(makeSingleArticleInv(), {
-      getSnapshot: () => fakeSnapshot({ kind: 'user-worker', url: 'https://worker.example.com' }),
+      getSnapshot: () => fakeSnapshot({ kind: 'user-worker', url: 'https://worker.example.com', sharedSecret: 'test-secret' }),
     });
 
     expect(result.fetched).toBe(1);
