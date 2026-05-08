@@ -14,7 +14,7 @@ import { get } from 'svelte/store';
 import { extractImageUrls } from './extract-image-urls';
 import { hasImageBlob, saveImageBlob } from './image-store';
 import { imageHydration, type HydrationFailure } from './hydration-state';
-import { saveFailures } from './failure-store';
+import { saveFailures, loadFailures } from './failure-store';
 import { capabilitySnapshot, type CapabilitySnapshot } from './capability-snapshot';
 import { fetchImageViaHelper } from './helper-client';
 import { fetchImageViaUserWorker } from './user-worker-client';
@@ -93,47 +93,74 @@ export async function hydrateImages(
 
   const urls = extractImageUrls(inventory);
 
+  // Pre-compute already-hydrated count + persisted failures so the row
+  // displays the correct cumulative coverage from the very first frame —
+  // no climbing from 0 each refresh, no fail count flashing to 0.
+  const blobChecks = await Promise.all(urls.map((u) => hasImageBlob(u)));
+  const urlsToFetch = urls.filter((_, i) => !blobChecks[i]);
+  const skippedAtStart = urls.length - urlsToFetch.length;
+
+  const persisted = await loadFailures('images');
+  // Only carry forward failures whose URL is still both in the inventory
+  // AND not yet hydrated (a URL that succeeded since the last run shouldn't
+  // be in the failures list anymore).
+  const carriedFailures = persisted.filter((f) => urlsToFetch.includes(f.url));
+  const failures: HydrationFailure[] = [...carriedFailures];
+
   imageHydration.set({
     status: urls.length === 0 ? 'done' : 'running',
     total: urls.length,
     fetched: 0,
-    skipped: 0,
-    failed: 0,
-    failures: [],
+    skipped: skippedAtStart,
+    failed: failures.length,
+    failures: [...failures],
   });
 
   let fetched = 0;
-  let skipped = 0;
-  let failed = 0;
-  const failures: HydrationFailure[] = [];
+  const skipped = skippedAtStart;
+  let failed = failures.length;
 
-  for (const url of urls) {
+  for (const url of urlsToFetch) {
     if (signal?.aborted) {
       imageHydration.update((s) => ({ ...s, status: 'cancelled' }));
       void saveFailures('images', failures);
       return { fetched, skipped, failed, cancelled: true };
     }
 
-    if (await hasImageBlob(url)) {
-      skipped++;
-      imageHydration.update((s) => ({ ...s, skipped: s.skipped + 1 }));
-      continue;
-    }
-
     try {
       const blob = await fetcher(url);
       await saveImageBlob(url, blob);
       fetched++;
-      imageHydration.update((s) => ({ ...s, fetched: s.fetched + 1 }));
-    } catch (err) {
-      const failure: HydrationFailure = { url, reason: reasonOf(err) };
-      failures.push(failure);
-      failed++;
+      // If this URL was a carried-forward failure, drop it on success.
+      const i = failures.findIndex((f) => f.url === url);
+      if (i >= 0) {
+        failures.splice(i, 1);
+        failed--;
+      }
       imageHydration.update((s) => ({
         ...s,
-        failed: s.failed + 1,
-        failures: [...s.failures, failure],
+        fetched: s.fetched + 1,
+        failed: s.failures.filter((f) => f.url !== url).length,
+        failures: s.failures.filter((f) => f.url !== url),
       }));
+    } catch (err) {
+      const failure: HydrationFailure = { url, reason: reasonOf(err) };
+      const i = failures.findIndex((f) => f.url === url);
+      if (i >= 0) {
+        // Refresh the reason on a re-failed URL.
+        failures[i] = failure;
+      } else {
+        failures.push(failure);
+        failed++;
+      }
+      imageHydration.update((s) => {
+        const others = s.failures.filter((f) => f.url !== url);
+        return {
+          ...s,
+          failed: others.length + 1,
+          failures: [...others, failure],
+        };
+      });
     }
   }
 

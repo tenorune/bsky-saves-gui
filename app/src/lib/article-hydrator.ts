@@ -17,7 +17,7 @@ import { config } from './config';
 import { saveInventory } from './inventory-store';
 import { articleHydration, type HydrationFailure } from './hydration-state';
 import { extractArticleViaWorker } from './user-worker-client';
-import { saveFailures } from './failure-store';
+import { saveFailures, loadFailures } from './failure-store';
 import { capabilitySnapshot, type CapabilitySnapshot } from './capability-snapshot';
 
 export interface HydrateArticleResult {
@@ -128,6 +128,14 @@ export async function hydrateArticles(
   const urlsToFetch = extractArticleUrls(inventory);
   const skipped = allUrls.length - urlsToFetch.length;
 
+  // Carry forward any persisted failures whose URL is still relevant
+  // (still in the inventory and still needing hydration), so the count
+  // doesn't flash back to 0 each refresh.
+  const persisted = await loadFailures('articles');
+  const carriedFailures = persisted.filter((f) => urlsToFetch.includes(f.url));
+  const failures: HydrationFailure[] = [...carriedFailures];
+  let failed = failures.length;
+
   articleHydration.set({
     status: urlsToFetch.length === 0 ? 'done' : 'running',
     // Use the full article-eligible set as `total` so the LibraryHub
@@ -137,13 +145,11 @@ export async function hydrateArticles(
     total: allUrls.length,
     fetched: 0,
     skipped,
-    failed: 0,
-    failures: [],
+    failed,
+    failures: [...failures],
   });
 
   let fetched = 0;
-  let failed = 0;
-  const failures: HydrationFailure[] = [];
 
   for (const url of urlsToFetch) {
     if (signal?.aborted) {
@@ -171,7 +177,18 @@ export async function hydrateArticles(
         };
       }
       fetched++;
-      articleHydration.update((s) => ({ ...s, fetched: s.fetched + 1 }));
+      // If this URL was a carried-forward failure, drop it on success.
+      const i = failures.findIndex((f) => f.url === url);
+      if (i >= 0) {
+        failures.splice(i, 1);
+        failed--;
+      }
+      articleHydration.update((s) => ({
+        ...s,
+        fetched: s.fetched + 1,
+        failed: s.failures.filter((f) => f.url !== url).length,
+        failures: s.failures.filter((f) => f.url !== url),
+      }));
     } catch (err) {
       // AbortError: the user clicked Stop. Fall through; the next iteration's
       // signal.aborted check will exit cleanly.
@@ -179,13 +196,21 @@ export async function hydrateArticles(
         continue;
       }
       const failure: HydrationFailure = { url, reason: reasonOf(err) };
-      failures.push(failure);
-      failed++;
-      articleHydration.update((s) => ({
-        ...s,
-        failed: s.failed + 1,
-        failures: [...s.failures, failure],
-      }));
+      const i = failures.findIndex((f) => f.url === url);
+      if (i >= 0) {
+        failures[i] = failure;
+      } else {
+        failures.push(failure);
+        failed++;
+      }
+      articleHydration.update((s) => {
+        const others = s.failures.filter((f) => f.url !== url);
+        return {
+          ...s,
+          failed: others.length + 1,
+          failures: [...others, failure],
+        };
+      });
     }
   }
 
