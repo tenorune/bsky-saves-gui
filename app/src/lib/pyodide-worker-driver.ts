@@ -87,6 +87,11 @@ export class PyodideWorkerDriver {
           opts.onLog?.((e as MessageEvent).data.line ?? '');
           return; // log messages are not terminal
         }
+        if ('data' in e && (e as MessageEvent).data?.type === 'snapshot') {
+          // Snapshot replies have their own listener (see requestSnapshot);
+          // don't treat them as terminal here.
+          return;
+        }
         if ('data' in e && (e as MessageEvent).data?.type === 'result') {
           cleanup();
           resolve((e as MessageEvent).data.payload);
@@ -129,6 +134,56 @@ export class PyodideWorkerDriver {
     this._activeReject = null;
     if (r) r(new Error('pyodide worker cancelled'));
   }
+
+  /**
+   * Ask the worker for the current on-disk inventory. Used by the cancel
+   * path of the threads hydrator: bsky-saves >=0.4.2 flushes inventory
+   * after each save, so this returns whatever's been completed so far.
+   * Resolves with `null` on timeout (worker stuck in non-yielding Python)
+   * or if no inventory has been written yet.
+   */
+  requestSnapshot(timeoutMs = 2000): Promise<unknown | null> {
+    return new Promise<unknown | null>((resolve) => {
+      let settled = false;
+      const cleanup = () => {
+        this.worker.removeEventListener('message', onMessage);
+        this.worker.removeEventListener('error', onMessage);
+        clearTimeout(timer);
+      };
+      const onMessage = (e: MessageEvent | ErrorEvent) => {
+        if ('data' in e && (e as MessageEvent).data?.type === 'snapshot') {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          resolve((e as MessageEvent).data.inventory ?? null);
+        }
+      };
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(null);
+      }, timeoutMs);
+      this.worker.addEventListener('message', onMessage);
+      this.worker.addEventListener('error', onMessage);
+      this.worker.postMessage({ type: 'snapshot-request' });
+    });
+  }
+
+  /**
+   * Snapshot-then-cancel: request the latest inventory snapshot, then
+   * terminate the worker. Returns the snapshot (or null on timeout).
+   * The driver is not reusable afterwards.
+   */
+  async requestSnapshotThenCancel(timeoutMs = 2000): Promise<unknown | null> {
+    let snapshot: unknown | null = null;
+    try {
+      snapshot = await this.requestSnapshot(timeoutMs);
+    } finally {
+      this.cancelActive();
+    }
+    return snapshot;
+  }
 }
 
 let _shared: PyodideWorkerDriver | null = null;
@@ -156,6 +211,19 @@ export function cancelSharedDriver(): void {
     _shared.cancelActive();
     _shared = null;
   }
+}
+
+/**
+ * Snapshot-then-cancel: ask the shared driver for its current on-disk
+ * inventory snapshot, then terminate. Used by the threads hydrator's
+ * cancel path so partial progress (per-iteration flushes from
+ * bsky-saves >=0.4.2) is preserved instead of discarded.
+ */
+export async function snapshotAndCancelSharedDriver(timeoutMs = 2000): Promise<unknown | null> {
+  if (!_shared) return null;
+  const drv = _shared;
+  _shared = null;
+  return drv.requestSnapshotThenCancel(timeoutMs);
 }
 
 /** For tests only — resets the shared driver. */

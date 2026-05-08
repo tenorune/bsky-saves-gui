@@ -54,7 +54,8 @@ type Inbound =
   | FetchMessage
   | { type: 'fetchOnly'; input: FetchOnlyInput }
   | { type: 'enrichOnly'; input: EnrichOnlyInput }
-  | { type: 'threadsOnly'; input: ThreadsOnlyInput };
+  | { type: 'threadsOnly'; input: ThreadsOnlyInput }
+  | { type: 'snapshot-request' };
 
 interface InitReadyMessage {
   readonly type: 'init-ready';
@@ -71,12 +72,16 @@ interface ResultMessage {
   readonly type: 'result';
   readonly payload: unknown;
 }
+interface SnapshotMessage {
+  readonly type: 'snapshot';
+  readonly inventory: unknown | null;
+}
 interface ErrorMessage {
   readonly type: 'error';
   readonly message: string;
   readonly name: string;
 }
-type Outbound = InitReadyMessage | LogMessage | FetchResultMessage | ResultMessage | ErrorMessage;
+type Outbound = InitReadyMessage | LogMessage | FetchResultMessage | ResultMessage | SnapshotMessage | ErrorMessage;
 
 interface PyodideLike {
   runPythonAsync(code: string): Promise<unknown>;
@@ -158,7 +163,7 @@ await micropip.install('pyodide-http')
 import pyodide_http
 pyodide_http.patch_all()
 await micropip.install('httpx')
-await micropip.install('bsky-saves==0.4.1', deps=False)
+await micropip.install('bsky-saves==0.4.2', deps=False)
 
 # pyodide-http patches urllib/urllib3/requests but NOT httpx, which uses
 # httpcore that tries raw sockets. Replace the httpx surface bsky-saves
@@ -430,6 +435,24 @@ print(f'bsky-saves: thread hydration done — {hydrated} hydrated, {skipped} ski
 ctx.addEventListener('message', async (event: MessageEvent<Inbound>) => {
   try {
     const msg = event.data;
+    if (msg.type === 'snapshot-request') {
+      // Read the on-disk inventory and post it back. bsky-saves >=0.4.2
+      // flushes the inventory file after each save in hydrate_threads, so
+      // this snapshot reflects everything completed up to the most recent
+      // yield-point in the loop. Returns null if no inventory has been
+      // written yet (pre-init or before the first iteration).
+      let inventory: unknown = null;
+      try {
+        if (pyodide) {
+          const raw = pyodide.FS.readFile(INVENTORY_PATH, { encoding: 'utf8' });
+          inventory = JSON.parse(raw);
+        }
+      } catch {
+        inventory = null;
+      }
+      post({ type: 'snapshot', inventory });
+      return;
+    }
     if (msg.type === 'init') {
       await initialise(msg.pyodideVersion);
       post({ type: 'init-ready' });
