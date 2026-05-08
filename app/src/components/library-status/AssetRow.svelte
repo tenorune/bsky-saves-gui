@@ -43,14 +43,16 @@
     {#if backendLabel}
       <span class="backend">via {backendLabel}</span>
     {/if}
-    <!-- Always-rendered slot so the row's height is constant whether or not
-         a progress bar is showing. Track + fill are transparent when idle. -->
-    <div
-      class="progress-bar"
-      class:progress-bar--indeterminate={progress === 'indeterminate'}
-      class:progress-bar--idle={progress === null}
-    ><span style={typeof progress === 'number' ? `width: ${Math.round(progress * 100)}%` : ''}></span></div>
   {/if}
+  <!-- Progress-bar slot is rendered for every row state — off, no-backend,
+       on-running, on-idle — so the row's height is constant. Track + fill
+       are transparent unless `progress` is non-null and the row is on with
+       a backend (handled by the --idle modifier). -->
+  <div
+    class="progress-bar"
+    class:progress-bar--indeterminate={on && backendAvailable && progress === 'indeterminate'}
+    class:progress-bar--idle={!on || !backendAvailable || progress === null}
+  ><span style={on && backendAvailable && typeof progress === 'number' ? `width: ${Math.round(progress * 100)}%` : ''}></span></div>
 </div>
 
 <style>
