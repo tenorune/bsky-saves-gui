@@ -360,6 +360,16 @@
     border-top: 1px solid color-mix(in oklab, CanvasText 12%, transparent);
     padding: 1rem 0;
   }
+  /* When the InstallHelperHint sits directly above a settings section,
+     drop the section's top border so the hint isn't visually fenced
+     in below. */
+  :global(.install-hint) + .settings-section {
+    border-top: 0;
+  }
+  /* Pull "Advanced backup options" away from the last Backup checkbox. */
+  .settings-section .advanced-toggle {
+    margin-top: 1.25rem;
+  }
   .settings-section h3 {
     margin: 0 0 0.5rem;
   }

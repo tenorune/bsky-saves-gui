@@ -28,13 +28,12 @@
     gap: 0.5rem;
     align-items: baseline;
   }
-  /* Compact variant for Settings: tighter top spacing but keep the symmetric
-     borders so the tip is bracketed by thin lines top and bottom. */
+  /* Compact variant for Settings: tighter top spacing; no bottom border —
+     the immediately-following Settings section already provides any
+     divider needed. */
   .install-hint--compact {
     margin-top: 0.25rem;
     padding-top: 0.5rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 1px solid color-mix(in oklab, CanvasText 10%, transparent);
   }
   .install-hint__link, .install-hint__dismiss {
     font: inherit;
