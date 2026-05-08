@@ -22,7 +22,7 @@ import { hydrateThreads as defaultHydrateThreads, type FetchSavesCredentials, ty
 import { getSharedDriver, cancelSharedDriver } from './pyodide-worker-driver';
 import type { PyodideWorkerDriver } from './pyodide-worker-driver';
 import { config } from './config';
-import { saveFailures } from './failure-store';
+import { saveFailures, loadFailures } from './failure-store';
 import type { PreauthSession } from './preauth-session';
 
 export type ThreadBackend = { kind: 'helper' } | { kind: 'pyodide' };
@@ -71,9 +71,22 @@ export const threadHydrator = {
         // Skip saves that already have thread_replies populated (matches
         // bsky-saves CLI's hydrate-threads behavior). Failed and new saves
         // are retried on each Refresh.
-        const needsHydration = input.inventory.saves.filter((s) => s.thread_replies === undefined);
+        const allSaves = input.inventory.saves;
+        const needsHydration = allSaves.filter((s) => s.thread_replies === undefined);
         const uris = needsHydration.map((s) => s.uri);
-        threadProgress.set({ status: 'running', total: uris.length, fetched: 0, skipped: 0, failed: 0, failures: [] });
+        const skipped = allSaves.length - needsHydration.length;
+        // Carry forward persisted failures whose URI is still in scope
+        // for hydration so the count doesn't flash to 0 each refresh.
+        const persisted = await loadFailures('threads');
+        const carried = persisted.filter((f) => uris.includes(f.url));
+        threadProgress.set({
+          status: 'running',
+          total: allSaves.length,
+          fetched: 0,
+          skipped,
+          failed: carried.length,
+          failures: [...carried],
+        });
 
         if (uris.length === 0) {
           threadProgress.update((p) => ({ ...p, status: 'done' }));
@@ -134,7 +147,20 @@ export const threadHydrator = {
         }));
         return merged;
       }
-      threadProgress.set({ status: 'running', total: input.inventory.saves.length, fetched: 0, skipped: 0, failed: 0, failures: [] });
+      // Pre-compute skipped (saves already with thread_replies) so the
+      // displayed count is cumulative across cancel+restart cycles, and
+      // carry forward persisted failures.
+      const allSavesPy = input.inventory.saves;
+      const skippedPy = allSavesPy.filter((s) => s.thread_replies !== undefined).length;
+      const persistedPy = await loadFailures('threads');
+      threadProgress.set({
+        status: 'running',
+        total: allSavesPy.length,
+        fetched: 0,
+        skipped: skippedPy,
+        failed: persistedPy.length,
+        failures: [...persistedPy],
+      });
       const driver = deps.driver ?? getSharedDriver();
       await driver.initialise(config.pyodideVersion);
       // With preauthSession in hand the worker's monkey-patch bypasses
@@ -161,12 +187,15 @@ export const threadHydrator = {
         // time. Also handles `bsky-saves: K hydrated, F failed` summary at
         // end (informational; the merged inventory drives the final state).
         onLog: (line: string) => {
+          // bsky-saves prints "[N/M]" with M = saves needing hydration this
+          // run. We expose `fetched = N` (this-run progress) but DO NOT
+          // overwrite `total` — that's the full inventory size, set above
+          // so the cumulative display reads (fetched+skipped) of total.
           const m = /^\s*\[(\d+)\/(\d+)\]/.exec(line);
           if (m) {
             const fetched = parseInt(m[1], 10);
-            const total = parseInt(m[2], 10);
-            if (!Number.isNaN(fetched) && !Number.isNaN(total) && total > 0) {
-              threadProgress.update((p) => ({ ...p, fetched, total }));
+            if (!Number.isNaN(fetched)) {
+              threadProgress.update((p) => ({ ...p, fetched }));
             }
           }
         },
@@ -176,7 +205,9 @@ export const threadHydrator = {
         // result so we don't overwrite the existing inventory with a stale run.
         return input.inventory;
       }
-      threadProgress.update((p) => ({ ...p, status: 'done', fetched: p.total }));
+      // On clean completion, this run hydrated every save that needed it.
+      // fetched = total - skipped - failed (failed stays as carried + new).
+      threadProgress.update((p) => ({ ...p, status: 'done', fetched: Math.max(0, p.total - p.skipped - p.failed) }));
       return out;
     } catch (e) {
       if (_cancelled) return input.inventory;

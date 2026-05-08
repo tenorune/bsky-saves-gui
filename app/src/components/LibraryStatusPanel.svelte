@@ -65,14 +65,18 @@
   $: helperVersion = snap.helper.detected ? snap.helper.version : '';
   $: pyodideOnly = !snap.helper.detected;
 
-  // Threads
+  // Threads. Same cumulative-coverage shape as images/articles —
+  // fetched is this-run's newly-hydrated count, skipped is saves that
+  // already had thread_replies populated before this run started.
+  // Together they're the total hydrated.
   $: threadsTotal = $threadProgress.total || null;
-  $: threadsFetched = $threadProgress.fetched || null;
+  $: threadsHydrated = $threadProgress.fetched + $threadProgress.skipped;
+  $: threadsFetched = threadsHydrated > 0 ? threadsHydrated : null;
   $: threadsFailed = $threadProgress.failed;
   $: threadsRunning = $threadProgress.status === 'running';
   $: threadsProgress =
-    threadsRunning && threadsTotal && (threadsFetched ?? 0) > 0
-      ? Math.min(1, ($threadProgress.fetched ?? 0) / threadsTotal)
+    threadsRunning && threadsTotal && threadsHydrated > 0
+      ? Math.min(1, threadsHydrated / threadsTotal)
       : threadsRunning
       ? 'indeterminate' as const
       : null;
