@@ -9,6 +9,11 @@
   import { rkeyOf } from '../reader/inventory-shape';
 
   onMount(() => {
+    // Always start a post at the top. Without this, the browser keeps the
+    // window scroll position from the previous route (typically the
+    // Library, which preserves its own scroll on return), so a tall post
+    // can land the reader mid-content.
+    window.scrollTo(0, 0);
     if (get(inventoryState).status === 'loading') {
       void loadFromDb();
     }
