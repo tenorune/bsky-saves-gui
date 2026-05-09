@@ -1,4 +1,5 @@
 import { get, set, del } from 'idb-keyval';
+import { markInventoryPresent, clearInventoryPresent } from './inventory-presence';
 
 const KEY = 'inventory:v1';
 
@@ -6,6 +7,7 @@ export type Inventory = unknown; // shape comes from bsky-saves; treated opaquel
 
 export async function saveInventory(inventory: Inventory): Promise<void> {
   await set(KEY, inventory);
+  markInventoryPresent();
 }
 
 export async function loadInventory(): Promise<Inventory | null> {
@@ -15,4 +17,5 @@ export async function loadInventory(): Promise<Inventory | null> {
 
 export async function clearInventory(): Promise<void> {
   await del(KEY);
+  clearInventoryPresent();
 }

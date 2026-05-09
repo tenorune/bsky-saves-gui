@@ -8,6 +8,7 @@
   import { BUILD_TIME, BUILD_BRANCH } from '$lib/build-info';
   import { lastSession } from '$lib/last-session';
   import { inventoryState } from '$lib/inventory-loader';
+  import { inventoryPresent } from '$lib/inventory-presence';
 
   onMount(() => {
     const stop = startRouter();
@@ -37,9 +38,11 @@
           @{$lastSession.handle}
         </span>
       {/if}
+      {#if $inventoryPresent}
+        <a href="#/library">Library</a>
+      {/if}
       {#if $inventoryState.status === 'ready'}
         <ExportMenu />
-        <a href="#/library">Library</a>
       {/if}
       <a href="#/settings">Settings</a>
     </nav>
