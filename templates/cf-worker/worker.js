@@ -33,7 +33,7 @@ function parseAllowedOrigins(raw) {
 function corsHeaders(matchedOrigin) {
   return {
     'Access-Control-Allow-Origin': matchedOrigin,
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, X-Proxy-Secret',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin',

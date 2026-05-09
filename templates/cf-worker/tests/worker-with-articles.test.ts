@@ -23,6 +23,19 @@ describe('worker-with-articles bundle', () => {
     await worker.stop();
   });
 
+  it('OPTIONS preflight authorizes GET, POST, and the X-Proxy-Secret header', async () => {
+    const res = await worker.fetch('/capabilities', {
+      method: 'OPTIONS',
+      headers: { Origin: GOOD_ORIGIN },
+    });
+    expect(res.status).toBe(204);
+    const allowedMethods = res.headers.get('Access-Control-Allow-Methods') ?? '';
+    expect(allowedMethods).toContain('GET');
+    expect(allowedMethods).toContain('POST');
+    expect(allowedMethods).toContain('OPTIONS');
+    expect(res.headers.get('Access-Control-Allow-Headers')).toContain('X-Proxy-Secret');
+  });
+
   it('GET /capabilities lists both endpoints', async () => {
     const res = await worker.fetch('/capabilities', {
       method: 'GET',

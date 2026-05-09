@@ -45,7 +45,12 @@ describe('OPTIONS preflight', () => {
     });
     expect(res.status).toBe(204);
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe(GOOD_ORIGIN);
-    expect(res.headers.get('Access-Control-Allow-Methods')).toContain('POST');
+    const allowedMethods = res.headers.get('Access-Control-Allow-Methods') ?? '';
+    // GET is required so the modal's probe (GET /capabilities with the
+    // non-simple X-Proxy-Secret header) survives the browser's preflight.
+    expect(allowedMethods).toContain('GET');
+    expect(allowedMethods).toContain('POST');
+    expect(allowedMethods).toContain('OPTIONS');
     expect(res.headers.get('Access-Control-Allow-Headers')).toContain('X-Proxy-Secret');
   });
 
