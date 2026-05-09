@@ -58,6 +58,73 @@ describe('config', () => {
     expect(config.beaconAtUri).toBeNull();
   });
 
+  it('rejects a non-empty VITE_OPERATOR_IMAGE_PROXY_URL that lacks a scheme', async () => {
+    Object.assign(import.meta.env, {
+      VITE_APP_NAME: 'Test',
+      VITE_APP_DOMAIN: 'test.example',
+      VITE_OPERATOR_HANDLE: 'op',
+      VITE_BEACON_AT_URI: '',
+      VITE_DEFAULT_PDS: 'https://x',
+      VITE_HELPER_ORIGIN: 'http://x',
+      VITE_REPO_URL: 'https://x',
+      VITE_PYODIDE_VERSION: '0.0.0',
+      // Bare hostname — exactly the misconfiguration we hit in production.
+      VITE_OPERATOR_IMAGE_PROXY_URL: 'bsky-saves-image-proxy.example.workers.dev',
+    });
+
+    await expect(import('./config')).rejects.toThrow(/VITE_OPERATOR_IMAGE_PROXY_URL/);
+  });
+
+  it('rejects VITE_OPERATOR_IMAGE_PROXY_URL with a non-http scheme', async () => {
+    Object.assign(import.meta.env, {
+      VITE_APP_NAME: 'Test',
+      VITE_APP_DOMAIN: 'test.example',
+      VITE_OPERATOR_HANDLE: 'op',
+      VITE_BEACON_AT_URI: '',
+      VITE_DEFAULT_PDS: 'https://x',
+      VITE_HELPER_ORIGIN: 'http://x',
+      VITE_REPO_URL: 'https://x',
+      VITE_PYODIDE_VERSION: '0.0.0',
+      VITE_OPERATOR_IMAGE_PROXY_URL: 'ftp://example.com',
+    });
+
+    await expect(import('./config')).rejects.toThrow(/VITE_OPERATOR_IMAGE_PROXY_URL/);
+  });
+
+  it('accepts an empty VITE_OPERATOR_IMAGE_PROXY_URL (feature disabled)', async () => {
+    Object.assign(import.meta.env, {
+      VITE_APP_NAME: 'Test',
+      VITE_APP_DOMAIN: 'test.example',
+      VITE_OPERATOR_HANDLE: 'op',
+      VITE_BEACON_AT_URI: '',
+      VITE_DEFAULT_PDS: 'https://x',
+      VITE_HELPER_ORIGIN: 'http://x',
+      VITE_REPO_URL: 'https://x',
+      VITE_PYODIDE_VERSION: '0.0.0',
+      VITE_OPERATOR_IMAGE_PROXY_URL: '',
+    });
+
+    const { config } = await import('./config');
+    expect(config.operatorImageProxyUrl).toBe('');
+  });
+
+  it('accepts a well-formed https VITE_OPERATOR_IMAGE_PROXY_URL', async () => {
+    Object.assign(import.meta.env, {
+      VITE_APP_NAME: 'Test',
+      VITE_APP_DOMAIN: 'test.example',
+      VITE_OPERATOR_HANDLE: 'op',
+      VITE_BEACON_AT_URI: '',
+      VITE_DEFAULT_PDS: 'https://x',
+      VITE_HELPER_ORIGIN: 'http://x',
+      VITE_REPO_URL: 'https://x',
+      VITE_PYODIDE_VERSION: '0.0.0',
+      VITE_OPERATOR_IMAGE_PROXY_URL: 'https://operator.example.workers.dev',
+    });
+
+    const { config } = await import('./config');
+    expect(config.operatorImageProxyUrl).toBe('https://operator.example.workers.dev');
+  });
+
   it('throws on missing required values at module load time', async () => {
     Object.assign(import.meta.env, {
       VITE_APP_NAME: 'Test',

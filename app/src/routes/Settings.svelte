@@ -64,7 +64,12 @@
     await loadInstallHintPref();
   });
 
-  let operatorProxyReachable: 'unknown' | 'ok' | 'fail' = 'unknown';
+  import {
+    probeOperatorProxy as runOperatorProxyProbe,
+    type OperatorProxyStatus,
+  } from '$lib/operator-proxy-probe';
+
+  let operatorProxyReachable: OperatorProxyStatus = 'unknown';
 
   $: operatorProxyConfigured = config.operatorImageProxyUrl !== '';
   $: operatorProxyOptOut = backupPrefs?.operatorProxyOptOut ?? false;
@@ -72,16 +77,10 @@
   async function probeOperatorProxy(): Promise<void> {
     if (!operatorProxyConfigured) return;
     operatorProxyReachable = 'unknown';
-    try {
-      const url = config.operatorImageProxyUrl.replace(/\/+$/, '') + '/fetch';
-      const res = await fetch(url, {
-        method: 'OPTIONS',
-        headers: { Origin: window.location.origin },
-      });
-      operatorProxyReachable = res.status === 204 ? 'ok' : 'fail';
-    } catch {
-      operatorProxyReachable = 'fail';
-    }
+    operatorProxyReachable = await runOperatorProxyProbe(
+      config.operatorImageProxyUrl,
+      config.operatorImageProxySecret,
+    );
   }
 
   async function handleToggleOperatorProxyOptOut(event: Event) {
@@ -319,7 +318,11 @@
             <code>{config.operatorImageProxyUrl}</code>
             {#if operatorProxyReachable === 'ok'}
               <span class="status-ok">· reachable</span>
-            {:else if operatorProxyReachable === 'fail'}
+            {:else if operatorProxyReachable === 'origin-blocked'}
+              <span class="status-fail">· this origin is not in the worker's ALLOWED_ORIGIN</span>
+            {:else if operatorProxyReachable === 'unauthorized'}
+              <span class="status-fail">· shared-secret mismatch</span>
+            {:else if operatorProxyReachable === 'unreachable'}
               <span class="status-fail">· unreachable</span>
             {/if}
           </p>
