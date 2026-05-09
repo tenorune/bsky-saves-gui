@@ -1,6 +1,7 @@
 <script lang="ts">
   import { marked } from 'marked';
   import { config } from '$lib/config';
+  import { slideRoute } from '$lib/slide-transition';
   // Vite's `?raw` import returns the file contents as a string at build time.
   import rawPrivacy from '../../../docs/privacy.md?raw';
 
@@ -13,7 +14,7 @@
   const html = marked.parse(substituted, { async: false }) as string;
 </script>
 
-<section class="route route--privacy">
+<section class="route route--privacy" use:slideRoute>
   <div class="privacy-doc">
     {@html html}
   </div>

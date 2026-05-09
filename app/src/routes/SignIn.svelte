@@ -10,6 +10,7 @@
   import { assetToggles, setAssetToggle, loadAssetToggles } from '$lib/asset-toggles';
   import { createSession, InvalidCredentialsError } from '$lib/atproto';
   import { setLastSession } from '$lib/last-session';
+  import { slideRoute } from '$lib/slide-transition';
 
   let savedPresent = false;
   let useDifferentAccount = false;
@@ -112,7 +113,7 @@
   }
 </script>
 
-<section class="route route--sign-in">
+<section class="route route--sign-in" use:slideRoute>
   <p class="intro">
     {config.appName} exports your Bluesky saved posts as JSON, Markdown, or a
     self-contained HTML archive. Everything runs in your browser — your handle,

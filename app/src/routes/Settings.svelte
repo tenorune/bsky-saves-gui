@@ -68,6 +68,7 @@
     probeOperatorProxy as runOperatorProxyProbe,
     type OperatorProxyStatus,
   } from '$lib/operator-proxy-probe';
+  import { slideRoute } from '$lib/slide-transition';
 
   let operatorProxyReachable: OperatorProxyStatus = 'unknown';
 
@@ -203,7 +204,7 @@
   }
 </script>
 
-<section class="route route--settings">
+<section class="route route--settings" use:slideRoute>
   <header class="route__header">
     <h2 class="route__title">Settings</h2>
   </header>

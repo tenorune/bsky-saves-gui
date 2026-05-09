@@ -34,6 +34,7 @@
 
 <style>
   .library-view {
+    width: 100%;
     max-width: 44rem;
     margin: 0 auto;
   }
