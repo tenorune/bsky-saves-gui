@@ -11,12 +11,17 @@ const FETCH_TIMEOUT_MS = 20_000;
 const BODY_SIZE_LIMIT = 10 * 1024 * 1024;
 const SHORT_TEXT_THRESHOLD = 200;
 
-function corsHeaders(allowedOrigin: string): Record<string, string> {
+function parseAllowedOrigins(raw: string): string[] {
+  return raw.split(',').map((o) => o.trim()).filter(Boolean);
+}
+
+function corsHeaders(matchedOrigin: string): Record<string, string> {
   return {
-    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Origin': matchedOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, X-Proxy-Secret',
     'Access-Control-Max-Age': '86400',
+    'Vary': 'Origin',
   };
 }
 
@@ -222,10 +227,10 @@ export default {
     if (!env.SHARED_SECRET || env.SHARED_SECRET.trim() === '') {
       return jsonError('Worker misconfigured: SHARED_SECRET is not set', 500);
     }
-    const allowedOrigin = env.ALLOWED_ORIGIN.trim();
+    const allowedOrigins = parseAllowedOrigins(env.ALLOWED_ORIGIN);
     const requestOrigin = request.headers.get('Origin') ?? '';
-    if (requestOrigin !== allowedOrigin) return jsonError('Origin not allowed', 403);
-    const cors = corsHeaders(allowedOrigin);
+    if (!allowedOrigins.includes(requestOrigin)) return jsonError('Origin not allowed', 403);
+    const cors = corsHeaders(requestOrigin);
 
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
 

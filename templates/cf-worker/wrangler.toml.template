@@ -12,5 +12,7 @@ compatibility_date = "2025-01-01"
 #
 # ALLOWED_ORIGIN  — the full origin of your deployed app
 #                   e.g. "https://saves.lightseed.net"
+#                   or a comma-separated list of origins, e.g.
+#                   "https://saves.example.com,https://staging.example.com"
 # SHARED_SECRET   — a long random string; the app shows you a generated one
 #                   in Settings → Proxy setup.

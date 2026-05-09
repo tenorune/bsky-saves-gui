@@ -41,6 +41,15 @@ describe('worker-with-articles bundle', () => {
     expect(res.status).toBe(401);
   });
 
+  it('echoes the matched origin in CORS reply with Vary: Origin', async () => {
+    const res = await worker.fetch('/capabilities', {
+      method: 'GET',
+      headers: { Origin: GOOD_ORIGIN, 'X-Proxy-Secret': GOOD_SECRET },
+    });
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBe(GOOD_ORIGIN);
+    expect(res.headers.get('Vary')).toContain('Origin');
+  });
+
   it('POST /extract-article rejects wrong origin', async () => {
     const res = await worker.fetch('/extract-article', {
       method: 'POST',
@@ -89,6 +98,49 @@ describe('worker-with-articles bundle', () => {
       // example.com is short — expect a note.
       expect(body.note).toBeTypeOf('string');
     }
+  });
+});
+
+describe('worker-with-articles multi-origin ALLOWED_ORIGIN', () => {
+  const SECOND_ORIGIN = 'https://staging.example.com';
+  let worker: UnstableDevWorker;
+  beforeAll(async () => {
+    worker = await unstable_dev(WORKER_SCRIPT, {
+      vars: {
+        ALLOWED_ORIGIN: `${GOOD_ORIGIN}, ${SECOND_ORIGIN}`,
+        SHARED_SECRET: GOOD_SECRET,
+      },
+      experimental: EXPERIMENTAL,
+    });
+  });
+  afterAll(async () => {
+    await worker.stop();
+  });
+
+  it('allows the first listed origin', async () => {
+    const res = await worker.fetch('/capabilities', {
+      method: 'GET',
+      headers: { Origin: GOOD_ORIGIN, 'X-Proxy-Secret': GOOD_SECRET },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBe(GOOD_ORIGIN);
+  });
+
+  it('allows the second listed origin and echoes it back', async () => {
+    const res = await worker.fetch('/capabilities', {
+      method: 'GET',
+      headers: { Origin: SECOND_ORIGIN, 'X-Proxy-Secret': GOOD_SECRET },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBe(SECOND_ORIGIN);
+  });
+
+  it('rejects an origin not in the comma-separated list', async () => {
+    const res = await worker.fetch('/capabilities', {
+      method: 'GET',
+      headers: { Origin: 'https://attacker.example.com', 'X-Proxy-Secret': GOOD_SECRET },
+    });
+    expect(res.status).toBe(403);
   });
 });
 
