@@ -371,6 +371,9 @@
     margin: 0 auto;
   }
   .route__header {
+    /* Matches Library's `.route__header` padding-top so both titles sit
+       the same distance below the app navbar. */
+    padding-top: 0.75rem;
     margin-bottom: 1.5rem;
   }
   .route__title {
