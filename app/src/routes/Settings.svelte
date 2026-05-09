@@ -7,6 +7,7 @@
   import { clearCredentials } from '$lib/credentials-store';
   import { clearAccount } from '$lib/account-store';
   import { lastSession, clearLastSession } from '$lib/last-session';
+  import { signInDraft } from '$lib/sign-in-draft';
   import { clearBeaconSent } from '$lib/beacon';
   import { loadProxyConfig, clearProxyConfig } from '$lib/proxy-config';
   import { disableOperatorProxy } from '$lib/disable-operator-proxy';
@@ -167,7 +168,7 @@
   }
 
   async function clearAll() {
-    if (!confirm('Clear inventory, saved credentials, backup state, and beacon state? This cannot be undone.')) {
+    if (!confirm('Wipe the inventory, backups, and saved credentials from this browser? This cannot be undone.')) {
       return;
     }
     cancelImageBackup();
@@ -196,10 +197,16 @@
   }
 
   function signOut() {
-    // Sign out clears only the session token. Inventory, saved credentials,
-    // and account label all stay so the user can sign in again and pick up
-    // where they left off. To wipe everything, use "Clear all local data".
+    // End the active session: clear the JWTs in sessionStorage AND the
+    // in-memory sign-in draft (which holds the app password from the most
+    // recent sign-in form submit). Without clearing the draft, asset
+    // hydration could still authenticate against the PDS using the
+    // residual password — making "Sign out" a no-op for active backups.
+    // Inventory, encrypted credentials, and account label intentionally
+    // stay so signing back in only requires the local-DB passphrase.
+    // To wipe everything, use "Clear all local data".
     clearLastSession();
+    signInDraft.set(null);
     navigate('/');
   }
 </script>
@@ -223,8 +230,16 @@
         Signed in as <code>@{$lastSession.handle}</code>.
       </p>
       <div class="settings-row">
-        <button type="button" on:click={signOut}>Sign out</button>
+        <button
+          type="button"
+          on:click={signOut}
+          title="End your session. Inventory and saved credentials stay on this device; sign in again to resume."
+        >Sign out</button>
       </div>
+      <p class="help">
+        Ends the session. Inventory and saved credentials stay on this device
+        — to wipe them, use Reset below.
+      </p>
     {:else}
       <p class="help">Not signed in.</p>
       <div class="settings-row">
@@ -353,7 +368,7 @@
   <section class="settings-section">
     <h3>Reset</h3>
     <p class="help">
-      Wipes the inventory, saved credentials, and beacon state from this browser. This cannot be undone.
+      Wipes the inventory, backups, and saved credentials from this browser. This cannot be undone.
     </p>
     <button type="button" class="danger" on:click={clearAll}>Clear all local data</button>
   </section>
