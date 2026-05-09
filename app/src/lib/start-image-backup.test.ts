@@ -2,6 +2,16 @@ import { describe, expect, it, beforeEach, vi } from 'vitest';
 import 'fake-indexeddb/auto';
 import { get } from 'svelte/store';
 
+// See image-fetcher.test.ts for the rationale. Tests that need a
+// configured operator proxy override via vi.doMock after vi.resetModules.
+vi.mock('./config', () => ({
+  config: {
+    helperOrigin: 'http://127.0.0.1:47826',
+    operatorImageProxyUrl: '',
+    operatorImageProxySecret: '',
+  },
+}));
+
 beforeEach(async () => {
   vi.unstubAllGlobals();
   vi.resetModules();
