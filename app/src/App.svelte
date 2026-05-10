@@ -95,9 +95,7 @@
   {#if $persistenceMode === 'session-only'}
     <div class="session-only-banner" role="status">
       <span class="session-only-banner__msg">
-        Session-only mode — closing this tab signs you out. Your saves
-        won't follow you across a browser quit on most setups, though
-        browsers that restore sessions may show them again briefly.
+        <strong>Session mode</strong> — closing this tab will clear your library{#if $lastSession} and sign you out{/if}.
       </span>
       <button
         type="button"
@@ -196,19 +194,25 @@
     padding: 1.5rem;
   }
   .session-only-banner {
+    /* Left edge aligns with .app-header's left padding (1.5rem) so the
+       banner reads as a continuation of the header rather than a
+       separately-positioned strip. message + action sit next to each
+       other on the left rather than space-between'd — the action is
+       a short inline link, not a separately-emphasized button. */
     display: flex;
     flex-wrap: wrap;
-    gap: 0.75rem 1rem;
-    align-items: center;
-    justify-content: space-between;
+    gap: 0.5rem 1rem;
+    align-items: baseline;
     padding: 0.625rem 1.5rem;
     background: color-mix(in oklab, Canvas 88%, orange 12%);
     border-bottom: 1px solid color-mix(in oklab, CanvasText 18%, transparent);
     font-size: 0.875rem;
   }
   .session-only-banner__msg {
-    flex: 1;
-    min-width: 16rem;
+    /* Don't grow: keep the message its natural width so the action
+       sits right next to it. flex-wrap on the parent handles the
+       narrow-viewport overflow. */
+    flex: 0 0 auto;
   }
   /* The "Keep my saves in this browser" affordance functions as a
      button (triggers a multi-step flush) but reads as a link in the

@@ -9,7 +9,6 @@
   import { lastSession, clearLastSession } from '$lib/last-session';
   import { signInDraft } from '$lib/sign-in-draft';
   import { clearSessionHeartbeat } from '$lib/session-heartbeat';
-  import { clearSessionOnlyMarker } from '$lib/persistence-mode';
   import { clearBeaconSent } from '$lib/beacon';
   import { loadProxyConfig, clearProxyConfig } from '$lib/proxy-config';
   import { disableOperatorProxy } from '$lib/disable-operator-proxy';
@@ -220,12 +219,16 @@
     // Inventory, encrypted credentials, and account label intentionally
     // stay so signing back in only requires the local-DB passphrase.
     // To wipe everything, use "Clear all local data".
+    //
+    // Intentionally NOT clearing the session-only marker here: if the
+    // user signed in unchecked, the session-mode banner should stay
+    // visible after sign-out (its copy adapts to drop "and sign you
+    // out" when there's no active session). The marker is cleared
+    // only by: a fresh sign-in (SignIn.submit chooses based on the
+    // checkbox), "Keep my saves in this browser" (saveLibraryToDevice),
+    // or heartbeat expiry.
     clearLastSession();
     signInDraft.set(null);
-    // Drop the session-only marker so the post-sign-out app shows
-    // persistenceMode='persist' (the default for returning visits).
-    // The next sign-in's checkbox choice will set the right value.
-    clearSessionOnlyMarker();
     navigate('/');
   }
 </script>
