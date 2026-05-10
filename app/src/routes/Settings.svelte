@@ -193,7 +193,7 @@
   }
 
   async function clearAllPreferences() {
-    if (!confirm('Reset preferences and custom setup (asset toggles, operator-proxy opt-out, install hint, custom Cloudflare Worker setup, Library filters, session-only mode) to defaults? Your saves and credentials will not be affected.')) {
+    if (!confirm('Reset preferences and custom setup (asset toggles, operator-proxy opt-out, install hint, custom Cloudflare Worker setup, Library filters) to defaults? Your saves and credentials will not be affected.')) {
       return;
     }
     await Promise.all([
@@ -203,17 +203,6 @@
       clearProxyConfig(),
     ]);
     resetLibraryFilters();
-    // Exit session-only mode if the current sign-in chose it. The
-    // library data lives in sessionStorage and stays there; the next
-    // write will migrate it to disk per the cross-store invariant in
-    // each store's writeToStorage. The banner clears immediately
-    // because both the draft.saveInventory boolean and the marker
-    // are cleared.
-    const draft = get(signInDraft);
-    if (draft && draft.saveInventory === false) {
-      signInDraft.set({ ...draft, saveInventory: true });
-    }
-    clearSessionOnlyMarker();
     operatorProxyOptOut = false;
     customProxyConfigured = false;
     // Recompute capability snapshot since operator-proxy opt-out and
@@ -404,7 +393,7 @@
       <button type="button" class="danger" on:click={clearAll}>Clear all local data</button>
     </div>
     <p class="help advanced-heading--spaced">
-      Reset preferences and custom setup (asset toggles, operator-proxy opt-out, install hint, custom Cloudflare Worker setup, Library filters, session-only mode) to defaults. Your saves and credentials are not affected.
+      Reset preferences and custom setup (asset toggles, operator-proxy opt-out, install hint, custom Cloudflare Worker setup, Library filters) to defaults. Your saves and credentials are not affected.
     </p>
     <div class="settings-row">
       <button type="button" on:click={clearAllPreferences}>Reset all preferences</button>
