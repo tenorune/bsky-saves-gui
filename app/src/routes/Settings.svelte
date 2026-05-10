@@ -321,36 +321,38 @@
         {/if}
       </p>
 
-      <label class="checkbox settings-section--spaced">
-        <input type="checkbox" bind:checked={rememberCredsChecked} />
-        <span>Remember my app password on this device</span>
-      </label>
-      {#if rememberCredsChecked}
-        <div class="settings-creds-form">
-          <label class="settings-field">
-            Passphrase
-            <input
-              type="password"
-              bind:value={rememberPassphrase}
-              minlength="8"
-              autocomplete="new-password"
-            />
-          </label>
-          <p class="help">
-            Your app password gets locked with this passphrase and stored only
-            in this browser. If you forget the passphrase, you'll just need to
-            type your app password again next time.
-          </p>
-          <div class="settings-row">
-            <button type="button" on:click={handleSaveCredentialsFromSettings}>Save</button>
+      {#if !savedCredentialsPresent}
+        <label class="checkbox settings-section--spaced">
+          <input type="checkbox" bind:checked={rememberCredsChecked} />
+          <span>Remember my app password on this device</span>
+        </label>
+        {#if rememberCredsChecked}
+          <div class="card advanced settings-creds-form">
+            <label class="settings-field">
+              Passphrase
+              <input
+                type="password"
+                bind:value={rememberPassphrase}
+                minlength="8"
+                autocomplete="new-password"
+              />
+            </label>
+            <p class="help">
+              Your app password gets locked with this passphrase and stored only
+              in this browser. If you forget the passphrase, you'll just need to
+              type your app password again next time.
+            </p>
+            <div class="settings-row">
+              <button type="button" on:click={handleSaveCredentialsFromSettings}>Save</button>
+            </div>
+            {#if rememberCredsStatus}
+              <p class="status">{rememberCredsStatus}</p>
+            {/if}
+            {#if rememberCredsError}
+              <p class="error" role="alert">{rememberCredsError}</p>
+            {/if}
           </div>
-          {#if rememberCredsStatus}
-            <p class="status">{rememberCredsStatus}</p>
-          {/if}
-          {#if rememberCredsError}
-            <p class="error" role="alert">{rememberCredsError}</p>
-          {/if}
-        </div>
+        {/if}
       {/if}
     {:else}
       <p class="help">Not signed in. You must be signed in to refresh your saved posts.</p>
@@ -605,18 +607,14 @@
     font-weight: 500;
   }
   /* "Remember my app password" form revealed by the checkbox in
-     Settings → Account. Indents under the checkbox to read as
-     belonging to it, with a light surface so it doesn't run into the
-     surrounding flow. */
+     Settings → Account. Container reuses .card.advanced so it
+     visually matches the other Advanced cards (Settings backup,
+     SignIn → Advanced) — no background, just an outlined box. */
   .settings-section--spaced {
     margin-top: 0.75rem;
   }
   .settings-creds-form {
     margin-top: 0.5rem;
-    padding: 0.75rem 1rem;
-    border: 1px solid color-mix(in oklab, CanvasText 12%, transparent);
-    border-radius: 6px;
-    background: color-mix(in oklab, CanvasText 3%, Canvas);
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
