@@ -30,8 +30,8 @@
   import { parseInventory } from '../reader/inventory-shape';
   import { navigate } from '$lib/router';
   import CustomProxySetupModal from '../components/CustomProxySetupModal.svelte';
-  import { assetToggles, setAssetToggle, loadAssetToggles } from '$lib/asset-toggles';
-  import { installHintDismissed, loadInstallHintPref } from '$lib/install-hint-pref';
+  import { assetToggles, setAssetToggle, loadAssetToggles, clearAssetToggles } from '$lib/asset-toggles';
+  import { installHintDismissed, loadInstallHintPref, clearInstallHintPref } from '$lib/install-hint-pref';
   import InstallHelperHint from '../components/library-status/InstallHelperHint.svelte';
   import { capabilitySnapshot, initCapabilitySnapshot } from '$lib/capability-snapshot';
   import { prospectiveBackendName } from '$lib/dominant-backend';
@@ -168,13 +168,17 @@
     }
     cancelImageBackup();
     cancelArticleBackup();
+    // Reset wipes data, auth, and diagnostics. It intentionally does NOT
+    // touch user preferences (asset toggles, operator-proxy opt-out, the
+    // install-helper hint) — those are browser-wide settings the user
+    // tuned for this device. "Reset all preferences" is a separate action
+    // for that.
     await Promise.all([
       clearInventory(),
       clearCredentials(),
       clearProxyConfig(),
       clearBeaconSent(),
       clearAccount(),
-      clearOperatorProxyOptOut(),
       clearImageBlobs(),
       clearFailures(),
     ]);
@@ -183,13 +187,27 @@
     resetImageHydration();
     resetArticleHydration();
     resetLibraryFilters();
-    // Refresh local UI state so the Backup section disappears immediately.
-    operatorProxyOptOut = false;
     customProxyConfigured = false;
     operatorProxyReachable = 'unknown';
     void probeOperatorProxy();
     await loadFromDb();
     status = 'All local data cleared.';
+  }
+
+  async function clearAllPreferences() {
+    if (!confirm('Reset preferences (asset toggles, operator-proxy opt-out, install hint) to defaults? Your saves and credentials will not be affected.')) {
+      return;
+    }
+    await Promise.all([
+      clearAssetToggles(),
+      clearOperatorProxyOptOut(),
+      clearInstallHintPref(),
+    ]);
+    operatorProxyOptOut = false;
+    // Recompute capability snapshot since operator-proxy opt-out
+    // affects routing and image-fetcher's backend selection.
+    await initCapabilitySnapshot();
+    status = 'All preferences reset to defaults.';
   }
 
   function signOut() {
@@ -366,7 +384,15 @@
     <p class="help">
       Wipes the inventory, backups, and saved credentials from this browser. This cannot be undone.
     </p>
-    <button type="button" class="danger" on:click={clearAll}>Clear all local data</button>
+    <div class="settings-row">
+      <button type="button" class="danger" on:click={clearAll}>Clear all local data</button>
+    </div>
+    <p class="help advanced-heading--spaced">
+      Reset all preferences (asset toggles, operator-proxy opt-out, install hint) to defaults. Your saves and credentials are not affected.
+    </p>
+    <div class="settings-row">
+      <button type="button" on:click={clearAllPreferences}>Reset all preferences</button>
+    </div>
   </section>
 
   <CustomProxySetupModal
@@ -447,8 +473,7 @@
     gap: 0.5rem;
     flex-wrap: wrap;
   }
-  .settings-row button,
-  .settings-section > button {
+  .settings-row button {
     font: inherit;
     line-height: 1.25;
     padding: 0.5rem 0.75rem;

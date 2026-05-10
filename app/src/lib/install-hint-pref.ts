@@ -1,5 +1,5 @@
 import { writable, type Readable } from 'svelte/store';
-import { get as idbGet, set as idbSet } from 'idb-keyval';
+import { get as idbGet, set as idbSet, del as idbDel } from 'idb-keyval';
 
 const KEY = 'install-hint-dismissed:v1';
 
@@ -19,6 +19,15 @@ export async function dismissInstallHint(): Promise<void> {
 export async function restoreInstallHint(): Promise<void> {
   store.set(false);
   await idbSet(KEY, false);
+}
+
+/**
+ * Drop the persisted dismissal so the hint reverts to its default
+ * (visible). Used by Settings → "Reset all preferences."
+ */
+export async function clearInstallHintPref(): Promise<void> {
+  store.set(false);
+  await idbDel(KEY);
 }
 
 /** For tests only — resets to false without touching IndexedDB. */

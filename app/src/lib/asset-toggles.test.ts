@@ -5,10 +5,11 @@ import {
   assetToggles,
   setAssetToggle,
   loadAssetToggles,
+  clearAssetToggles,
   _resetAssetTogglesForTests,
   type AssetTogglesShape,
 } from './asset-toggles';
-import { clear } from 'idb-keyval';
+import { clear, get as idbGet } from 'idb-keyval';
 
 describe('assetToggles', () => {
   beforeEach(async () => {
@@ -83,6 +84,19 @@ describe('images-toggle-on triggers image hydration', () => {
     await setAssetToggle('threads', false, { onImagesToggleOn });
     await setAssetToggle('threads', true, { onImagesToggleOn });
     expect(onImagesToggleOn).not.toHaveBeenCalled();
+  });
+
+  it('clearAssetToggles resets in-memory store to defaults and removes the IDB entry', async () => {
+    await setAssetToggle('threads', true);
+    await setAssetToggle('images', true);
+    await setAssetToggle('articles', true);
+    expect(get(assetToggles)).toEqual({ threads: true, images: true, articles: true });
+    expect(await idbGet('asset-toggles:v1')).toBeDefined();
+
+    await clearAssetToggles();
+
+    expect(get(assetToggles)).toEqual({ threads: false, images: false, articles: false });
+    expect(await idbGet('asset-toggles:v1')).toBeUndefined();
   });
 });
 
