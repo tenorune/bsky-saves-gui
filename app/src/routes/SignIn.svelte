@@ -4,7 +4,7 @@
   import { config } from '$lib/config';
   import { navigate } from '$lib/router';
   import { signInDraft } from '$lib/sign-in-draft';
-  import { markSessionOnly, clearSessionOnlyMarker } from '$lib/persistence-mode';
+  import { markSessionOnly, clearSessionOnlyMarker, persistenceMode } from '$lib/persistence-mode';
   import { hasCredentials, loadCredentials, saveCredentials as persistCredentials } from '$lib/credentials-store';
   import { DecryptError } from '$lib/crypto';
   import { startLibraryRefresh } from '$lib/library-refresh';
@@ -40,7 +40,15 @@
       handle = creds.handle;
       appPassword = creds.appPassword;
       pds = creds.pds;
-      // Auto-submit the form.
+      // Preserve the prior session-only choice when unlocking. The
+      // form's saveInventory local defaults to true (the natural
+      // default for a fresh sign-in), but if the user was already in
+      // session-only mode — sessionStorage marker is still set —
+      // submitting with saveInventory=true would clear the marker
+      // and silently flip them to persist mode. Reflect the mode
+      // marker into the form so the user's prior intent survives the
+      // passphrase unlock.
+      saveInventory = get(persistenceMode) !== 'session-only';
       submit();
     } catch (e) {
       if (e instanceof DecryptError) {
