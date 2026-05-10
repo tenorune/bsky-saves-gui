@@ -10,6 +10,7 @@
   import { assetToggles, setAssetToggle, loadAssetToggles } from '$lib/asset-toggles';
   import { createSession, InvalidCredentialsError } from '$lib/atproto';
   import { setLastSession } from '$lib/last-session';
+  import { saveAccount } from '$lib/account-store';
   import { clearInventory } from '$lib/inventory-store';
   import { clearImageBlobs } from '$lib/image-store';
   import { clearFailures } from '$lib/failure-store';
@@ -111,6 +112,13 @@
       did: session.did,
       handle: session.handle,
     });
+
+    // Persist the account label so the cached library remains attributed
+    // to its source account even after Sign Out (when lastSession is gone
+    // but the inventory and credentials may still be on the device).
+    // Reads the resolved handle from the createSession response, not the
+    // user-typed input — handles get canonicalized server-side.
+    void saveAccount(session.handle);
 
     startLibraryRefresh({
       credentials: { handle, appPassword, pds },
