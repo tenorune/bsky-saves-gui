@@ -169,14 +169,13 @@
     cancelImageBackup();
     cancelArticleBackup();
     // Reset wipes data, auth, and diagnostics. It intentionally does NOT
-    // touch user preferences (asset toggles, operator-proxy opt-out, the
-    // install-helper hint) — those are browser-wide settings the user
-    // tuned for this device. "Reset all preferences" is a separate action
-    // for that.
+    // touch preferences or setup the user tuned for this device — asset
+    // toggles, operator-proxy opt-out, install hint, custom proxy
+    // configuration, and Library filters all survive. "Reset all
+    // preferences" is the separate action for those.
     await Promise.all([
       clearInventory(),
       clearCredentials(),
-      clearProxyConfig(),
       clearBeaconSent(),
       clearAccount(),
       clearImageBlobs(),
@@ -186,8 +185,6 @@
     clearSessionHeartbeat();
     resetImageHydration();
     resetArticleHydration();
-    resetLibraryFilters();
-    customProxyConfigured = false;
     operatorProxyReachable = 'unknown';
     void probeOperatorProxy();
     await loadFromDb();
@@ -195,17 +192,20 @@
   }
 
   async function clearAllPreferences() {
-    if (!confirm('Reset preferences (asset toggles, operator-proxy opt-out, install hint) to defaults? Your saves and credentials will not be affected.')) {
+    if (!confirm('Reset preferences and custom setup (asset toggles, operator-proxy opt-out, install hint, custom Cloudflare Worker setup, Library filters) to defaults? Your saves and credentials will not be affected.')) {
       return;
     }
     await Promise.all([
       clearAssetToggles(),
       clearOperatorProxyOptOut(),
       clearInstallHintPref(),
+      clearProxyConfig(),
     ]);
+    resetLibraryFilters();
     operatorProxyOptOut = false;
-    // Recompute capability snapshot since operator-proxy opt-out
-    // affects routing and image-fetcher's backend selection.
+    customProxyConfigured = false;
+    // Recompute capability snapshot since operator-proxy opt-out and
+    // custom proxy config both affect routing / backend selection.
     await initCapabilitySnapshot();
     status = 'All preferences reset to defaults.';
   }
@@ -388,7 +388,7 @@
       <button type="button" class="danger" on:click={clearAll}>Clear all local data</button>
     </div>
     <p class="help advanced-heading--spaced">
-      Reset all preferences (asset toggles, operator-proxy opt-out, install hint) to defaults. Your saves and credentials are not affected.
+      Reset preferences and custom setup (asset toggles, operator-proxy opt-out, install hint, custom Cloudflare Worker setup, Library filters) to defaults. Your saves and credentials are not affected.
     </p>
     <div class="settings-row">
       <button type="button" on:click={clearAllPreferences}>Reset all preferences</button>
