@@ -37,18 +37,18 @@ const HEARTBEAT_INTERVAL_MS = 30_000;
 const STALE_THRESHOLD_MS = 60_000;
 
 // Sessionstorage keys that should be cleared when the heartbeat is
-// stale. Add new session-only keys here as they're introduced.
-//
-// `session-only-mode:v1` (the persistence-mode marker) is intentionally
-// NOT in this list — the marker is a UI-state preference for the user's
-// chosen mode, not a data item. After expiry, the next sign-in's
-// checkbox value will set the right marker; the stale-but-set marker
-// is harmless in the meantime (data has been cleared, and any future
-// writes correctly go to sessionStorage per the marker's signal).
+// stale. Add new session-only keys here as they're introduced — the
+// list represents "everything tied to the current session that should
+// be wiped if the user has been gone long enough."
 const SESSION_KEYS_TO_EXPIRE = [
   'inventory:session-v1',  // inventory-store
   'inventory-present:v1',  // inventory-presence
   'last-session:v1',       // last-session (session-only mode)
+  'account:v1',            // account-store (session-only mode)
+  'session-only-mode:v1',  // persistence-mode marker — wiping it lets
+                           // the post-expiry app revert to default
+                           // 'persist' mode and stop showing the
+                           // session-only banner over a fresh state
 ];
 
 let intervalId: ReturnType<typeof setInterval> | null = null;

@@ -55,12 +55,22 @@ describe('expireStaleSessionData', () => {
   });
 
   it('clears all session-only sessionStorage entries when the heartbeat is stale', () => {
+    // Populate every key the expiry should cover. Add new ones here as
+    // the SESSION_KEYS_TO_EXPIRE list grows.
     sessionStorage.setItem('inventory:session-v1', '{"saves":[]}');
     sessionStorage.setItem('inventory-present:v1', '1');
+    sessionStorage.setItem('last-session:v1', '{"handle":"h"}');
+    sessionStorage.setItem('account:v1', 'h');
+    sessionStorage.setItem('session-only-mode:v1', '1');
     localStorage.setItem(HEARTBEAT_KEY, String(Date.now() - STALE - 5_000));
     expect(expireStaleSessionData()).toBe(true);
     expect(sessionStorage.getItem('inventory:session-v1')).toBeNull();
     expect(sessionStorage.getItem('inventory-present:v1')).toBeNull();
+    expect(sessionStorage.getItem('last-session:v1')).toBeNull();
+    expect(sessionStorage.getItem('account:v1')).toBeNull();
+    // The persistence-mode marker is also expired so the post-quit
+    // reopen doesn't show a session-only banner over a fresh state.
+    expect(sessionStorage.getItem('session-only-mode:v1')).toBeNull();
   });
 
   it('returns false when there is no heartbeat at all (no stale data to clear)', () => {

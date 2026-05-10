@@ -25,12 +25,19 @@
 
 import { derived, get, writable, type Readable } from 'svelte/store';
 import { signInDraft } from './sign-in-draft';
+import { expireStaleSessionData } from './session-heartbeat';
 
 export type PersistenceMode = 'persist' | 'session-only';
 
 const MARKER_KEY = 'session-only-mode:v1';
 
 function readMarker(): boolean {
+  // Drop the marker (and other session-only data) if the heartbeat is
+  // stale. Without this, a session-restoring browser's rehydrated
+  // marker would survive a long-gap reopen and the banner would show
+  // over a freshly-empty state, confusing the user about what mode
+  // they're actually in.
+  expireStaleSessionData();
   if (typeof sessionStorage === 'undefined') return false;
   try {
     return sessionStorage.getItem(MARKER_KEY) === '1';
