@@ -222,18 +222,22 @@
     // residual password — making "Sign out" a no-op for active backups.
     // Inventory, encrypted credentials, and account label intentionally
     // stay so signing back in only requires the local-DB passphrase.
-    // To wipe everything, use "Clear all local data".
+    // To wipe everything, use "Clear data".
     //
-    // Intentionally NOT clearing the session-only marker here: if the
-    // user signed in unchecked, the session-mode banner should stay
-    // visible after sign-out (its copy adapts to drop "and sign you
-    // out" when there's no active session). The marker is cleared
-    // only by: a fresh sign-in (SignIn.submit chooses based on the
-    // checkbox), "Keep my saves in this browser" (saveLibraryToDevice),
-    // or heartbeat expiry.
+    // Intentionally NOT clearing the session-only marker: if the user
+    // signed in unchecked, the session-mode banner should stay visible
+    // after sign-out (its copy adapts to drop "and sign you out" when
+    // there's no active session). The marker is cleared only by a
+    // fresh sign-in, "Keep my saves in this browser"
+    // (saveLibraryToDevice), or heartbeat expiry.
+    //
+    // Intentionally NOT navigating away from Settings either: the user
+    // is in the middle of looking at their settings, and signing out
+    // is a settings-side action. The runtime route gate in App.svelte
+    // ensures any later attempt to reach /library or /post via
+    // browser back / address bar redirects them to sign-in.
     clearLastSession();
     signInDraft.set(null);
-    navigate('/');
   }
 </script>
 
@@ -270,7 +274,7 @@
         {/if}
       </p>
     {:else}
-      <p class="help">Not signed in.</p>
+      <p class="help">Not signed in. You must be signed in to refresh your saved posts.</p>
       <div class="settings-row">
         <button type="button" on:click={() => navigate('/')}>Sign in</button>
       </div>
