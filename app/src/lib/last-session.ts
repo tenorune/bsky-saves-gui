@@ -23,11 +23,9 @@ function isLastSession(value: unknown): value is LastSession {
   );
 }
 
-function readFromStorage(): LastSession | null {
-  if (typeof sessionStorage === 'undefined') return null;
+function parse(raw: string | null): LastSession | null {
+  if (!raw) return null;
   try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
     const parsed = JSON.parse(raw) as unknown;
     return isLastSession(parsed) ? parsed : null;
   } catch {
@@ -35,25 +33,67 @@ function readFromStorage(): LastSession | null {
   }
 }
 
+/**
+ * Read at module load. Persist mode keeps the JWT pair in localStorage
+ * so it survives single-tab close (sessionStorage's per-tab scope was
+ * always the wrong shape for "session" in the user-facing sense:
+ * closing one tab shouldn't sign the user out across other tabs or a
+ * later reopen). On first load after the migration, fall back to
+ * sessionStorage so an existing user doesn't get logged out and
+ * promote the value to localStorage.
+ */
+function readFromStorage(): LastSession | null {
+  // Try localStorage first.
+  if (typeof localStorage !== 'undefined') {
+    try {
+      const fromLocal = parse(localStorage.getItem(STORAGE_KEY));
+      if (fromLocal !== null) return fromLocal;
+    } catch { /* ignore */ }
+  }
+  // One-time migration: a value left over in sessionStorage from before
+  // the localStorage move. Promote it.
+  if (typeof sessionStorage !== 'undefined') {
+    try {
+      const fromSession = parse(sessionStorage.getItem(STORAGE_KEY));
+      if (fromSession !== null) {
+        try {
+          if (typeof localStorage !== 'undefined') {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(fromSession));
+          }
+          sessionStorage.removeItem(STORAGE_KEY);
+        } catch { /* ignore */ }
+        return fromSession;
+      }
+    } catch { /* ignore */ }
+  }
+  return null;
+}
+
 function writeToStorage(session: LastSession | null): void {
-  if (typeof sessionStorage === 'undefined') return;
   // Removals always go through — sign-out and Reset must wipe the JWT
-  // pair regardless of mode.
+  // pair from BOTH stores regardless of mode (sessionStorage may still
+  // have a stale value during the migration window above).
   if (session === null) {
-    try { sessionStorage.removeItem(STORAGE_KEY); } catch { /* best-effort */ }
+    if (typeof localStorage !== 'undefined') {
+      try { localStorage.removeItem(STORAGE_KEY); } catch { /* best-effort */ }
+    }
+    if (typeof sessionStorage !== 'undefined') {
+      try { sessionStorage.removeItem(STORAGE_KEY); } catch { /* best-effort */ }
+    }
     return;
   }
   // In session-only mode, the JWT pair is kept in the in-memory svelte
-  // store but NOT mirrored to sessionStorage. This is the one place
-  // where session-only is stricter than sessionStorage's natural
-  // semantics: most browsers' "Continue where you left off" feature
-  // restores sessionStorage across browser quit, which would otherwise
-  // auto-resume the user into their account against the intent they
-  // signaled with "Keep my saves in this browser" unchecked. The
-  // in-memory store dies with the page, period.
+  // store but NOT mirrored to disk. The in-memory store dies with the
+  // page, so signed-in state genuinely doesn't survive browser quit,
+  // even on browsers that restore sessionStorage via their "Continue
+  // where you left off" feature.
   if (!shouldPersistLibraryData()) return;
+  // Persist mode: write to localStorage so signed-in state mirrors the
+  // saves (which live in IDB). Closing one tab no longer signs the
+  // user out across other tabs / later reopens.
+  if (typeof localStorage === 'undefined') return;
   try {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
   } catch {
     // Quota or disabled storage — fall through; in-memory store still works.
   }

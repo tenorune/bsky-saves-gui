@@ -81,7 +81,7 @@ describe('saveLibraryToDevice', () => {
     expect(stored).toBeDefined();
   });
 
-  it('promotes the in-memory lastSession to sessionStorage on flush', async () => {
+  it('promotes the in-memory lastSession to localStorage on flush', async () => {
     signInDraft.set(SESSION_ONLY_DRAFT);
     setLastSession({
       pds: 'https://x',
@@ -91,17 +91,20 @@ describe('saveLibraryToDevice', () => {
       handle: 'h',
     });
     // In session-only mode, lastSession is kept in the in-memory svelte
-    // store but NOT mirrored to sessionStorage (so a session-restoring
-    // browser doesn't auto-resume the account).
+    // store but NOT mirrored to disk in either store.
     expect(sessionStorage.getItem('last-session:v1')).toBeNull();
+    expect(localStorage.getItem('last-session:v1')).toBeNull();
     expect(get(lastSession)?.handle).toBe('h');
 
     await saveLibraryToDevice();
 
-    // After flush: the JWT pair is in sessionStorage so a page reload
-    // (or a session-restoring browser) keeps the user signed in.
-    const stored = sessionStorage.getItem('last-session:v1');
+    // After flush: the JWT pair is in localStorage so closing the tab
+    // doesn't sign the user out and a browser restart keeps them
+    // signed in (mirroring the saves' persistence).
+    const stored = localStorage.getItem('last-session:v1');
     expect(stored).toContain('"handle":"h"');
+    // sessionStorage is still empty — persist mode no longer uses it.
+    expect(sessionStorage.getItem('last-session:v1')).toBeNull();
   });
 
   it('is a safe no-op when nothing is in memory', async () => {
