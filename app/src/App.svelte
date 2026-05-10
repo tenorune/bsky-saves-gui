@@ -9,6 +9,19 @@
   import { lastSession } from '$lib/last-session';
   import { inventoryState } from '$lib/inventory-loader';
   import { inventoryPresent } from '$lib/inventory-presence';
+  import { persistenceMode } from '$lib/persistence-mode';
+  import { saveLibraryToDevice } from '$lib/save-library-to-device';
+
+  let savingToDevice = false;
+  async function handleSaveToDevice() {
+    if (savingToDevice) return;
+    savingToDevice = true;
+    try {
+      await saveLibraryToDevice();
+    } finally {
+      savingToDevice = false;
+    }
+  }
 
   onMount(() => {
     const stop = startRouter();
@@ -47,6 +60,20 @@
       <a href="#/settings">Settings</a>
     </nav>
   </header>
+
+  {#if $persistenceMode === 'session-only'}
+    <div class="session-only-banner" role="status">
+      <span class="session-only-banner__msg">
+        Session-only mode — your saves won't be kept after you close this tab.
+      </span>
+      <button
+        type="button"
+        class="session-only-banner__action"
+        on:click={handleSaveToDevice}
+        disabled={savingToDevice}
+      >{savingToDevice ? 'Saving…' : 'Save Library to this device'}</button>
+    </div>
+  {/if}
 
   <main class="app-main">
     <svelte:component this={$currentRoute.def.component} />
@@ -113,6 +140,28 @@
   .app-main {
     flex: 1;
     padding: 1.5rem;
+  }
+  .session-only-banner {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1rem;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.625rem 1.5rem;
+    background: color-mix(in oklab, Canvas 88%, orange 12%);
+    border-bottom: 1px solid color-mix(in oklab, CanvasText 18%, transparent);
+    font-size: 0.875rem;
+  }
+  .session-only-banner__msg {
+    flex: 1;
+    min-width: 16rem;
+  }
+  .session-only-banner__action {
+    font: inherit;
+  }
+  .session-only-banner__action[disabled] {
+    opacity: 0.6;
+    cursor: progress;
   }
   .app-footer {
     padding: 1rem 1.5rem;
