@@ -7,7 +7,7 @@
   // import BeaconButton from './components/BeaconButton.svelte';
   import { BUILD_TIME, BUILD_BRANCH } from '$lib/build-info';
   import { lastSession } from '$lib/last-session';
-  import { inventoryState } from '$lib/inventory-loader';
+  import { inventoryState, loadFromDb } from '$lib/inventory-loader';
   import { inventoryPresent } from '$lib/inventory-presence';
   import { persistenceMode } from '$lib/persistence-mode';
   import { saveLibraryToDevice } from '$lib/save-library-to-device';
@@ -64,6 +64,16 @@
     // staleness check on the next read and so this session's data is
     // protected against the same on the next reopen.
     startSessionHeartbeat();
+    // Populate inventoryState from IDB on cold load so reactive
+    // surfaces (Export button, Library link, etc.) work regardless
+    // of which route the user lands on. Library / Post call
+    // loadFromDb on their own mount too; calling here is idempotent
+    // (loadFromDb skips the "loading" placeholder when state is
+    // already 'ready'), and covers the case where the user is on
+    // Settings (or any other route) when the page first loads —
+    // typical reproducer is Sign Out → browser refresh, where
+    // Settings has no Library mount to trigger the load.
+    void loadFromDb();
     // Cold-load gate: route the user to wherever they should actually
     // be given their data state. Covers root → /library on cached
     // visits, /library or /post → / when there's no inventory to back
