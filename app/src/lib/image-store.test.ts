@@ -50,4 +50,31 @@ describe('image-store', () => {
     await clearImageBlobs();
     expect(await imageBlobCount()).toBe(0);
   });
+
+  it('savedImageBlobCount store reactively tracks save / delete / clear', async () => {
+    const { get } = await import('svelte/store');
+    const { saveImageBlob, deleteImageBlob, clearImageBlobs, savedImageBlobCount } =
+      await import('./image-store');
+
+    // Note: refresh after a mutation is fire-and-forget (void). Yield
+    // microtasks before each assertion so the IDB read resolves.
+    const tick = () => new Promise<void>((r) => setTimeout(r, 0));
+
+    expect(get(savedImageBlobCount)).toBe(0);
+
+    await saveImageBlob('https://x/1', new Blob([''], { type: 'image/png' }));
+    await tick();
+    expect(get(savedImageBlobCount)).toBe(1);
+
+    await saveImageBlob('https://x/2', new Blob([''], { type: 'image/png' }));
+    await tick();
+    expect(get(savedImageBlobCount)).toBe(2);
+
+    await deleteImageBlob('https://x/1');
+    await tick();
+    expect(get(savedImageBlobCount)).toBe(1);
+
+    await clearImageBlobs();
+    expect(get(savedImageBlobCount)).toBe(0);
+  });
 });

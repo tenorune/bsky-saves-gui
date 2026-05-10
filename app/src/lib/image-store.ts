@@ -7,18 +7,45 @@
 // "Save Library to this device" flow flushes the map to IDB.
 
 import { createStore, get, set, del, clear, keys } from 'idb-keyval';
+import { writable, type Readable } from 'svelte/store';
 import { shouldPersistLibraryData } from './persistence-mode';
 
 const store = createStore('bsky-saves:images', 'blobs');
 const inMemoryBlobs = new Map<string, Blob>();
 
+// Reactive count of saved image blobs (sum of IDB + in-memory map).
+// Subscribers (e.g., ExportMenu's HTML / HTML Archive label) get
+// updates whenever a blob is added, removed, or the store is cleared,
+// so they don't need to poll or wait for an unrelated reactive
+// dependency to fire.
+const blobCountStore = writable<number>(0);
+export const savedImageBlobCount: Readable<number> = {
+  subscribe: blobCountStore.subscribe,
+};
+
+async function refreshBlobCount(): Promise<void> {
+  try {
+    const onDisk = (await keys(store)).length;
+    blobCountStore.set(onDisk + inMemoryBlobs.size);
+  } catch {
+    // Leave the prior value in place rather than zeroing on a transient
+    // IDB error — the next mutation will retry the refresh.
+  }
+}
+
+// Initialize at module load so callers see a real count without waiting
+// for a mutation. Fire-and-forget — the writable starts at 0 and lifts
+// to the true value as soon as the IDB read resolves.
+void refreshBlobCount();
+
 export async function saveImageBlob(url: string, blob: Blob): Promise<void> {
   if (shouldPersistLibraryData()) {
     await set(url, blob, store);
     inMemoryBlobs.delete(url);
-    return;
+  } else {
+    inMemoryBlobs.set(url, blob);
   }
-  inMemoryBlobs.set(url, blob);
+  void refreshBlobCount();
 }
 
 export async function loadImageBlob(url: string): Promise<Blob | undefined> {
@@ -43,11 +70,13 @@ export async function imageBlobCount(): Promise<number> {
 export async function deleteImageBlob(url: string): Promise<void> {
   inMemoryBlobs.delete(url);
   await del(url, store);
+  void refreshBlobCount();
 }
 
 export async function clearImageBlobs(): Promise<void> {
   inMemoryBlobs.clear();
   await clear(store);
+  blobCountStore.set(0);
 }
 
 /**
@@ -61,11 +90,16 @@ export async function persistInMemoryImageBlobs(): Promise<void> {
     await set(url, blob, store);
   }
   inMemoryBlobs.clear();
+  // Total count is unchanged — blobs just moved from one backing to
+  // the other — but refresh defensively in case the IDB write counts
+  // diverge from expectations.
+  void refreshBlobCount();
 }
 
-/** For tests only — drop the in-memory map. */
+/** For tests only — drop the in-memory map and reset the count store. */
 export function _resetImageStoreForTests(): void {
   inMemoryBlobs.clear();
+  blobCountStore.set(0);
 }
 
 /**
