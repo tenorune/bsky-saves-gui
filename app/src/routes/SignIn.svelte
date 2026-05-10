@@ -5,7 +5,7 @@
   import { navigate } from '$lib/router';
   import { signInDraft } from '$lib/sign-in-draft';
   import { markSessionOnly, clearSessionOnlyMarker } from '$lib/persistence-mode';
-  import { hasCredentials, loadCredentials } from '$lib/credentials-store';
+  import { hasCredentials, loadCredentials, saveCredentials as persistCredentials } from '$lib/credentials-store';
   import { DecryptError } from '$lib/crypto';
   import { startLibraryRefresh } from '$lib/library-refresh';
   import { assetToggles, setAssetToggle, loadAssetToggles } from '$lib/asset-toggles';
@@ -132,6 +132,25 @@
     // Reads the resolved handle from the createSession response, not the
     // user-typed input — handles get canonicalized server-side.
     void saveAccount(session.handle);
+
+    // Honor the "Remember my app password on this device" checkbox.
+    // Without this call, hasCredentials() never flips to true and the
+    // Welcome-back passphrase prompt never appears on subsequent
+    // visits. Use the canonicalized handle from the session response
+    // so a future loadCredentials() returns the same shape.
+    if (saveCredentials) {
+      try {
+        await persistCredentials(
+          { handle: session.handle, appPassword, pds },
+          passphrase,
+        );
+      } catch (e) {
+        // Don't fail the whole sign-in over a credential-save error;
+        // surface it inline and let the user proceed without saved
+        // credentials.
+        error = `Saved credentials failed: ${e instanceof Error ? e.message : String(e)}`;
+      }
+    }
 
     startLibraryRefresh({
       credentials: { handle, appPassword, pds },
