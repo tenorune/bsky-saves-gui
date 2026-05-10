@@ -14,7 +14,6 @@
   import { startSessionHeartbeat } from '$lib/session-heartbeat';
   import { clearLibraryScroll } from '$lib/library-scroll';
   import { loadAccount } from '$lib/account-store';
-  import { get } from 'svelte/store';
 
   $: routeName = $currentRoute.name;
 
@@ -36,20 +35,6 @@
       return;
     }
     displayedHandle = await loadAccount();
-  }
-
-  // Runtime route gate: if the user navigates to a data-required
-  // route (via browser back/forward, address bar, or programmatic
-  // navigation) without an active session, redirect to sign-in.
-  // This covers post-Sign-Out navigation — signOut() no longer
-  // navigates anywhere, so the user could still reach /library via
-  // history. Cold-load is handled by decideEntryRoute below.
-  $: void enforceSessionGate(routeName, $lastSession);
-  async function enforceSessionGate(name: string, session: typeof $lastSession) {
-    if (session !== null) return;
-    if (name === 'library' || name === 'post') {
-      navigate('/', { animate: false });
-    }
   }
 
   function goToLibraryFromTopNav() {
@@ -83,7 +68,7 @@
     // be given their data state. Covers root → /library on cached
     // visits, /library or /post → / when there's no inventory to back
     // those routes (the typical session-only-expired reproducer).
-    void decideEntryRoute(window.location.hash, get(lastSession)).then((target) => {
+    void decideEntryRoute(window.location.hash).then((target) => {
       if (target !== null) navigate(target, { animate: false });
     });
     return stop;
