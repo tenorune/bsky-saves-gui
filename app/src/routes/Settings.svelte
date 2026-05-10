@@ -4,10 +4,11 @@
   import { inventoryState, loadFromDb } from '$lib/inventory-loader';
   import { clearInventory, saveInventory } from '$lib/inventory-store';
   import { triggerThreadHydration, triggerImageHydration, triggerArticleHydration } from '$lib/asset-trigger';
-  import { clearCredentials } from '$lib/credentials-store';
+  import { clearCredentials, hasCredentials } from '$lib/credentials-store';
   import { clearAccount } from '$lib/account-store';
   import { lastSession, clearLastSession } from '$lib/last-session';
   import { signInDraft } from '$lib/sign-in-draft';
+  import { persistenceMode } from '$lib/persistence-mode';
   import { clearSessionHeartbeat } from '$lib/session-heartbeat';
   import { clearBeaconSent } from '$lib/beacon';
   import { loadProxyConfig, clearProxyConfig } from '$lib/proxy-config';
@@ -44,6 +45,27 @@
   let backupAdvancedOpen = false;
   let setupModalOpen = false;
   let customProxyConfigured = false;
+  let savedCredentialsPresent = false;
+
+  // Conditional copy under the Sign Out button: tells the user what
+  // will persist on their device after they sign out. Permutations:
+  //   session-only mode → library will be cleared on close anyway, so
+  //     the library-stays-on-device half doesn't apply.
+  //   no saved credentials → no second sentence (in session-only) or
+  //     just the library-stays line (in persist).
+  $: signOutHelpText = (() => {
+    const sessionOnly = $persistenceMode === 'session-only';
+    if (sessionOnly && savedCredentialsPresent) {
+      return 'You must be signed in to fetch more posts. Saved credentials stay on this device — to wipe them, you can Clear data below.';
+    }
+    if (sessionOnly) {
+      return 'You must be signed in to fetch more posts.';
+    }
+    if (savedCredentialsPresent) {
+      return 'You must be signed in to fetch more posts. Your library and saved credentials stay on this device — to wipe them, you can Clear data below.';
+    }
+    return 'You must be signed in to fetch more posts. Your library stays on this device — to wipe it, you can Clear data below.';
+  })();
 
   async function refreshCustomProxyStatus(): Promise<void> {
     const cfg = await loadProxyConfig();
@@ -59,6 +81,7 @@
 
   onMount(async () => {
     operatorProxyOptOut = await loadOperatorProxyOptOut();
+    savedCredentialsPresent = await hasCredentials();
     await refreshCustomProxyStatus();
     void probeOperatorProxy();
     await loadAssetToggles();
@@ -163,16 +186,16 @@
   }
 
   async function clearAll() {
-    if (!confirm('Wipe the inventory, backups, and saved credentials from this browser? This cannot be undone.')) {
+    if (!confirm('Wipe the library and saved credentials from this browser? This cannot be undone.')) {
       return;
     }
     cancelImageBackup();
     cancelArticleBackup();
-    // Reset wipes data, auth, and diagnostics. It intentionally does NOT
-    // touch preferences or setup the user tuned for this device — asset
-    // toggles, operator-proxy opt-out, install hint, custom proxy
-    // configuration, and Library filters all survive. "Reset all
-    // preferences" is the separate action for those.
+    // Clear data wipes the user's data, auth, and diagnostics. It
+    // intentionally does NOT touch preferences or setup the user tuned
+    // for this device — asset toggles, operator-proxy opt-out, install
+    // hint, custom proxy configuration, and Library filters all
+    // survive. "Reset preferences" is the separate action for those.
     await Promise.all([
       clearInventory(),
       clearCredentials(),
@@ -185,6 +208,7 @@
     clearSessionHeartbeat();
     resetImageHydration();
     resetArticleHydration();
+    savedCredentialsPresent = false;
     operatorProxyReachable = 'unknown';
     void probeOperatorProxy();
     await loadFromDb();
@@ -192,7 +216,7 @@
   }
 
   async function clearAllPreferences() {
-    if (!confirm('Reset preferences and custom setup (asset toggles, operator-proxy opt-out, install hint, custom Cloudflare Worker setup, Library filters) to defaults? Your saves and credentials will not be affected.')) {
+    if (!confirm('Reset preferences and custom setup to defaults? Your library and credentials will not be affected.')) {
       return;
     }
     await Promise.all([
@@ -252,16 +276,9 @@
         Signed in as <code>@{$lastSession.handle}</code>.
       </p>
       <div class="settings-row">
-        <button
-          type="button"
-          on:click={signOut}
-          title="End your session. Inventory and saved credentials stay on this device; sign in again to resume."
-        >Sign out</button>
+        <button type="button" on:click={signOut}>Sign out</button>
       </div>
-      <p class="help">
-        Ends the session. Inventory and saved credentials stay on this device
-        — to wipe them, use Reset below.
-      </p>
+      <p class="help">{signOutHelpText}</p>
     {:else}
       <p class="help">Not signed in.</p>
       <div class="settings-row">
@@ -389,18 +406,18 @@
 
   <section class="settings-section">
     <h3>Reset</h3>
+    <div class="settings-row">
+      <button type="button" class="danger" on:click={clearAll}>Clear data</button>
+    </div>
     <p class="help">
-      Wipes the inventory, backups, and saved credentials from this browser. This cannot be undone.
+      Wipes the library and saved credentials from this browser. This cannot be undone.
     </p>
-    <div class="settings-row">
-      <button type="button" class="danger" on:click={clearAll}>Clear all local data</button>
+    <div class="settings-row advanced-heading--spaced">
+      <button type="button" on:click={clearAllPreferences}>Reset preferences</button>
     </div>
-    <p class="help advanced-heading--spaced">
-      Reset preferences and custom setup (asset toggles, operator-proxy opt-out, install hint, custom Cloudflare Worker setup, Library filters) to defaults. Your saves and credentials are not affected.
+    <p class="help">
+      Reset preferences and custom setup to defaults. Your library and credentials are not affected.
     </p>
-    <div class="settings-row">
-      <button type="button" on:click={clearAllPreferences}>Reset all preferences</button>
-    </div>
   </section>
 
   <CustomProxySetupModal
@@ -445,6 +462,12 @@
     margin: 0 0 0.75rem;
     font-size: 0.875rem;
     opacity: 0.8;
+  }
+  /* When a help paragraph sits immediately after a button row, give
+     it breathing room above so the explanation reads as belonging to
+     the button rather than fused to it. */
+  .settings-section .settings-row + .help {
+    margin-top: 0.5rem;
   }
   /* Inline checkboxes for "Don't ask me" toggles. */
   .settings-section label.checkbox {

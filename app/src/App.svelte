@@ -95,7 +95,7 @@
   {#if $persistenceMode === 'session-only'}
     <div class="session-only-banner" role="status">
       <span class="session-only-banner__msg">
-        <strong>Session mode</strong> — closing this tab will clear your library{$lastSession ? ' and sign you out' : ''}.
+        <strong>Session mode</strong> — closing this tab or quitting the browser will clear your library and sign you out
       </span>
       <button
         type="button"
