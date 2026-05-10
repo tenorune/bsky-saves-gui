@@ -22,8 +22,6 @@ const SESSION_ONLY_DRAFT = {
   handle: 'a',
   appPassword: 'b',
   pds: 'https://x',
-  fetch: true,
-  threads: false,
   saveInventory: false,
   saveCredentials: false,
   passphrase: '',

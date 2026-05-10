@@ -19,8 +19,6 @@ const PERSIST_DRAFT = {
   handle: 'a',
   appPassword: 'b',
   pds: 'https://x',
-  fetch: true,
-  threads: false,
   saveInventory: true,
   saveCredentials: false,
   passphrase: '',

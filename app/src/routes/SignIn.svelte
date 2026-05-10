@@ -86,12 +86,16 @@
 
     // Set the draft FIRST so persistence-mode checks during
     // setLastSession / startLibraryRefresh see the user's choice.
+    // Note: threads-on/off is NOT carried on the draft — the SignIn
+    // form's threads checkbox writes to assetToggles directly via
+    // setAssetToggle, and consumers (Library.svelte, library-refresh,
+    // asset-trigger) read from assetToggles. Same for the implicit
+    // "always fetch on sign-in" behavior — there's no opt-out, so
+    // there's nothing to record on the draft.
     signInDraft.set({
       handle,
       appPassword,
       pds,
-      fetch: true,
-      threads: get(assetToggles).threads,
       saveInventory,
       saveCredentials,
       passphrase,
