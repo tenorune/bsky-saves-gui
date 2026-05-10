@@ -20,7 +20,7 @@
   </header>
 
   {#if visible.length === 0}
-    <p class="library-view__empty">No saves match your filters.</p>
+    <p class="library-view__empty">No saved posts match your filters.</p>
   {:else}
     <ul class="library-view__feed">
       {#each visible as save (save.uri)}

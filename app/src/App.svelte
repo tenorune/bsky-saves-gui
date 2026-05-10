@@ -110,14 +110,14 @@
   {#if $persistenceMode === 'session-only'}
     <div class="session-only-banner" role="status">
       <span class="session-only-banner__msg">
-        <strong>Session mode</strong> — closing this tab or quitting the browser will clear your library{$lastSession ? ' and sign you out' : ''}.
+        <strong>Session mode</strong> — closing this tab or quitting the browser will clear your Library{$lastSession ? ' and sign you out' : ''}.
       </span>
       <button
         type="button"
         class="session-only-banner__action"
         on:click={handleSaveToDevice}
         disabled={savingToDevice}
-      >{savingToDevice ? 'Saving…' : 'Keep my saves in this browser'}</button>
+      >{savingToDevice ? 'Saving…' : 'Keep my saved posts in this browser'}</button>
     </div>
   {/if}
 

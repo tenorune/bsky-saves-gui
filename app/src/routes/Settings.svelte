@@ -157,7 +157,7 @@
       const parsed = parseInventory(JSON.parse(text));
       await saveInventory(parsed);
       await loadFromDb();
-      status = `Imported ${parsed.saves.length} saves.`;
+      status = `Imported ${parsed.saves.length} saved posts.`;
     } catch (err) {
       error = err instanceof Error ? err.message : 'Import failed';
     } finally {
@@ -166,7 +166,7 @@
   }
 
   async function clearAll() {
-    if (!confirm('Wipe the library and saved credentials from this browser? This cannot be undone.')) {
+    if (!confirm('Wipe your Library and saved credentials from this browser? This cannot be undone.')) {
       return;
     }
     cancelImageBackup();
@@ -196,7 +196,7 @@
   }
 
   async function clearAllPreferences() {
-    if (!confirm('Reset preferences and custom setup to defaults? Your library and credentials will not be affected.')) {
+    if (!confirm('Reset preferences and custom setup to defaults? Your Library and credentials will not be affected.')) {
       return;
     }
     await Promise.all([
@@ -268,9 +268,9 @@
         {:else if $persistenceMode === 'session-only'}
           You must be signed in to refresh your saved posts.
         {:else if savedCredentialsPresent}
-          You must be signed in to refresh your saved posts. Your library and saved credentials stay on this device — to wipe them, <strong>Clear data</strong> below.
+          You must be signed in to refresh your saved posts. Your Library and saved credentials stay on this device — to wipe them, <strong>Clear data</strong> below.
         {:else}
-          You must be signed in to refresh your saved posts. Your library stays on this device — to wipe it, <strong>Clear data</strong> below.
+          You must be signed in to refresh your saved posts. Your Library stays on this device — to wipe it, <strong>Clear data</strong> below.
         {/if}
       </p>
     {:else}
@@ -285,7 +285,7 @@
     <h3>Library</h3>
     {#if $inventoryState.status === 'ready'}
       <p class="help">
-        {$inventoryState.inventory.saves.length} saves{#if libraryFetchedAt}, last updated {libraryFetchedAt}{/if}.
+        {$inventoryState.inventory.saves.length} saved posts{#if libraryFetchedAt}, last updated {libraryFetchedAt}{/if}.
       </p>
     {:else if $inventoryState.status === 'empty'}
       <p class="help">No saves yet.</p>
@@ -404,13 +404,13 @@
       <button type="button" class="danger" on:click={clearAll}>Clear data</button>
     </div>
     <p class="help">
-      Wipes the library and saved credentials from this browser. This cannot be undone.
+      Wipes your Library and saved credentials from this browser. This cannot be undone.
     </p>
     <div class="settings-row advanced-heading--spaced">
       <button type="button" on:click={clearAllPreferences}>Reset preferences</button>
     </div>
     <p class="help">
-      Reset preferences and custom setup to defaults. Your library and credentials are not affected.
+      Reset preferences and custom setup to defaults. Your Library and credentials are not affected.
     </p>
   </section>
 

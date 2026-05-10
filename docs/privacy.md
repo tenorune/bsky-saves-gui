@@ -4,7 +4,7 @@ This page describes how `${VITE_APP_NAME}` (deployed at `${VITE_APP_DOMAIN}`) ha
 
 ## Architecture summary
 
-This is a static web app. There is no operator-run server that receives your credentials, your saves, or any other content by default. The page, its scripts, and its styles are static files hosted on GitHub Pages. Almost all processing happens in your browser.
+This is a static web app. There is no operator-run server that receives your credentials, your saved posts, or any other content by default. The page, its scripts, and its styles are static files hosted on GitHub Pages. Almost all processing happens in your browser.
 
 The exception is **image backup**, which can optionally route image bytes through a small server-side proxy. See "What can leave your browser" below.
 

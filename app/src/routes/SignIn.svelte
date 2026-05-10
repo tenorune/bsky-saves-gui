@@ -286,7 +286,7 @@
 
         <label class="checkbox">
           <input type="checkbox" bind:checked={saveInventory} />
-          <span>Keep my saves in this browser</span>
+          <span>Keep my saved posts in this browser</span>
         </label>
         <p class="help">
           Come back later to read or refresh without downloading everything
