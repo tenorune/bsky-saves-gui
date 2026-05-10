@@ -4,7 +4,7 @@
   import { inventoryState, loadFromDb } from '$lib/inventory-loader';
   import { clearInventory, saveInventory } from '$lib/inventory-store';
   import { triggerThreadHydration, triggerImageHydration, triggerArticleHydration } from '$lib/asset-trigger';
-  import { clearCredentials, hasCredentials } from '$lib/credentials-store';
+  import { clearCredentials, hasCredentials, saveCredentials as persistCredentials } from '$lib/credentials-store';
   import { clearAccount } from '$lib/account-store';
   import { lastSession, clearLastSession } from '$lib/last-session';
   import { signInDraft } from '$lib/sign-in-draft';
@@ -46,6 +46,53 @@
   let setupModalOpen = false;
   let customProxyConfigured = false;
   let savedCredentialsPresent = false;
+
+  // Settings → "Remember my app password" form state. Mirrors the
+  // SignIn → Advanced section: checkbox reveals passphrase + Save
+  // button. Lets a user who forgot to check the box at sign-in time
+  // (or who just signed in fresh) save credentials post-hoc, without
+  // having to sign out and back in.
+  let rememberCredsChecked = false;
+  let rememberPassphrase = '';
+  let rememberCredsStatus = '';
+  let rememberCredsError = '';
+
+  async function handleSaveCredentialsFromSettings(): Promise<void> {
+    rememberCredsError = '';
+    rememberCredsStatus = '';
+    if (rememberPassphrase.length < 8) {
+      rememberCredsError = 'Passphrase must be at least 8 characters.';
+      return;
+    }
+    // We need the plaintext app password to encrypt — it only lives
+    // on signInDraft (in-memory svelte store, populated by
+    // SignIn.submit, cleared by signOut). If the user signed in on
+    // this page life it's available. If they refreshed since signing
+    // in, it isn't — they'd need to sign in again.
+    const draft = get(signInDraft);
+    if (!draft || !draft.appPassword) {
+      rememberCredsError =
+        "Your app password isn't in memory. Sign out and sign in again to save it.";
+      return;
+    }
+    const session = get(lastSession);
+    if (!session) {
+      rememberCredsError = 'Not signed in.';
+      return;
+    }
+    try {
+      await persistCredentials(
+        { handle: session.handle, appPassword: draft.appPassword, pds: session.pds },
+        rememberPassphrase,
+      );
+      savedCredentialsPresent = true;
+      rememberCredsStatus = 'Saved.';
+      rememberPassphrase = '';
+      rememberCredsChecked = false;
+    } catch (e) {
+      rememberCredsError = e instanceof Error ? e.message : String(e);
+    }
+  }
 
   async function refreshCustomProxyStatus(): Promise<void> {
     const cfg = await loadProxyConfig();
@@ -273,6 +320,38 @@
           You must be signed in to refresh your saved posts. Your Library stays on this device — to wipe it, <strong>Clear data</strong> below.
         {/if}
       </p>
+
+      <label class="checkbox settings-section--spaced">
+        <input type="checkbox" bind:checked={rememberCredsChecked} />
+        <span>Remember my app password on this device</span>
+      </label>
+      {#if rememberCredsChecked}
+        <div class="settings-creds-form">
+          <label class="settings-field">
+            Passphrase
+            <input
+              type="password"
+              bind:value={rememberPassphrase}
+              minlength="8"
+              autocomplete="new-password"
+            />
+          </label>
+          <p class="help">
+            Your app password gets locked with this passphrase and stored only
+            in this browser. If you forget the passphrase, you'll just need to
+            type your app password again next time.
+          </p>
+          <div class="settings-row">
+            <button type="button" on:click={handleSaveCredentialsFromSettings}>Save</button>
+          </div>
+          {#if rememberCredsStatus}
+            <p class="status">{rememberCredsStatus}</p>
+          {/if}
+          {#if rememberCredsError}
+            <p class="error" role="alert">{rememberCredsError}</p>
+          {/if}
+        </div>
+      {/if}
     {:else}
       <p class="help">Not signed in. You must be signed in to refresh your saved posts.</p>
       <div class="settings-row">
@@ -524,6 +603,35 @@
   .error {
     color: color-mix(in oklab, red 70%, CanvasText);
     font-weight: 500;
+  }
+  /* "Remember my app password" form revealed by the checkbox in
+     Settings → Account. Indents under the checkbox to read as
+     belonging to it, with a light surface so it doesn't run into the
+     surrounding flow. */
+  .settings-section--spaced {
+    margin-top: 0.75rem;
+  }
+  .settings-creds-form {
+    margin-top: 0.5rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid color-mix(in oklab, CanvasText 12%, transparent);
+    border-radius: 6px;
+    background: color-mix(in oklab, CanvasText 3%, Canvas);
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .settings-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: 0.875rem;
+  }
+  .settings-field input {
+    font: inherit;
+    padding: 0.4rem 0.5rem;
+    border: 1px solid color-mix(in oklab, CanvasText 25%, transparent);
+    border-radius: 4px;
   }
   .advanced-toggle > summary {
     margin-bottom: 0.75rem;
