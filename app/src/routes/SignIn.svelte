@@ -10,6 +10,9 @@
   import { assetToggles, setAssetToggle, loadAssetToggles } from '$lib/asset-toggles';
   import { createSession, InvalidCredentialsError } from '$lib/atproto';
   import { setLastSession } from '$lib/last-session';
+  import { clearInventory } from '$lib/inventory-store';
+  import { clearImageBlobs } from '$lib/image-store';
+  import { clearFailures } from '$lib/failure-store';
   import { slideRoute } from '$lib/slide-transition';
 
   let savedPresent = false;
@@ -98,9 +101,6 @@
     // previous (checked) sign-in would still be on disk and would
     // reappear on next persist-mode load.
     if (!saveInventory) {
-      const { clearInventory } = await import('$lib/inventory-store');
-      const { clearImageBlobs } = await import('$lib/image-store');
-      const { clearFailures } = await import('$lib/failure-store');
       await Promise.all([clearInventory(), clearImageBlobs(), clearFailures()]);
     }
 
