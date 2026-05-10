@@ -87,7 +87,7 @@
       {#if routeName === 'settings'}
         <strong class="app-header__current">Settings</strong>
       {:else}
-        <a href="#/settings">Settings</a>
+        <a class="app-header__navlink" href="#/settings">Settings</a>
       {/if}
     </nav>
   </header>
