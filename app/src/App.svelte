@@ -64,7 +64,9 @@
   {#if $persistenceMode === 'session-only'}
     <div class="session-only-banner" role="status">
       <span class="session-only-banner__msg">
-        Session-only mode — your saves won't be kept after you close this tab.
+        Session-only mode — closing this tab signs you out. Your saves
+        won't follow you across a browser quit on most setups, though
+        browsers that restore sessions may show them again briefly.
       </span>
       <button
         type="button"

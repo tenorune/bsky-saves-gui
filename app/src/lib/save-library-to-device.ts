@@ -1,14 +1,16 @@
 // "Save Library to this device" — flips a session-only sign-in into
 // persist mode and moves everything stored under the session backings
-// (sessionStorage for inventory; in-memory for image blobs) onto IDB.
-// Reachable from the persistence-mode banner (App.svelte) when the user
-// changes their mind mid-session.
+// (sessionStorage for inventory; in-memory for image blobs and
+// lastSession) onto IDB / sessionStorage. Reachable from the
+// persistence-mode banner (App.svelte) when the user changes their mind
+// mid-session.
 
 import { get } from 'svelte/store';
 import { persistInMemoryToDisk } from './inventory-store';
 import { persistInMemoryImageBlobs } from './image-store';
 import { promoteToPersistedPresence } from './inventory-presence';
 import { signInDraft } from './sign-in-draft';
+import { lastSession, setLastSession } from './last-session';
 
 export async function saveLibraryToDevice(): Promise<void> {
   // Flip the draft FIRST so subsequent writes (and the in-flight
@@ -23,9 +25,10 @@ export async function saveLibraryToDevice(): Promise<void> {
   // Move the presence flag from sessionStorage → localStorage so the
   // navbar Library link survives browser quit.
   promoteToPersistedPresence();
-  // lastSession was already in sessionStorage (we no longer gate that
-  // write on persistence mode); JWTs are short-lived enough that we
-  // don't need to re-key it to localStorage. Browser quit still loses
-  // the active session — sign-in-with-saved-credentials remains the
-  // way to re-enter quickly.
+  // Re-write the active session to sessionStorage now that the gate is
+  // open. In session-only mode, lastSession was kept in memory only;
+  // promoting it here means the user doesn't get logged out on the
+  // next page reload after they opted into persistence.
+  const session = get(lastSession);
+  if (session) setLastSession(session);
 }

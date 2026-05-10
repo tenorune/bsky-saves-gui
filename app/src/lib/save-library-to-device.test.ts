@@ -15,7 +15,7 @@ import {
   clearImageBlobs,
   _resetImageStoreForTests,
 } from './image-store';
-import { setLastSession, clearLastSession } from './last-session';
+import { lastSession, setLastSession, clearLastSession } from './last-session';
 import { inventoryPresent } from './inventory-presence';
 
 const SESSION_ONLY_DRAFT = {
@@ -81,7 +81,7 @@ describe('saveLibraryToDevice', () => {
     expect(stored).toBeDefined();
   });
 
-  it('does not need to re-persist lastSession (it was already in sessionStorage)', async () => {
+  it('promotes the in-memory lastSession to sessionStorage on flush', async () => {
     signInDraft.set(SESSION_ONLY_DRAFT);
     setLastSession({
       pds: 'https://x',
@@ -90,14 +90,18 @@ describe('saveLibraryToDevice', () => {
       did: 'd',
       handle: 'h',
     });
-    // lastSession is in sessionStorage from the moment it's set,
-    // regardless of persistence mode — JWTs are short-lived and
-    // don't need a localStorage promotion.
-    expect(sessionStorage.getItem('last-session:v1')).toContain('"handle":"h"');
+    // In session-only mode, lastSession is kept in the in-memory svelte
+    // store but NOT mirrored to sessionStorage (so a session-restoring
+    // browser doesn't auto-resume the account).
+    expect(sessionStorage.getItem('last-session:v1')).toBeNull();
+    expect(get(lastSession)?.handle).toBe('h');
 
     await saveLibraryToDevice();
 
-    expect(sessionStorage.getItem('last-session:v1')).toContain('"handle":"h"');
+    // After flush: the JWT pair is in sessionStorage so a page reload
+    // (or a session-restoring browser) keeps the user signed in.
+    const stored = sessionStorage.getItem('last-session:v1');
+    expect(stored).toContain('"handle":"h"');
   });
 
   it('is a safe no-op when nothing is in memory', async () => {
