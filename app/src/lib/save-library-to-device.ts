@@ -12,6 +12,7 @@ import { promoteToPersistedPresence } from './inventory-presence';
 import { signInDraft } from './sign-in-draft';
 import { lastSession, setLastSession } from './last-session';
 import { clearSessionHeartbeat } from './session-heartbeat';
+import { clearSessionOnlyMarker } from './persistence-mode';
 
 export async function saveLibraryToDevice(): Promise<void> {
   // Flip the draft FIRST so subsequent writes (and the in-flight
@@ -37,4 +38,7 @@ export async function saveLibraryToDevice(): Promise<void> {
   // heartbeat is no longer relevant. Clear it so it doesn't sit in
   // localStorage forever.
   clearSessionHeartbeat();
+  // Drop the session-only marker so persistenceMode flips to 'persist'
+  // for the rest of this tab's life and across refresh.
+  clearSessionOnlyMarker();
 }

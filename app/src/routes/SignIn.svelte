@@ -4,6 +4,7 @@
   import { config } from '$lib/config';
   import { navigate } from '$lib/router';
   import { signInDraft } from '$lib/sign-in-draft';
+  import { markSessionOnly, clearSessionOnlyMarker } from '$lib/persistence-mode';
   import { hasCredentials, loadCredentials } from '$lib/credentials-store';
   import { DecryptError } from '$lib/crypto';
   import { startLibraryRefresh } from '$lib/library-refresh';
@@ -95,6 +96,18 @@
       saveCredentials,
       passphrase,
     });
+
+    // Promote the user's choice to a sessionStorage marker so it survives
+    // refresh — without this, the persistenceMode banner disappears and
+    // (worse) every persistence gate flips back to "persist," leaking
+    // session-only data to disk on the next write. Always write
+    // explicitly (mark or clear) so a fresh sign-in overrides any marker
+    // left over from a previous session-only sign-in on this tab.
+    if (saveInventory) {
+      clearSessionOnlyMarker();
+    } else {
+      markSessionOnly();
+    }
 
     // If the user opted out of persistence, wipe any pre-existing
     // disk-backed library data so the fresh session-only session truly

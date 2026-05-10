@@ -1,10 +1,17 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 import { signInDraft } from './sign-in-draft';
-import { shouldPersistLibraryData, persistenceMode } from './persistence-mode';
+import {
+  shouldPersistLibraryData,
+  persistenceMode,
+  markSessionOnly,
+  clearSessionOnlyMarker,
+} from './persistence-mode';
 
 beforeEach(() => {
   signInDraft.set(null);
+  clearSessionOnlyMarker();
+  sessionStorage.clear();
 });
 
 describe('shouldPersistLibraryData', () => {
@@ -74,5 +81,48 @@ describe('persistenceMode store', () => {
     expect(get(persistenceMode)).toBe('session-only');
     signInDraft.set({ ...baseDraft, saveInventory: true });
     expect(get(persistenceMode)).toBe('persist');
+  });
+});
+
+describe('session-only marker (survives in-tab refresh)', () => {
+  it('markSessionOnly persists to sessionStorage and flips both stores', () => {
+    expect(get(persistenceMode)).toBe('persist');
+    expect(shouldPersistLibraryData()).toBe(true);
+
+    markSessionOnly();
+
+    expect(sessionStorage.getItem('session-only-mode:v1')).toBe('1');
+    expect(get(persistenceMode)).toBe('session-only');
+    expect(shouldPersistLibraryData()).toBe(false);
+  });
+
+  it('clearSessionOnlyMarker reverses both stores and removes the entry', () => {
+    markSessionOnly();
+    clearSessionOnlyMarker();
+
+    expect(sessionStorage.getItem('session-only-mode:v1')).toBeNull();
+    expect(get(persistenceMode)).toBe('persist');
+    expect(shouldPersistLibraryData()).toBe(true);
+  });
+
+  it('marker takes precedence over signInDraft (refresh scenario)', () => {
+    // Simulate the post-refresh state: marker was written before
+    // refresh, signInDraft is null because it has no persistence.
+    markSessionOnly();
+    signInDraft.set(null);
+
+    expect(get(persistenceMode)).toBe('session-only');
+    expect(shouldPersistLibraryData()).toBe(false);
+  });
+
+  it('marker survives a module reload — the bug this fix addresses', async () => {
+    // Pre-set the marker as if from a previous page life.
+    sessionStorage.setItem('session-only-mode:v1', '1');
+    // Reset modules and re-import — simulates page refresh.
+    vi.resetModules();
+    const { shouldPersistLibraryData: fresh, persistenceMode: freshMode } =
+      await import('./persistence-mode');
+    expect(fresh()).toBe(false);
+    expect(get(freshMode)).toBe('session-only');
   });
 });

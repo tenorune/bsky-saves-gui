@@ -9,6 +9,7 @@
   import { lastSession, clearLastSession } from '$lib/last-session';
   import { signInDraft } from '$lib/sign-in-draft';
   import { clearSessionHeartbeat } from '$lib/session-heartbeat';
+  import { clearSessionOnlyMarker } from '$lib/persistence-mode';
   import { clearBeaconSent } from '$lib/beacon';
   import { loadProxyConfig, clearProxyConfig } from '$lib/proxy-config';
   import { disableOperatorProxy } from '$lib/disable-operator-proxy';
@@ -221,6 +222,10 @@
     // To wipe everything, use "Clear all local data".
     clearLastSession();
     signInDraft.set(null);
+    // Drop the session-only marker so the post-sign-out app shows
+    // persistenceMode='persist' (the default for returning visits).
+    // The next sign-in's checkbox choice will set the right value.
+    clearSessionOnlyMarker();
     navigate('/');
   }
 </script>
