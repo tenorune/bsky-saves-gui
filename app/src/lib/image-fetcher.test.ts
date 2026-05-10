@@ -19,8 +19,8 @@ beforeEach(async () => {
   vi.doMock('./config', () => ({ config: DEFAULT_CONFIG }));
   const { clearProxyConfig } = await import('./proxy-config');
   await clearProxyConfig();
-  const { clearBackupPrefs } = await import('./backup-prefs');
-  await clearBackupPrefs();
+  const { clearOperatorProxyOptOut } = await import('./operator-proxy-opt-out');
+  await clearOperatorProxyOptOut();
 });
 
 describe('detectBackends', () => {
@@ -207,7 +207,7 @@ describe('operator-proxy backend', () => {
         operatorImageProxySecret: 'op-secret',
       },
     }));
-    const { setOperatorProxyOptOut } = await import('./backup-prefs');
+    const { setOperatorProxyOptOut } = await import('./operator-proxy-opt-out');
     await setOperatorProxyOptOut(true);
     const { detectBackends } = await import('./image-fetcher');
     const backends = await detectBackends();

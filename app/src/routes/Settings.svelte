@@ -13,11 +13,10 @@
   import { loadProxyConfig, clearProxyConfig } from '$lib/proxy-config';
   import { disableOperatorProxy } from '$lib/disable-operator-proxy';
   import {
-    loadBackupPrefs,
+    loadOperatorProxyOptOut,
     setOperatorProxyOptOut,
-    clearBackupPrefs,
-    type BackupPrefs,
-  } from '$lib/backup-prefs';
+    clearOperatorProxyOptOut,
+  } from '$lib/operator-proxy-opt-out';
   import { config } from '$lib/config';
   import { cancelImageBackup } from '$lib/start-image-backup';
   import { cancelArticleBackup } from '$lib/start-article-backup';
@@ -41,7 +40,7 @@
   let error = '';
   let importInputEl: HTMLInputElement | undefined;
 
-  let backupPrefs: BackupPrefs | null = null;
+  let operatorProxyOptOut = false;
   let backupAdvancedOpen = false;
   let setupModalOpen = false;
   let customProxyConfigured = false;
@@ -59,7 +58,7 @@
   }
 
   onMount(async () => {
-    backupPrefs = await loadBackupPrefs();
+    operatorProxyOptOut = await loadOperatorProxyOptOut();
     await refreshCustomProxyStatus();
     void probeOperatorProxy();
     await loadAssetToggles();
@@ -75,7 +74,6 @@
   let operatorProxyReachable: OperatorProxyStatus = 'unknown';
 
   $: operatorProxyConfigured = config.operatorImageProxyUrl !== '';
-  $: operatorProxyOptOut = backupPrefs?.operatorProxyOptOut ?? false;
 
   async function probeOperatorProxy(): Promise<void> {
     if (!operatorProxyConfigured) return;
@@ -89,7 +87,7 @@
   async function handleToggleOperatorProxyOptOut(event: Event) {
     const checked = (event.target as HTMLInputElement).checked;
     await setOperatorProxyOptOut(checked);
-    await reloadBackupPrefs();
+    operatorProxyOptOut = checked;
     // Recompute the capability snapshot so Library reflects the new
     // image-backend selection (operator-worker → none when opting out).
     await initCapabilitySnapshot();
@@ -97,11 +95,7 @@
 
   async function handleDisableOperatorProxyClick() {
     await disableOperatorProxy();
-    await reloadBackupPrefs();
-  }
-
-  async function reloadBackupPrefs() {
-    backupPrefs = await loadBackupPrefs();
+    operatorProxyOptOut = await loadOperatorProxyOptOut();
   }
 
   $: toggles = $assetToggles;
@@ -180,7 +174,7 @@
       clearProxyConfig(),
       clearBeaconSent(),
       clearAccount(),
-      clearBackupPrefs(),
+      clearOperatorProxyOptOut(),
       clearImageBlobs(),
       clearFailures(),
     ]);
@@ -190,7 +184,7 @@
     resetArticleHydration();
     resetLibraryFilters();
     // Refresh local UI state so the Backup section disappears immediately.
-    backupPrefs = await loadBackupPrefs();
+    operatorProxyOptOut = false;
     customProxyConfigured = false;
     operatorProxyReachable = 'unknown';
     void probeOperatorProxy();

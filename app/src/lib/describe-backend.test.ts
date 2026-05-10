@@ -16,8 +16,8 @@ beforeEach(async () => {
   vi.resetModules();
   const { clearProxyConfig } = await import('./proxy-config');
   await clearProxyConfig();
-  const { clearBackupPrefs } = await import('./backup-prefs');
-  await clearBackupPrefs();
+  const { clearOperatorProxyOptOut } = await import('./operator-proxy-opt-out');
+  await clearOperatorProxyOptOut();
 });
 
 const okPing = {

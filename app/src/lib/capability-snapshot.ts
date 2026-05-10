@@ -75,7 +75,7 @@ export function computeCapabilitySnapshot(
 import { writable, type Readable } from 'svelte/store';
 import { probeConfiguredHelper } from './helper-client';
 import { loadProxyConfig } from './proxy-config';
-import { loadBackupPrefs } from './backup-prefs';
+import { loadOperatorProxyOptOut } from './operator-proxy-opt-out';
 
 const store = writable<CapabilitySnapshot>(EMPTY_SNAPSHOT);
 export const capabilitySnapshot: Readable<CapabilitySnapshot> = { subscribe: store.subscribe };
@@ -89,7 +89,7 @@ export interface InitDeps {
 export async function initCapabilitySnapshot(deps: InitDeps = {}): Promise<void> {
   const probe = deps.probe ?? probeConfiguredHelper;
   const loadUserWorker = deps.loadUserWorker ?? loadUserWorkerFromProxyConfig;
-  const loadOperatorProxyOptOut = deps.loadOperatorProxyOptOut ?? defaultLoadOperatorProxyOptOut;
+  const loadOperatorOptOut = deps.loadOperatorProxyOptOut ?? loadOperatorProxyOptOut;
   let helper: HelperStatus;
   try {
     helper = await probe();
@@ -104,7 +104,7 @@ export async function initCapabilitySnapshot(deps: InitDeps = {}): Promise<void>
   }
   let operatorProxyOptOut = false;
   try {
-    operatorProxyOptOut = await loadOperatorProxyOptOut();
+    operatorProxyOptOut = await loadOperatorOptOut();
   } catch {
     operatorProxyOptOut = false;
   }
@@ -114,11 +114,6 @@ export async function initCapabilitySnapshot(deps: InitDeps = {}): Promise<void>
 async function loadUserWorkerFromProxyConfig(): Promise<{ readonly url: string; readonly sharedSecret: string } | null> {
   const cfg = await loadProxyConfig();
   return cfg && cfg.url ? { url: cfg.url, sharedSecret: cfg.sharedSecret } : null;
-}
-
-async function defaultLoadOperatorProxyOptOut(): Promise<boolean> {
-  const prefs = await loadBackupPrefs();
-  return prefs.operatorProxyOptOut;
 }
 
 /** For tests only — resets the store to EMPTY_SNAPSHOT. */

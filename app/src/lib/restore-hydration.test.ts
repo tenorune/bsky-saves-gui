@@ -11,14 +11,10 @@ beforeEach(async () => {
   // Pre-seed two saved blobs.
   await saveImageBlob('https://i/1', new Blob(['a']));
   await saveImageBlob('https://i/2', new Blob(['b']));
-  const { clearBackupPrefs } = await import('./backup-prefs');
-  await clearBackupPrefs();
 });
 
 describe('restoreHydrationFromInventory', () => {
-  it('sets imageHydration to done when image backup is enabled and blobs exist', async () => {
-    const { setBackupEnabled } = await import('./backup-prefs');
-    await setBackupEnabled('images', true);
+  it('sets imageHydration to done when blobs exist', async () => {
     const { restoreHydrationFromInventory } = await import('./restore-hydration');
     const { imageHydration } = await import('./hydration-state');
     const inv = {
@@ -34,9 +30,7 @@ describe('restoreHydrationFromInventory', () => {
     expect(s.failed).toBe(0);
   });
 
-  it('sets articleHydration to done when article backup is enabled', async () => {
-    const { setBackupEnabled } = await import('./backup-prefs');
-    await setBackupEnabled('articles', true);
+  it('sets articleHydration to done when article_text is present', async () => {
     const { restoreHydrationFromInventory } = await import('./restore-hydration');
     const { articleHydration } = await import('./hydration-state');
     const inv = {
@@ -79,10 +73,7 @@ describe('restoreHydrationFromInventory', () => {
     expect(s.fetched).toBe(1);
   });
 
-  it('leaves stores in idle state when inventory has no assets even if enabled', async () => {
-    const { setBackupEnabled } = await import('./backup-prefs');
-    await setBackupEnabled('images', true);
-    await setBackupEnabled('articles', true);
+  it('leaves stores in idle state when inventory has no assets', async () => {
     const { restoreHydrationFromInventory } = await import('./restore-hydration');
     const { imageHydration, articleHydration } = await import('./hydration-state');
     await restoreHydrationFromInventory({ saves: [{ uri: 'x' }] });
