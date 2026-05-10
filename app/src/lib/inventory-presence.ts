@@ -1,28 +1,35 @@
-// Synchronous "has the user ever saved an inventory in this browser" flag,
-// backed by localStorage so it survives page reload. The in-memory
-// `inventoryState` store starts as 'loading' on every cold start and only
-// flips to 'ready' after the async IndexedDB read finishes — gating
-// navigation chrome (the Library link) on that store causes a visible
-// flash on reload where the link disappears until the load completes.
-// This flag is the persistent shape of the same predicate: "is there an
-// inventory cached locally?"
+// Synchronous "has the user saved an inventory in this browser?" flag.
+// Two backings, OR'd together:
+//   - localStorage (persist mode): survives reload AND browser quit.
+//   - sessionStorage (session-only mode): survives reload, gone on quit.
+// Either being set means the Library is reachable in this session.
 //
-// Set when saveInventory() runs (any time the helper or fetch path writes
-// the inventory to IndexedDB). Cleared when clearInventory() runs (Reset
-// in Settings). Read synchronously at module load so the navbar's
-// reactive block has the right value on the very first paint.
+// The navbar's Library link gates on this so its correct value is on the
+// very first paint — no flash from the async IDB read in inventoryState.
+//
+// Set by saveInventory() in inventory-store.ts (chooses the right store
+// based on persistence mode). Cleared by clearInventory() (Settings →
+// Reset) and by the persist-flush path (saveLibraryToDevice promotes
+// session → persist).
 
 import { writable, type Readable } from 'svelte/store';
+import { shouldPersistLibraryData } from './persistence-mode';
 
-const STORAGE_KEY = 'inventory-present:v1';
+const LOCAL_KEY = 'inventory-present:v1';
+const SESSION_KEY = 'inventory-present:v1';
 
 function readSync(): boolean {
-  if (typeof localStorage === 'undefined') return false;
   try {
-    return localStorage.getItem(STORAGE_KEY) === '1';
-  } catch {
-    return false;
-  }
+    if (typeof localStorage !== 'undefined' && localStorage.getItem(LOCAL_KEY) === '1') {
+      return true;
+    }
+  } catch { /* ignore */ }
+  try {
+    if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(SESSION_KEY) === '1') {
+      return true;
+    }
+  } catch { /* ignore */ }
+  return false;
 }
 
 const store = writable<boolean>(readSync());
@@ -30,9 +37,16 @@ export const inventoryPresent: Readable<boolean> = { subscribe: store.subscribe 
 
 export function markInventoryPresent(): void {
   store.set(true);
-  if (typeof localStorage === 'undefined') return;
+  // Route the persistent flag to whichever store matches the user's
+  // intent: localStorage for "Keep my saves" persist mode (survives
+  // browser quit), sessionStorage for session-only (gone on quit).
+  const persist = shouldPersistLibraryData();
   try {
-    localStorage.setItem(STORAGE_KEY, '1');
+    if (persist) {
+      if (typeof localStorage !== 'undefined') localStorage.setItem(LOCAL_KEY, '1');
+    } else {
+      if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(SESSION_KEY, '1');
+    }
   } catch {
     // Quota or disabled storage — the in-memory store still reflects
     // the truth for this tab; we just lose the cross-reload signal.
@@ -41,10 +55,18 @@ export function markInventoryPresent(): void {
 
 export function clearInventoryPresent(): void {
   store.set(false);
-  if (typeof localStorage === 'undefined') return;
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-  } catch {
-    // Same as above — best-effort.
-  }
+  try { if (typeof localStorage !== 'undefined') localStorage.removeItem(LOCAL_KEY); } catch { /* ignore */ }
+  try { if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(SESSION_KEY); } catch { /* ignore */ }
+}
+
+/**
+ * Promote the session-only flag to the persist (localStorage) flag.
+ * Called by saveLibraryToDevice() when the user opts into persistence
+ * mid-session — without this, the persistent flag would be in
+ * sessionStorage only and a browser quit would still drop it.
+ */
+export function promoteToPersistedPresence(): void {
+  try { if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(SESSION_KEY); } catch { /* ignore */ }
+  try { if (typeof localStorage !== 'undefined') localStorage.setItem(LOCAL_KEY, '1'); } catch { /* ignore */ }
+  store.set(true);
 }

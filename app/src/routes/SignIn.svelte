@@ -93,17 +93,14 @@
     });
 
     // If the user opted out of persistence, wipe any pre-existing
-    // disk-backed library data so the fresh session truly starts clean.
-    // Without this, an old persisted inventory from a previous (checked)
-    // sign-in would still be on disk and would reappear on next load.
+    // disk-backed library data so the fresh session-only session truly
+    // starts clean. Without this, an old persisted inventory from a
+    // previous (checked) sign-in would still be on disk and would
+    // reappear on next persist-mode load.
     if (!saveInventory) {
       const { clearInventory } = await import('$lib/inventory-store');
       const { clearImageBlobs } = await import('$lib/image-store');
       const { clearFailures } = await import('$lib/failure-store');
-      const { clearLastSession } = await import('$lib/last-session');
-      // Drop any sessionStorage JWT pair from a prior persist-mode session
-      // so the in-memory setLastSession() below is the authoritative state.
-      clearLastSession();
       await Promise.all([clearInventory(), clearImageBlobs(), clearFailures()]);
     }
 

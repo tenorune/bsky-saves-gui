@@ -1,5 +1,4 @@
 import { writable, type Readable } from 'svelte/store';
-import { shouldPersistLibraryData } from './persistence-mode';
 
 const STORAGE_KEY = 'last-session:v1';
 
@@ -37,19 +36,12 @@ function readFromStorage(): LastSession | null {
 
 function writeToStorage(session: LastSession | null): void {
   if (typeof sessionStorage === 'undefined') return;
-  // Removal always goes through (sign-out / clear-all-data still need to
-  // wipe the JWT pair from disk regardless of persistence mode).
-  if (session === null) {
-    try { sessionStorage.removeItem(STORAGE_KEY); } catch { /* best-effort */ }
-    return;
-  }
-  // Session-only mode: keep the JWTs in memory but don't write them to
-  // sessionStorage. Some browsers (Chrome with "Continue where you left
-  // off", Firefox session restore) rehydrate sessionStorage across browser
-  // quit, which would defeat the user's "don't keep anything" choice.
-  if (!shouldPersistLibraryData()) return;
   try {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+    if (session === null) {
+      sessionStorage.removeItem(STORAGE_KEY);
+    } else {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+    }
   } catch {
     // Quota or disabled storage — fall through; in-memory store still works.
   }

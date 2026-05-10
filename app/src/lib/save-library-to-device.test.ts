@@ -15,7 +15,7 @@ import {
   clearImageBlobs,
   _resetImageStoreForTests,
 } from './image-store';
-import { lastSession, setLastSession, clearLastSession } from './last-session';
+import { setLastSession, clearLastSession } from './last-session';
 import { inventoryPresent } from './inventory-presence';
 
 const SESSION_ONLY_DRAFT = {
@@ -47,18 +47,23 @@ describe('saveLibraryToDevice', () => {
     expect(get(signInDraft)?.saveInventory).toBe(true);
   });
 
-  it('writes the in-memory inventory to disk and marks inventoryPresent', async () => {
+  it('writes the session-stored inventory to disk and promotes the presence flag', async () => {
     signInDraft.set(SESSION_ONLY_DRAFT);
     await saveInventory({ saves: [{ uri: 'at://x' }] });
-    // While in session-only mode, IndexedDB has nothing yet.
+    // In session-only mode, the inventory lives in sessionStorage and
+    // the presence flag is also session-scoped, not localStorage.
     expect(localStorage.getItem('inventory-present:v1')).toBeNull();
-    expect(get(inventoryPresent)).toBe(false);
+    expect(sessionStorage.getItem('inventory-present:v1')).toBe('1');
+    expect(sessionStorage.getItem('inventory:session-v1')).not.toBeNull();
+    expect(get(inventoryPresent)).toBe(true);
 
     await saveLibraryToDevice();
 
-    // After flush: persistence flag is set, IDB has the data, in-memory
-    // fallback is empty, and a fresh load reads from disk.
-    expect(get(inventoryPresent)).toBe(true);
+    // After flush: localStorage flag is set (survives browser quit),
+    // sessionStorage entries are gone, and a fresh load reads from IDB.
+    expect(localStorage.getItem('inventory-present:v1')).toBe('1');
+    expect(sessionStorage.getItem('inventory-present:v1')).toBeNull();
+    expect(sessionStorage.getItem('inventory:session-v1')).toBeNull();
     const loaded = await loadInventory();
     expect(loaded).toEqual({ saves: [{ uri: 'at://x' }] });
   });
@@ -76,7 +81,7 @@ describe('saveLibraryToDevice', () => {
     expect(stored).toBeDefined();
   });
 
-  it('persists the current lastSession to sessionStorage', async () => {
+  it('does not need to re-persist lastSession (it was already in sessionStorage)', async () => {
     signInDraft.set(SESSION_ONLY_DRAFT);
     setLastSession({
       pds: 'https://x',
@@ -85,15 +90,14 @@ describe('saveLibraryToDevice', () => {
       did: 'd',
       handle: 'h',
     });
-    // While in session-only mode, the writeToStorage gate kept it out.
-    expect(sessionStorage.getItem('last-session:v1')).toBeNull();
-    expect(get(lastSession)?.handle).toBe('h');
+    // lastSession is in sessionStorage from the moment it's set,
+    // regardless of persistence mode — JWTs are short-lived and
+    // don't need a localStorage promotion.
+    expect(sessionStorage.getItem('last-session:v1')).toContain('"handle":"h"');
 
     await saveLibraryToDevice();
 
-    // Now it's on disk so a browser-quit-and-reopen retains the session.
-    const stored = sessionStorage.getItem('last-session:v1');
-    expect(stored).toContain('"handle":"h"');
+    expect(sessionStorage.getItem('last-session:v1')).toContain('"handle":"h"');
   });
 
   it('is a safe no-op when nothing is in memory', async () => {

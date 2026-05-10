@@ -1,30 +1,31 @@
 // "Save Library to this device" — flips a session-only sign-in into
-// persist mode and flushes everything currently in memory to disk.
+// persist mode and moves everything stored under the session backings
+// (sessionStorage for inventory; in-memory for image blobs) onto IDB.
 // Reachable from the persistence-mode banner (App.svelte) when the user
 // changes their mind mid-session.
 
 import { get } from 'svelte/store';
 import { persistInMemoryToDisk } from './inventory-store';
 import { persistInMemoryImageBlobs } from './image-store';
+import { promoteToPersistedPresence } from './inventory-presence';
 import { signInDraft } from './sign-in-draft';
-import { lastSession, setLastSession } from './last-session';
 
 export async function saveLibraryToDevice(): Promise<void> {
-  // 1. Flip the draft so the persistence gate (shouldPersistLibraryData)
-  //    returns true for the rest of this session and for the writes the
-  //    flush helpers below will perform.
+  // Flip the draft FIRST so subsequent writes (and the in-flight
+  // persistInMemoryToDisk call below) see persist mode.
   const draft = get(signInDraft);
   if (draft && draft.saveInventory === false) {
     signInDraft.set({ ...draft, saveInventory: true });
   }
-  // 2. Flush the in-memory inventory and image blobs.
+  // Move sessionStorage inventory → IDB and the in-memory blob map → IDB.
   await persistInMemoryToDisk();
   await persistInMemoryImageBlobs();
-  // 3. Re-write the current session to sessionStorage now that the
-  //    persistence gate is open. Without this step, the JWT pair would
-  //    stay in-memory only and a browser quit would still log the user
-  //    out — the "Save Library" intent should also include keeping the
-  //    session warm.
-  const session = get(lastSession);
-  if (session) setLastSession(session);
+  // Move the presence flag from sessionStorage → localStorage so the
+  // navbar Library link survives browser quit.
+  promoteToPersistedPresence();
+  // lastSession was already in sessionStorage (we no longer gate that
+  // write on persistence mode); JWTs are short-lived enough that we
+  // don't need to re-key it to localStorage. Browser quit still loses
+  // the active session — sign-in-with-saved-credentials remains the
+  // way to re-enter quickly.
 }
