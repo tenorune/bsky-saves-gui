@@ -47,26 +47,6 @@
   let customProxyConfigured = false;
   let savedCredentialsPresent = false;
 
-  // Conditional copy under the Sign Out button: tells the user what
-  // will persist on their device after they sign out. Permutations:
-  //   session-only mode → library will be cleared on close anyway, so
-  //     the library-stays-on-device half doesn't apply.
-  //   no saved credentials → no second sentence (in session-only) or
-  //     just the library-stays line (in persist).
-  $: signOutHelpText = (() => {
-    const sessionOnly = $persistenceMode === 'session-only';
-    if (sessionOnly && savedCredentialsPresent) {
-      return 'You must be signed in to fetch more posts. Saved credentials stay on this device — to wipe them, you can Clear data below.';
-    }
-    if (sessionOnly) {
-      return 'You must be signed in to fetch more posts.';
-    }
-    if (savedCredentialsPresent) {
-      return 'You must be signed in to fetch more posts. Your library and saved credentials stay on this device — to wipe them, you can Clear data below.';
-    }
-    return 'You must be signed in to fetch more posts. Your library stays on this device — to wipe it, you can Clear data below.';
-  })();
-
   async function refreshCustomProxyStatus(): Promise<void> {
     const cfg = await loadProxyConfig();
     customProxyConfigured = cfg !== null && cfg.url !== '' && cfg.sharedSecret !== '';
@@ -278,7 +258,17 @@
       <div class="settings-row">
         <button type="button" on:click={signOut}>Sign out</button>
       </div>
-      <p class="help">{signOutHelpText}</p>
+      <p class="help">
+        {#if $persistenceMode === 'session-only' && savedCredentialsPresent}
+          You must be signed in to refresh your saved posts. Saved credentials stay on this device — to wipe them, <strong>Clear data</strong> below.
+        {:else if $persistenceMode === 'session-only'}
+          You must be signed in to refresh your saved posts.
+        {:else if savedCredentialsPresent}
+          You must be signed in to refresh your saved posts. Your library and saved credentials stay on this device — to wipe them, <strong>Clear data</strong> below.
+        {:else}
+          You must be signed in to refresh your saved posts. Your library stays on this device — to wipe it, <strong>Clear data</strong> below.
+        {/if}
+      </p>
     {:else}
       <p class="help">Not signed in.</p>
       <div class="settings-row">
