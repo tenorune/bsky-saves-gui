@@ -95,32 +95,30 @@
     >
       {config.appName}
     </button>
+    {#if displayedHandle && $inventoryPresent}
+      <span class="app-header__handle app-header__item-handle" title="Library owner">
+        @{displayedHandle}
+      </span>
+    {/if}
+    {#if $inventoryState.status === 'ready'}
+      <div class="app-header__item-export"><ExportMenu /></div>
+    {/if}
     {#if $inventoryPresent}
       {#if routeName === 'library'}
-        <strong class="app-header__current">Library</strong>
+        <strong class="app-header__current app-header__item-library">Library</strong>
       {:else}
         <button
           type="button"
-          class="app-header__navlink"
+          class="app-header__navlink app-header__item-library"
           on:click={goToLibraryFromTopNav}
         >Library</button>
       {/if}
     {/if}
     {#if routeName === 'settings'}
-      <strong class="app-header__current">Settings</strong>
+      <strong class="app-header__current app-header__item-settings">Settings</strong>
     {:else}
-      <a class="app-header__navlink" href="#/settings">Settings</a>
+      <a class="app-header__navlink app-header__item-settings" href="#/settings">Settings</a>
     {/if}
-    <nav class="app-header__trail" aria-label="Library tools">
-      {#if displayedHandle && $inventoryPresent}
-        <span class="app-header__handle" title="Library owner">
-          @{displayedHandle}
-        </span>
-      {/if}
-      {#if $inventoryState.status === 'ready'}
-        <ExportMenu />
-      {/if}
-    </nav>
   </header>
 
   {#if $persistenceMode === 'session-only'}
@@ -175,14 +173,12 @@
     min-height: 100vh;
   }
   .app-header {
-    /* Single-row flex with wrap: title pushed left by margin-right:
-       auto; Library + Settings + trail-group flush right via
-       justify-content: flex-end. On narrow viewports, the
-       trail-group (handle + Export) drops to row 2 — it's the last
-       source item, so flex-wrap pushes it there first, leaving
-       Library + Settings on row 1's top right. Row 2 is also
-       flex-end aligned, so the trail-group stays right-aligned
-       there too. */
+    /* Wide: single row, title pushed left by margin-right: auto, the
+       rest flush right via justify-content: flex-end. Source order
+       (Title, Handle, Export, Library, Settings) determines wide
+       visual order so there's no reorder cost at the common width.
+       Narrow: a media query reorders so Library/Settings stay on
+       row 1 and Handle/Export drop to row 2 via flex-wrap. */
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -191,10 +187,14 @@
     padding: 1rem 1.5rem;
     border-bottom: 1px solid color-mix(in oklab, CanvasText 15%, transparent);
   }
-  .app-header__trail {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
+  /* Wrap point: roughly when the title + four right-cluster items
+     stop fitting on one line. Bluesky-handle widths vary, so 768px
+     is the conservative cutoff. */
+  @media (max-width: 768px) {
+    .app-header__item-library { order: 1; }
+    .app-header__item-settings { order: 2; }
+    .app-header__item-handle { order: 3; }
+    .app-header__item-export { order: 4; }
   }
   .app-header__title {
     /* Push self left of everything else in the flex row. */
