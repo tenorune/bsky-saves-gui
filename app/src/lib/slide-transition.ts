@@ -1,10 +1,18 @@
 import type { Action } from 'svelte/action';
-import { getLastNavDirection } from './router';
+import { getAndConsumeInAppNav, getLastNavDirection } from './router';
 
 // Slide-in animation for a route component on mount. Direction comes from
 // the router (decided at navigation time): 'forward' enters from the right
 // (the established motion); 'backward' enters from the left.
+//
+// Skipped when the route mount is NOT the result of in-app navigation
+// (cold load, page reload, address-bar edit, browser back/forward).
+// The animation is intended only as feedback for "you just clicked
+// something inside the app," so the URL-driven entry points should land
+// silently — the user already saw the URL change.
 export const slideRoute: Action<HTMLElement> = (node) => {
+  if (!getAndConsumeInAppNav()) return {};
+
   const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const duration = reduce ? 120 : 280;
   const direction = getLastNavDirection();

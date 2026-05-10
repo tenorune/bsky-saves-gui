@@ -19,6 +19,23 @@ export function getLastNavDirection(): NavDirection {
   return lastNavDirection;
 }
 
+// Set by navigate() to mark "this route change came from an in-app
+// click / button / programmatic call." Consumed by the slide action
+// at the next route mount. Cold-load mounts and external changes
+// (browser back/forward, address-bar edits) leave this false so the
+// slide action no-ops — animation is reserved for in-app navigation.
+//
+// Consume-on-read: each call to getAndConsumeInAppNav() resets the
+// flag, so a navigate() that doesn't actually change the route (no
+// remount) doesn't leave a stale "true" lying around for a later
+// external change to inherit.
+let nextNavIsInApp = false;
+export function getAndConsumeInAppNav(): boolean {
+  const v = nextNavIsInApp;
+  nextNavIsInApp = false;
+  return v;
+}
+
 function parsePath(path: string): ActiveRoute {
   let normalized = path.length === 0 || path === '/' ? '/' : path;
   // Legacy redirects: /run and /refresh were replaced by the Library hub.
@@ -64,6 +81,7 @@ export function navigate(path: string): void {
   if (!path.startsWith('/')) {
     throw new Error(`navigate() requires an absolute path, got: ${path}`);
   }
+  nextNavIsInApp = true;
   window.location.hash = `#${path}`;
   setRoute(parsePath(path));
 }
