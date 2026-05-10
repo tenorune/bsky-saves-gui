@@ -95,14 +95,16 @@
     >
       {config.appName}
     </button>
-    {#if displayedHandle && $inventoryPresent}
-      <span class="app-header__handle app-header__item-handle" title="Library owner">
-        @{displayedHandle}
-      </span>
-    {/if}
-    {#if $inventoryState.status === 'ready'}
-      <div class="app-header__item-export"><ExportMenu /></div>
-    {/if}
+    <nav class="app-header__handle-export" aria-label="Library tools">
+      {#if displayedHandle && $inventoryPresent}
+        <span class="app-header__handle" title="Library owner">
+          @{displayedHandle}
+        </span>
+      {/if}
+      {#if $inventoryState.status === 'ready'}
+        <ExportMenu />
+      {/if}
+    </nav>
     {#if $inventoryPresent}
       {#if routeName === 'library'}
         <strong class="app-header__current app-header__item-library">Library</strong>
@@ -173,12 +175,14 @@
     min-height: 100vh;
   }
   .app-header {
-    /* Wide: single row, title pushed left by margin-right: auto, the
-       rest flush right via justify-content: flex-end. Source order
-       (Title, Handle, Export, Library, Settings) determines wide
-       visual order so there's no reorder cost at the common width.
-       Narrow: a media query reorders so Library/Settings stay on
-       row 1 and Handle/Export drop to row 2 via flex-wrap. */
+    /* Wide: single row. Title pushed left by margin-right: auto;
+       Handle+Export group, Library, Settings flush right via
+       justify-content: flex-end. Source order matches wide visual
+       (Title, handle-export, Library, Settings) so wide needs no
+       reorder. Narrow: a media query reorders so Library/Settings
+       stay on row 1 and the handle-export group drops to row 2 as
+       a unit; the group also flips to row-reverse (visual EXPORT,
+       Handle) and is left-aligned via margin-right: auto. */
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -187,14 +191,25 @@
     padding: 1rem 1.5rem;
     border-bottom: 1px solid color-mix(in oklab, CanvasText 15%, transparent);
   }
-  /* Wrap point: roughly when the title + four right-cluster items
-     stop fitting on one line. Bluesky-handle widths vary, so 768px
-     is the conservative cutoff. */
+  .app-header__handle-export {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  /* Wrap point: roughly when title + Handle/Export + Library + Settings
+     stop fitting on one line. Bluesky handle widths vary, so 768px is
+     the conservative cutoff. */
   @media (max-width: 768px) {
     .app-header__item-library { order: 1; }
     .app-header__item-settings { order: 2; }
-    .app-header__item-handle { order: 3; }
-    .app-header__item-export { order: 4; }
+    .app-header__handle-export {
+      order: 3;
+      /* Push the wrapped group to the left edge of row 2. */
+      margin-right: auto;
+      /* Visual order on row 2: EXPORT, Handle. Source order is
+         (Handle, Export); row-reverse flips that left-to-right. */
+      flex-direction: row-reverse;
+    }
   }
   .app-header__title {
     /* Push self left of everything else in the flex row. */
