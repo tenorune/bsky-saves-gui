@@ -55,19 +55,30 @@ describe('last-session writeToStorage gate', () => {
     expect(localStorage.getItem('last-session:v1')).toContain('"handle":"h"');
   });
 
-  it('SKIPS disk in session-only mode but updates the in-memory store', () => {
+  it('writes to sessionStorage in session-only mode and clears localStorage', () => {
+    // Seed a stale localStorage entry to confirm the session-only write
+    // also wipes it (mode flip from persist → session-only).
+    localStorage.setItem('last-session:v1', JSON.stringify({ ...SAMPLE, handle: 'old' }));
     signInDraft.set(SESSION_ONLY_DRAFT);
     setLastSession(SAMPLE);
-    // In-memory store has the value (so the running session is signed in)…
+    // In-memory store has the value (running session is signed in).
     expect(get(lastSession)?.handle).toBe('h');
-    // …but neither store is touched, so closing the tab or quitting
-    // the browser truly drops the JWTs.
+    // sessionStorage is the new home; localStorage was cleared.
+    expect(sessionStorage.getItem('last-session:v1')).toContain('"handle":"h"');
     expect(localStorage.getItem('last-session:v1')).toBeNull();
+  });
+
+  it('persist-mode write clears any stale sessionStorage entry', () => {
+    // Seed a stale session-only entry to confirm the persist write
+    // also wipes it (mode flip from session-only → persist).
+    sessionStorage.setItem('last-session:v1', JSON.stringify({ ...SAMPLE, handle: 'old' }));
+    signInDraft.set(PERSIST_DRAFT);
+    setLastSession(SAMPLE);
+    expect(localStorage.getItem('last-session:v1')).toContain('"handle":"h"');
     expect(sessionStorage.getItem('last-session:v1')).toBeNull();
   });
 
   it('clearLastSession wipes BOTH stores regardless of mode', () => {
-    // Seed both stores to simulate a partial migration state.
     setLastSession(SAMPLE);
     sessionStorage.setItem('last-session:v1', JSON.stringify(SAMPLE));
     expect(localStorage.getItem('last-session:v1')).not.toBeNull();
@@ -79,34 +90,52 @@ describe('last-session writeToStorage gate', () => {
   });
 });
 
-// Migration tests need a fresh module load to re-run the readFromStorage
-// path, so they reset modules and dynamically import.
-describe('last-session migration', () => {
+// Module-reload tests cover the readFromStorage entry point. Each test
+// resets modules and dynamically imports so the writable's initial
+// value is recomputed against the current sessionStorage / localStorage
+// state — the in-memory svelte store can't simulate cold load.
+describe('last-session cold-load read', () => {
   beforeEach(() => {
     sessionStorage.clear();
     localStorage.clear();
     vi.resetModules();
   });
 
-  it('promotes a sessionStorage value to localStorage on first load', async () => {
+  it('reads from sessionStorage when only session-only data exists', async () => {
     sessionStorage.setItem('last-session:v1', JSON.stringify(SAMPLE));
+    // Heartbeat must be fresh so expireStaleSessionData doesn't wipe it.
+    localStorage.setItem('session-heartbeat:v1', String(Date.now()));
     const mod = await import('./last-session');
-    // The module-level read should have promoted it.
     expect(get(mod.lastSession)?.handle).toBe('h');
-    expect(localStorage.getItem('last-session:v1')).toContain('"handle":"h"');
-    expect(sessionStorage.getItem('last-session:v1')).toBeNull();
+    // No promotion: session-only data stays in sessionStorage.
+    expect(sessionStorage.getItem('last-session:v1')).not.toBeNull();
+    expect(localStorage.getItem('last-session:v1')).toBeNull();
   });
 
-  it('prefers localStorage when both are populated', async () => {
+  it('reads from localStorage when only persist-mode data exists', async () => {
+    localStorage.setItem('last-session:v1', JSON.stringify(SAMPLE));
+    const mod = await import('./last-session');
+    expect(get(mod.lastSession)?.handle).toBe('h');
+  });
+
+  it('prefers sessionStorage over localStorage if both are set', async () => {
+    sessionStorage.setItem('last-session:v1', JSON.stringify({ ...SAMPLE, handle: 'session' }));
+    localStorage.setItem('last-session:v1', JSON.stringify({ ...SAMPLE, handle: 'local' }));
+    localStorage.setItem('session-heartbeat:v1', String(Date.now()));
+    const mod = await import('./last-session');
+    expect(get(mod.lastSession)?.handle).toBe('session');
+  });
+
+  it('drops a stale session-only entry via heartbeat expiry on cold load', async () => {
+    sessionStorage.setItem('last-session:v1', JSON.stringify(SAMPLE));
+    // Stale heartbeat — older than the threshold.
     localStorage.setItem(
-      'last-session:v1',
-      JSON.stringify({ ...SAMPLE, handle: 'newer' }),
-    );
-    sessionStorage.setItem(
-      'last-session:v1',
-      JSON.stringify({ ...SAMPLE, handle: 'older' }),
+      'session-heartbeat:v1',
+      String(Date.now() - 5 * 60 * 1000),
     );
     const mod = await import('./last-session');
-    expect(get(mod.lastSession)?.handle).toBe('newer');
+    expect(get(mod.lastSession)).toBeNull();
+    // The expiry should also have wiped the storage entry.
+    expect(sessionStorage.getItem('last-session:v1')).toBeNull();
   });
 });
