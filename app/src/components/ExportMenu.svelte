@@ -8,20 +8,31 @@
   import { exportMarkdown } from '../exporters/markdown-exporter';
   import { exportArchive } from '../exporters/html-exporter';
   import { downloadFile } from '../exporters/file-download';
+  import { imageBlobCount } from '$lib/image-store';
 
   let busy = false;
   let error = '';
   let menuEl: HTMLDetailsElement | undefined;
 
-  // Reactive: when any save has local image blobs, the HTML export becomes
+  // Reactive: when there are saved image blobs, the HTML export becomes
   // a ZIP archive (HTML + images/). When there are none, it's a single
   // flat HTML file. Surface that distinction in the button label.
-  $: htmlIncludesImages =
-    $inventoryState.status === 'ready' &&
-    $inventoryState.inventory.saves.some(
-      (s) => Array.isArray(s.local_images) && s.local_images.length > 0,
-    );
-  $: htmlButtonLabel = htmlIncludesImages ? 'HTML Archive' : 'HTML';
+  //
+  // Probe IDB directly rather than checking inventory.saves[].local_images
+  // — that field is set by the bsky-saves helper but the GUI's own image
+  // hydrator (which writes to the image-store IDB but doesn't mutate the
+  // inventory) leaves it empty, so the inventory-driven check would
+  // mislabel the export as "HTML" even when blobs are on disk.
+  let savedBlobCount = 0;
+  $: void refreshBlobCount($inventoryState);
+  async function refreshBlobCount(_state: typeof $inventoryState): Promise<void> {
+    try {
+      savedBlobCount = await imageBlobCount();
+    } catch {
+      savedBlobCount = 0;
+    }
+  }
+  $: htmlButtonLabel = savedBlobCount > 0 ? 'HTML Archive' : 'HTML';
 
   function handleOutsideClick(e: MouseEvent) {
     if (menuEl?.open && !menuEl.contains(e.target as Node)) {

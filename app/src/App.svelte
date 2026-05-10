@@ -12,6 +12,18 @@
   import { persistenceMode } from '$lib/persistence-mode';
   import { saveLibraryToDevice } from '$lib/save-library-to-device';
   import { startSessionHeartbeat } from '$lib/session-heartbeat';
+  import { clearLibraryScroll } from '$lib/library-scroll';
+
+  $: routeName = $currentRoute.name;
+
+  function goToLibraryFromTopNav() {
+    // Topnav "Library" link is rendered only when not on Library
+    // (Library state turns into bold static text instead). Any
+    // top-of-app click should land at the top of the feed, not at a
+    // stale scroll position captured on a previous visit.
+    clearLibraryScroll();
+    navigate('/library');
+  }
 
   let savingToDevice = false;
   async function handleSaveToDevice() {
@@ -58,13 +70,25 @@
           @{$lastSession.handle}
         </span>
       {/if}
-      {#if $inventoryPresent}
-        <a href="#/library">Library</a>
-      {/if}
       {#if $inventoryState.status === 'ready'}
         <ExportMenu />
       {/if}
-      <a href="#/settings">Settings</a>
+      {#if $inventoryPresent}
+        {#if routeName === 'library'}
+          <strong class="app-header__current">Library</strong>
+        {:else}
+          <button
+            type="button"
+            class="app-header__navlink"
+            on:click={goToLibraryFromTopNav}
+          >Library</button>
+        {/if}
+      {/if}
+      {#if routeName === 'settings'}
+        <strong class="app-header__current">Settings</strong>
+      {:else}
+        <a href="#/settings">Settings</a>
+      {/if}
     </nav>
   </header>
 
@@ -80,7 +104,7 @@
         class="session-only-banner__action"
         on:click={handleSaveToDevice}
         disabled={savingToDevice}
-      >{savingToDevice ? 'Saving…' : 'Save Library to this device'}</button>
+      >{savingToDevice ? 'Saving…' : 'Keep my saves in this browser'}</button>
     </div>
   {/if}
 
@@ -146,6 +170,27 @@
     font-size: 0.875rem;
     font-variant: small-caps;
   }
+  /* Bold static text used in place of the link for the user's current
+     route — same visual weight as a link's hover state, no pointer. */
+  .app-header__current {
+    font-weight: 700;
+  }
+  /* The Library topnav link is a button (so its on:click can clear the
+     saved scroll before navigating), but visually it should match the
+     surrounding <a> links. */
+  .app-header__navlink {
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+  .app-header__navlink:hover {
+    text-decoration: none;
+  }
   .app-main {
     flex: 1;
     padding: 1.5rem;
@@ -165,12 +210,26 @@
     flex: 1;
     min-width: 16rem;
   }
+  /* The "Keep my saves in this browser" affordance functions as a
+     button (triggers a multi-step flush) but reads as a link in the
+     banner — echoes the wording of the SignIn → Advanced checkbox. */
   .session-only-banner__action {
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
     font: inherit;
+    color: inherit;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+  .session-only-banner__action:hover {
+    text-decoration: none;
   }
   .session-only-banner__action[disabled] {
     opacity: 0.6;
     cursor: progress;
+    text-decoration: none;
   }
   .app-footer {
     padding: 1rem 1.5rem;
