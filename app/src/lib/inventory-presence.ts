@@ -14,6 +14,7 @@
 
 import { writable, type Readable } from 'svelte/store';
 import { shouldPersistLibraryData } from './persistence-mode';
+import { expireStaleSessionData } from './session-heartbeat';
 
 const LOCAL_KEY = 'inventory-present:v1';
 const SESSION_KEY = 'inventory-present:v1';
@@ -24,6 +25,10 @@ function readSync(): boolean {
       return true;
     }
   } catch { /* ignore */ }
+  // Expire any stale sessionStorage data first so a session-restored
+  // presence flag from a previous browser run doesn't make the navbar
+  // claim there's a Library when there isn't.
+  expireStaleSessionData();
   try {
     if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(SESSION_KEY) === '1') {
       return true;

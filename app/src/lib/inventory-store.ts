@@ -1,6 +1,7 @@
 import { get, set, del } from 'idb-keyval';
 import { markInventoryPresent, clearInventoryPresent } from './inventory-presence';
 import { shouldPersistLibraryData } from './persistence-mode';
+import { expireStaleSessionData } from './session-heartbeat';
 
 const KEY = 'inventory:v1';
 const SESSION_KEY = 'inventory:session-v1';
@@ -27,6 +28,13 @@ function writeSessionInventory(inventory: Inventory): boolean {
 
 function readSessionInventory(): Inventory | null {
   if (typeof sessionStorage === 'undefined') return null;
+  // Drop any session-restored data whose heartbeat went stale —
+  // browsers with "Continue where you left off" rehydrate sessionStorage
+  // across browser quit, and we want session-only intent to actually
+  // mean "gone after a real gap in user presence." Returns true on
+  // first call after such a gap; subsequent calls in this page life
+  // see fresh heartbeats and are no-ops.
+  expireStaleSessionData();
   try {
     const raw = sessionStorage.getItem(SESSION_KEY);
     if (raw === null) return null;

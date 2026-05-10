@@ -11,6 +11,7 @@ import { persistInMemoryImageBlobs } from './image-store';
 import { promoteToPersistedPresence } from './inventory-presence';
 import { signInDraft } from './sign-in-draft';
 import { lastSession, setLastSession } from './last-session';
+import { clearSessionHeartbeat } from './session-heartbeat';
 
 export async function saveLibraryToDevice(): Promise<void> {
   // Flip the draft FIRST so subsequent writes (and the in-flight
@@ -31,4 +32,9 @@ export async function saveLibraryToDevice(): Promise<void> {
   // next page reload after they opted into persistence.
   const session = get(lastSession);
   if (session) setLastSession(session);
+  // The heartbeat existed to expire session-only sessionStorage data;
+  // we just promoted everything to disk-backed storage, so the
+  // heartbeat is no longer relevant. Clear it so it doesn't sit in
+  // localStorage forever.
+  clearSessionHeartbeat();
 }

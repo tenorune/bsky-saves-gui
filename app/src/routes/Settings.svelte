@@ -8,6 +8,7 @@
   import { clearAccount } from '$lib/account-store';
   import { lastSession, clearLastSession } from '$lib/last-session';
   import { signInDraft } from '$lib/sign-in-draft';
+  import { clearSessionHeartbeat } from '$lib/session-heartbeat';
   import { clearBeaconSent } from '$lib/beacon';
   import { loadProxyConfig, clearProxyConfig } from '$lib/proxy-config';
   import { disableOperatorProxy } from '$lib/disable-operator-proxy';
@@ -184,6 +185,7 @@
       clearFailures(),
     ]);
     clearLastSession();
+    clearSessionHeartbeat();
     resetImageHydration();
     resetArticleHydration();
     resetLibraryFilters();

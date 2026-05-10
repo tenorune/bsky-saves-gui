@@ -11,6 +11,7 @@
   import { inventoryPresent } from '$lib/inventory-presence';
   import { persistenceMode } from '$lib/persistence-mode';
   import { saveLibraryToDevice } from '$lib/save-library-to-device';
+  import { startSessionHeartbeat } from '$lib/session-heartbeat';
 
   let savingToDevice = false;
   async function handleSaveToDevice() {
@@ -25,6 +26,11 @@
 
   onMount(() => {
     const stop = startRouter();
+    // Start the heartbeat so any session-only sessionStorage data the
+    // browser might have restored (Continue-where-you-left-off) gets a
+    // staleness check on the next read and so this session's data is
+    // protected against the same on the next reopen.
+    startSessionHeartbeat();
     // If user landed on the default `/` route and we have an inventory, jump to library.
     if (window.location.hash === '' || window.location.hash === '#/') {
       void decideEntryRoute().then((target) => {
