@@ -77,11 +77,22 @@ function setRoute(next: ActiveRoute): void {
   });
 }
 
-export function navigate(path: string): void {
+export interface NavigateOptions {
+  /**
+   * When false, the next route mount will not run the slide animation.
+   * Useful for app-driven redirects where the user didn't click
+   * anything (e.g., the cold-start decideEntryRoute redirect from / to
+   * /library when a cached inventory exists). Defaults to true so
+   * normal in-app links and buttons keep their feedback animation.
+   */
+  readonly animate?: boolean;
+}
+
+export function navigate(path: string, opts: NavigateOptions = {}): void {
   if (!path.startsWith('/')) {
     throw new Error(`navigate() requires an absolute path, got: ${path}`);
   }
-  nextNavIsInApp = true;
+  if (opts.animate !== false) nextNavIsInApp = true;
   window.location.hash = `#${path}`;
   setRoute(parsePath(path));
 }

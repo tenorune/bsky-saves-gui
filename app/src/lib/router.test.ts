@@ -136,6 +136,18 @@ describe('in-app navigation flag', () => {
     }
   });
 
+  it('navigate(path, { animate: false }) does NOT set the flag', async () => {
+    const { startRouter, navigate, getAndConsumeInAppNav } = await import('./router');
+    const stop = startRouter();
+    try {
+      getAndConsumeInAppNav();
+      navigate('/library', { animate: false });
+      expect(getAndConsumeInAppNav()).toBe(false);
+    } finally {
+      stop();
+    }
+  });
+
   it('hashchange (e.g., address-bar edit) does not set the flag', async () => {
     const { startRouter, getAndConsumeInAppNav } = await import('./router');
     const stop = startRouter();
