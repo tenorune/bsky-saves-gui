@@ -31,15 +31,13 @@
     // staleness check on the next read and so this session's data is
     // protected against the same on the next reopen.
     startSessionHeartbeat();
-    // If user landed on the default `/` route and we have an inventory,
-    // jump to library. The user didn't click anything to get here, so
-    // suppress the slide animation — this should feel like a cold load
-    // straight to /library, not an in-app navigation.
-    if (window.location.hash === '' || window.location.hash === '#/') {
-      void decideEntryRoute().then((target) => {
-        if (target !== '/') navigate(target, { animate: false });
-      });
-    }
+    // Cold-load gate: route the user to wherever they should actually
+    // be given their data state. Covers root → /library on cached
+    // visits, /library or /post → / when there's no inventory to back
+    // those routes (the typical session-only-expired reproducer).
+    void decideEntryRoute(window.location.hash).then((target) => {
+      if (target !== null) navigate(target, { animate: false });
+    });
     return stop;
   });
 </script>
