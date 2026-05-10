@@ -129,7 +129,7 @@ export function getPostBackupStatus(
         : hasImages
           ? imageWord
           : 'Article';
-      summary = `${subject} not yet backed up in the Library.`;
+      summary = `${subject} not yet backed up in your Library.`;
       link = 'library';
     } else {
       summary = 'Not yet saved — set up a backend.';

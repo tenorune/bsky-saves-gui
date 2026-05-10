@@ -13,9 +13,30 @@
   import { saveLibraryToDevice } from '$lib/save-library-to-device';
   import { startSessionHeartbeat } from '$lib/session-heartbeat';
   import { clearLibraryScroll } from '$lib/library-scroll';
+  import { loadAccount } from '$lib/account-store';
   import { get } from 'svelte/store';
 
   $: routeName = $currentRoute.name;
+
+  // The handle shown in the topnav represents the owner of the cached
+  // Library, not the active sign-in. Same resolution order as
+  // ExportMenu.resolveAccount: prefer the live session's handle (most
+  // current), fall back to the stored account label (set at last
+  // sign-in by saveAccount), null if neither. The handle is rendered
+  // only when an inventory exists ($inventoryPresent), so it doesn't
+  // appear pre-sign-in.
+  let displayedHandle: string | null = null;
+  $: void resolveDisplayedHandle($lastSession, $inventoryPresent);
+  async function resolveDisplayedHandle(
+    session: typeof $lastSession,
+    _present: boolean,
+  ): Promise<void> {
+    if (session) {
+      displayedHandle = session.handle;
+      return;
+    }
+    displayedHandle = await loadAccount();
+  }
 
   // Runtime route gate: if the user navigates to a data-required
   // route (via browser back/forward, address bar, or programmatic
@@ -71,23 +92,15 @@
 
 <div class="app">
   <header class="app-header">
-    <button
-      type="button"
-      class="app-header__title"
-      on:click={() => navigate('/')}
-      aria-label="Go to sign-in"
-    >
-      {config.appName}
-    </button>
-    <nav class="app-header__nav">
-      {#if $lastSession}
-        <span class="app-header__handle" title="Active session">
-          @{$lastSession.handle}
-        </span>
-      {/if}
-      {#if $inventoryState.status === 'ready'}
-        <ExportMenu />
-      {/if}
+    <div class="app-header__lead">
+      <button
+        type="button"
+        class="app-header__title"
+        on:click={() => navigate('/')}
+        aria-label="Go to sign-in"
+      >
+        {config.appName}
+      </button>
       {#if $inventoryPresent}
         {#if routeName === 'library'}
           <strong class="app-header__current">Library</strong>
@@ -103,6 +116,16 @@
         <strong class="app-header__current">Settings</strong>
       {:else}
         <a class="app-header__navlink" href="#/settings">Settings</a>
+      {/if}
+    </div>
+    <nav class="app-header__trail" aria-label="Library tools">
+      {#if displayedHandle && $inventoryPresent}
+        <span class="app-header__handle" title="Library owner">
+          @{displayedHandle}
+        </span>
+      {/if}
+      {#if $inventoryState.status === 'ready'}
+        <ExportMenu />
       {/if}
     </nav>
   </header>
@@ -159,11 +182,31 @@
     min-height: 100vh;
   }
   .app-header {
+    /* Two-group flex with wrap: __lead (title + Library + Settings)
+       stays on row 1; __trail (handle + Export) drops to row 2 on
+       narrow viewports because of flex-wrap. On wide viewports both
+       groups sit on row 1 with the trail pushed right by margin auto. */
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    justify-content: space-between;
+    gap: 0.5rem 1rem;
     padding: 1rem 1.5rem;
     border-bottom: 1px solid color-mix(in oklab, CanvasText 15%, transparent);
+  }
+  .app-header__lead {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+  }
+  .app-header__trail {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    /* Push right whenever there's room on the same line; when wrapping
+       to a second line, the auto-margin still resolves to right-align
+       because flex items honor margin-left auto along the main axis. */
+    margin-left: auto;
   }
   .app-header__title {
     background: none;
@@ -177,11 +220,6 @@
     font-weight: 600;
     cursor: pointer;
     color: inherit;
-  }
-  .app-header__nav {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
   }
   .app-header__handle {
     opacity: 0.7;

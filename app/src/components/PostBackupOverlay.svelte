@@ -97,7 +97,7 @@
         {status.summary}
       </button>
     {:else if status.link === 'library'}
-      {librarySubject} not yet backed up in the <a class="post-backup-overlay__button" href="#/library" on:click={clearLibraryScroll}>Library</a>.
+      {librarySubject} not yet backed up in your <a class="post-backup-overlay__button" href="#/library" on:click={clearLibraryScroll}>Library</a>.
     {:else if status.link === 'setup'}
       Not yet saved — <a class="post-backup-overlay__button" href="#/settings">set up a backend</a>.
     {:else}

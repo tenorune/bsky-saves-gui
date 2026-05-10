@@ -27,7 +27,7 @@ describe('getPostBackupStatus', () => {
     expect(r.hasAssets).toBe(false);
   });
 
-  it('returns "Images not yet backed up in the Library." for multiple pending images', () => {
+  it('returns "Images not yet backed up in your Library." for multiple pending images', () => {
     const r = getPostBackupStatus({
       save: baseSave,
       imageUrlsInPost: ['https://i/1', 'https://i/2', 'https://i/3'],
@@ -37,7 +37,7 @@ describe('getPostBackupStatus', () => {
       articleHydration: idle,
       setupAvailable: true,
     });
-    expect(r.summary).toBe('Images not yet backed up in the Library.');
+    expect(r.summary).toBe('Images not yet backed up in your Library.');
     expect(r.link).toBe('library');
     expect(r.anyFailed).toBe(false);
   });
@@ -52,11 +52,11 @@ describe('getPostBackupStatus', () => {
       articleHydration: idle,
       setupAvailable: true,
     });
-    expect(r.summary).toBe('Image not yet backed up in the Library.');
+    expect(r.summary).toBe('Image not yet backed up in your Library.');
     expect(r.link).toBe('library');
   });
 
-  it('says "Article not yet backed up in the Library." for an article-only pending post', () => {
+  it('says "Article not yet backed up in your Library." for an article-only pending post', () => {
     const r = getPostBackupStatus({
       save: baseSave,
       imageUrlsInPost: [],
@@ -66,7 +66,7 @@ describe('getPostBackupStatus', () => {
       articleHydration: idle,
       setupAvailable: true,
     });
-    expect(r.summary).toBe('Article not yet backed up in the Library.');
+    expect(r.summary).toBe('Article not yet backed up in your Library.');
     expect(r.link).toBe('library');
   });
 
@@ -80,7 +80,7 @@ describe('getPostBackupStatus', () => {
       articleHydration: idle,
       setupAvailable: true,
     });
-    expect(r.summary).toBe('Image and Article not yet backed up in the Library.');
+    expect(r.summary).toBe('Image and Article not yet backed up in your Library.');
     expect(r.link).toBe('library');
   });
 
@@ -94,7 +94,7 @@ describe('getPostBackupStatus', () => {
       articleHydration: idle,
       setupAvailable: true,
     });
-    expect(r.summary).toBe('Images and Article not yet backed up in the Library.');
+    expect(r.summary).toBe('Images and Article not yet backed up in your Library.');
     expect(r.link).toBe('library');
   });
 
