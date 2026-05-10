@@ -27,6 +27,12 @@
   onMount(async () => {
     savedPresent = await hasCredentials();
     await loadAssetToggles();
+    // Reflect the current persistence-mode marker into the form so a
+    // user already in session-only mode sees "Keep my saves in this
+    // browser" unchecked by default (matching their prior choice).
+    // Without this, the form's default saveInventory=true would
+    // override the marker on submit and silently flip them to persist.
+    saveInventory = get(persistenceMode) !== 'session-only';
   });
 
   async function unlockSaved() {
