@@ -11,6 +11,7 @@ import { persistInMemoryImageBlobs } from './image-store';
 import { promoteToPersistedPresence } from './inventory-presence';
 import { signInDraft } from './sign-in-draft';
 import { lastSession, setLastSession } from './last-session';
+import { loadAccount, saveAccount } from './account-store';
 import { clearSessionHeartbeat } from './session-heartbeat';
 import { clearSessionOnlyMarker } from './persistence-mode';
 
@@ -32,6 +33,13 @@ export async function saveLibraryToDevice(): Promise<void> {
   // Move the presence flag from sessionStorage → localStorage so the
   // navbar Library link survives browser quit.
   promoteToPersistedPresence();
+  // Migrate the account label (handle of the Library's owner) from
+  // sessionStorage → IDB. Without this the handle in the topnav and
+  // exports disappears once the tab closes — the user clicked the
+  // banner expecting their data to stick around, but the account
+  // label would silently die with the tab.
+  const ownerHandle = await loadAccount();
+  if (ownerHandle) await saveAccount(ownerHandle);
   // Re-write the active session, which now goes to localStorage
   // (persist mode) and clears the session-only sessionStorage entry
   // as part of writeToStorage's invariant.

@@ -17,6 +17,9 @@ import {
 } from './image-store';
 import { lastSession, setLastSession, clearLastSession } from './last-session';
 import { inventoryPresent } from './inventory-presence';
+import { saveAccount, loadAccount, clearAccount } from './account-store';
+import { markSessionOnly, clearSessionOnlyMarker } from './persistence-mode';
+import { get as idbGet } from 'idb-keyval';
 
 const SESSION_ONLY_DRAFT = {
   handle: 'a',
@@ -33,7 +36,9 @@ beforeEach(async () => {
   _resetImageStoreForTests();
   await clearInventory();
   await clearImageBlobs();
+  await clearAccount();
   clearLastSession();
+  clearSessionOnlyMarker();
   localStorage.clear();
   sessionStorage.clear();
 });
@@ -105,6 +110,29 @@ describe('saveLibraryToDevice', () => {
     const stored = localStorage.getItem('last-session:v1');
     expect(stored).toContain('"handle":"h"');
     expect(sessionStorage.getItem('last-session:v1')).toBeNull();
+  });
+
+  it('migrates the account label from sessionStorage to IDB', async () => {
+    // Reproduce the original-report flow: session-only sign-in saves
+    // the account to sessionStorage (mode-aware saveAccount). Without
+    // migration, closing the tab after "Keep my saved posts in this
+    // browser" wipes the sessionStorage entry → handle disappears
+    // from the topnav and exports on the next visit.
+    signInDraft.set(SESSION_ONLY_DRAFT);
+    markSessionOnly();
+    await saveAccount('alice.bsky.social');
+    expect(sessionStorage.getItem('account:v1')).toBe('alice.bsky.social');
+    expect(await idbGet('account:v1')).toBeUndefined();
+
+    await saveLibraryToDevice();
+
+    // After flush: account label lives in IDB; sessionStorage entry
+    // is gone (per account-store's persist-mode cross-store wipe).
+    expect(await idbGet('account:v1')).toBe('alice.bsky.social');
+    expect(sessionStorage.getItem('account:v1')).toBeNull();
+    // And a fresh loadAccount returns it (covering the topnav /
+    // ExportMenu read path).
+    expect(await loadAccount()).toBe('alice.bsky.social');
   });
 
   it('is a safe no-op when nothing is in memory', async () => {
