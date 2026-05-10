@@ -92,32 +92,30 @@
 
 <div class="app">
   <header class="app-header">
-    <div class="app-header__lead">
-      <button
-        type="button"
-        class="app-header__title"
-        on:click={() => navigate('/')}
-        aria-label="Go to sign-in"
-      >
-        {config.appName}
-      </button>
-      {#if $inventoryPresent}
-        {#if routeName === 'library'}
-          <strong class="app-header__current">Library</strong>
-        {:else}
-          <button
-            type="button"
-            class="app-header__navlink"
-            on:click={goToLibraryFromTopNav}
-          >Library</button>
-        {/if}
-      {/if}
-      {#if routeName === 'settings'}
-        <strong class="app-header__current">Settings</strong>
+    <button
+      type="button"
+      class="app-header__title"
+      on:click={() => navigate('/')}
+      aria-label="Go to sign-in"
+    >
+      {config.appName}
+    </button>
+    {#if $inventoryPresent}
+      {#if routeName === 'library'}
+        <strong class="app-header__current">Library</strong>
       {:else}
-        <a class="app-header__navlink" href="#/settings">Settings</a>
+        <button
+          type="button"
+          class="app-header__navlink"
+          on:click={goToLibraryFromTopNav}
+        >Library</button>
       {/if}
-    </div>
+    {/if}
+    {#if routeName === 'settings'}
+      <strong class="app-header__current">Settings</strong>
+    {:else}
+      <a class="app-header__navlink" href="#/settings">Settings</a>
+    {/if}
     <nav class="app-header__trail" aria-label="Library tools">
       {#if displayedHandle && $inventoryPresent}
         <span class="app-header__handle" title="Library owner">
@@ -182,33 +180,30 @@
     min-height: 100vh;
   }
   .app-header {
-    /* Two-group flex with wrap: __lead (title + Library + Settings)
-       stays on row 1; __trail (handle + Export) drops to row 2 on
-       narrow viewports because of flex-wrap. On wide viewports both
-       groups sit on row 1 with the trail pushed right by margin auto. */
+    /* Single-row flex with wrap: title pushed left by margin-right:
+       auto; Library + Settings + trail-group flush right via
+       justify-content: flex-end. On narrow viewports, the
+       trail-group (handle + Export) drops to row 2 — it's the last
+       source item, so flex-wrap pushes it there first, leaving
+       Library + Settings on row 1's top right. Row 2 is also
+       flex-end aligned, so the trail-group stays right-aligned
+       there too. */
     display: flex;
     flex-wrap: wrap;
     align-items: center;
+    justify-content: flex-end;
     gap: 0.5rem 1rem;
     padding: 1rem 1.5rem;
     border-bottom: 1px solid color-mix(in oklab, CanvasText 15%, transparent);
-  }
-  .app-header__lead {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 0.5rem 1rem;
   }
   .app-header__trail {
     display: flex;
     align-items: center;
     gap: 1rem;
-    /* Push right whenever there's room on the same line; when wrapping
-       to a second line, the auto-margin still resolves to right-align
-       because flex items honor margin-left auto along the main axis. */
-    margin-left: auto;
   }
   .app-header__title {
+    /* Push self left of everything else in the flex row. */
+    margin-right: auto;
     background: none;
     border: none;
     /* Remove the user-agent default button padding (1px 6px in most
