@@ -95,7 +95,7 @@
   {#if $persistenceMode === 'session-only'}
     <div class="session-only-banner" role="status">
       <span class="session-only-banner__msg">
-        <strong>Session mode</strong> — closing this tab will clear your library{#if $lastSession} and sign you out{/if}.
+        <strong>Session mode</strong> — closing this tab will clear your library{$lastSession ? ' and sign you out' : ''}.
       </span>
       <button
         type="button"
@@ -153,6 +153,11 @@
   .app-header__title {
     background: none;
     border: none;
+    /* Remove the user-agent default button padding (1px 6px in most
+       browsers) so the title's text-start aligns with .app-main /
+       .session-only-banner content edges at exactly 1.5rem. Without
+       this, the title sits ~6px right of the banner below it. */
+    padding: 0;
     font: inherit;
     font-weight: 600;
     cursor: pointer;
