@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { slide, fly } from 'svelte/transition';
   import { config } from '$lib/config';
   import { currentRoute, startRouter, navigate } from '$lib/router';
   import { decideEntryRoute } from '$lib/return-visit';
@@ -70,7 +71,39 @@
     }
   }
 
+  // Account menu: a second header row (Handle + ExportMenu) that slides
+  // down under the topnav when the user taps "@". A document-level
+  // listener closes the menu on outside clicks; Escape closes and
+  // returns focus to the toggle. The menu auto-closes when the library
+  // disappears (sign out) so a stale-open row doesn't linger.
+  let accountMenuOpen = false;
+  let accountToggleEl: HTMLButtonElement | undefined;
+  let accountRowEl: HTMLDivElement | undefined;
+  function toggleAccountMenu() {
+    accountMenuOpen = !accountMenuOpen;
+  }
+  function closeAccountMenu() {
+    accountMenuOpen = false;
+  }
+  function handleDocumentClick(e: MouseEvent) {
+    if (!accountMenuOpen) return;
+    const t = e.target as Node | null;
+    if (!t) return;
+    if (accountToggleEl?.contains(t)) return;
+    if (accountRowEl?.contains(t)) return;
+    closeAccountMenu();
+  }
+  function handleDocumentKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && accountMenuOpen) {
+      closeAccountMenu();
+      accountToggleEl?.focus();
+    }
+  }
+  $: if (!$inventoryPresent && accountMenuOpen) closeAccountMenu();
+
   onMount(() => {
+    document.addEventListener('click', handleDocumentClick);
+    document.addEventListener('keydown', handleDocumentKeydown);
     const stop = startRouter();
     // Start the heartbeat so any session-only sessionStorage data the
     // browser might have restored (Continue-where-you-left-off) gets a
@@ -94,7 +127,11 @@
     void decideEntryRoute(window.location.hash).then((target) => {
       if (target !== null) navigate(target, { animate: false });
     });
-    return stop;
+    return () => {
+      document.removeEventListener('click', handleDocumentClick);
+      document.removeEventListener('keydown', handleDocumentKeydown);
+      stop();
+    };
   });
 </script>
 
@@ -108,18 +145,6 @@
     >
       {config.appName}
     </button>
-    {#if (displayedHandle && $inventoryPresent) || $inventoryState.status === 'ready'}
-      <nav class="app-header__handle-export" aria-label="Library tools">
-        {#if displayedHandle && $inventoryPresent}
-          <span class="app-header__handle" title="Library owner">
-            @{displayedHandle}
-          </span>
-        {/if}
-        {#if $inventoryState.status === 'ready'}
-          <ExportMenu />
-        {/if}
-      </nav>
-    {/if}
     {#if $inventoryPresent}
       {#if routeName === 'library'}
         <strong class="app-header__current app-header__item-library">Library</strong>
@@ -140,7 +165,44 @@
         on:click|preventDefault={() => navigate('/settings')}
       >Settings</a>
     {/if}
+    {#if $inventoryPresent}
+      <button
+        type="button"
+        class="app-header__navlink app-header__account-toggle"
+        class:app-header__account-toggle--open={accountMenuOpen}
+        bind:this={accountToggleEl}
+        on:click={toggleAccountMenu}
+        aria-expanded={accountMenuOpen}
+        aria-controls="app-header-account-row"
+        aria-label="Account menu"
+      >@</button>
+    {/if}
   </header>
+
+  {#if accountMenuOpen && $inventoryPresent}
+    <div
+      id="app-header-account-row"
+      class="app-header__account-row"
+      bind:this={accountRowEl}
+      transition:slide={{ duration: 180 }}
+    >
+      <nav
+        class="app-header__handle-export"
+        aria-label="Library tools"
+        in:fly|local={{ duration: 200, x: 80 }}
+        out:fly|local={{ duration: 140, x: 80 }}
+      >
+        {#if displayedHandle}
+          <span class="app-header__handle" title="Library owner">
+            @{displayedHandle}
+          </span>
+        {/if}
+        {#if $inventoryState.status === 'ready'}
+          <ExportMenu />
+        {/if}
+      </nav>
+    </div>
+  {/if}
 
   {#if $persistenceMode === 'session-only'}
     <div class="session-only-banner" role="status">
@@ -203,44 +265,47 @@
     min-height: 100vh;
   }
   .app-header {
-    /* Wide: single row. Title pushed left by margin-right: auto;
-       Handle+Export group, Library, Settings flush right via
-       justify-content: flex-end. Source order matches wide visual
-       (Title, handle-export, Library, Settings) so wide needs no
-       reorder. Narrow: a media query reorders so Library/Settings
-       stay on row 1 and the handle-export group drops to row 2 as
-       a unit; the group also flips to row-reverse (visual EXPORT,
-       Handle) and is left-aligned via margin-right: auto. */
+    /* Single row: Title — Library — Settings — @. Title pushed left by
+       margin-right: auto; the rest sits flush right via
+       justify-content: flex-end. The handle / Export menu is no
+       longer in the header row — it lives in .app-header__account-row,
+       which slides down when the @ toggle is open. */
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
     justify-content: flex-end;
     gap: 0.5rem 1rem;
     padding: 1rem 1.5rem;
     border-bottom: 1px solid color-mix(in oklab, CanvasText 15%, transparent);
   }
+  .app-header__account-toggle {
+    /* Renders as a square-ish "@" button. Inherits the underline from
+       .app-header__navlink for visual parity with Library / Settings,
+       but the underline is suppressed when open so the toggle reads
+       as the active control of the open menu. */
+    font-size: 1.1rem;
+    line-height: 1;
+  }
+  .app-header__account-toggle--open {
+    text-decoration: none;
+    font-weight: 700;
+  }
+  .app-header__account-row {
+    /* Drops below the header when accountMenuOpen is true. The row's
+       background bleeds full-width like .session-only-banner so the
+       slide-down reads as a structural section of the topnav, not a
+       floating popover. */
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 0.625rem 1.5rem;
+    background: color-mix(in oklab, CanvasText 4%, Canvas);
+    border-bottom: 1px solid color-mix(in oklab, CanvasText 12%, transparent);
+    overflow: hidden;
+  }
   .app-header__handle-export {
     display: flex;
     align-items: center;
     gap: 1rem;
-  }
-  /* Wrap point: roughly when title + Handle/Export + Library + Settings
-     stop fitting on one line. Bluesky handle widths vary, so 768px is
-     the conservative cutoff. */
-  @media (max-width: 768px) {
-    .app-header__item-library { order: 1; }
-    .app-header__item-settings { order: 2; }
-    .app-header__handle-export {
-      order: 3;
-      /* Push the wrapped group to the left edge of row 2. */
-      margin-right: auto;
-      /* Force onto its own row immediately at this breakpoint, even if
-         the remaining inline space could fit it. Without this, there's
-         an intermediate width where Title/Library/Settings/Export/Handle
-         all share row 1 in the reordered sequence — visually unspecified
-         and not what the layout is meant to look like. */
-      flex-basis: 100%;
-    }
   }
   .app-header__title {
     /* Push self left of everything else in the flex row. */
