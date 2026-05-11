@@ -130,49 +130,45 @@
 
 <div class="app">
   <header class="app-header">
-    <div class="app-header__inner">
-      <div class="app-header__items">
+    <button
+      type="button"
+      class="app-header__title"
+      on:click={() => navigate('/')}
+      aria-label="Go to sign-in"
+    >
+      {config.appName}
+    </button>
+    {#if $inventoryPresent}
+      {#if routeName === 'library'}
+        <strong class="app-header__current app-header__item-library">Library</strong>
+      {:else}
         <button
           type="button"
-          class="app-header__title"
-          on:click={() => navigate('/')}
-          aria-label="Go to sign-in"
-        >
-          {config.appName}
-        </button>
-        {#if $inventoryPresent}
-          {#if routeName === 'library'}
-            <strong class="app-header__current app-header__item-library">Library</strong>
-          {:else}
-            <button
-              type="button"
-              class="app-header__navlink app-header__item-library"
-              on:click={goToLibraryFromTopNav}
-            >Library</button>
-          {/if}
-        {/if}
-        {#if routeName === 'settings'}
-          <strong class="app-header__current app-header__item-settings">Settings</strong>
-        {:else}
-          <a
-            class="app-header__navlink app-header__item-settings"
-            href="#/settings"
-            on:click|preventDefault={() => navigate('/settings')}
-          >Settings</a>
-        {/if}
-        {#if $inventoryPresent}
-          <button
-            type="button"
-            class="app-header__navlink app-header__account-toggle"
-            class:app-header__account-toggle--open={accountMenuOpen}
-            on:click={toggleAccountMenu}
-            aria-expanded={accountMenuOpen}
-            aria-controls="app-header-account-row"
-            aria-label="Account menu"
-          >@</button>
-        {/if}
-      </div>
-    </div>
+          class="app-header__navlink app-header__item-library"
+          on:click={goToLibraryFromTopNav}
+        >Library</button>
+      {/if}
+    {/if}
+    {#if routeName === 'settings'}
+      <strong class="app-header__current app-header__item-settings">Settings</strong>
+    {:else}
+      <a
+        class="app-header__navlink app-header__item-settings"
+        href="#/settings"
+        on:click|preventDefault={() => navigate('/settings')}
+      >Settings</a>
+    {/if}
+    {#if $inventoryPresent}
+      <button
+        type="button"
+        class="app-header__navlink app-header__account-toggle"
+        class:app-header__account-toggle--open={accountMenuOpen}
+        on:click={toggleAccountMenu}
+        aria-expanded={accountMenuOpen}
+        aria-controls="app-header-account-row"
+        aria-label="Account menu"
+      >@</button>
+    {/if}
   </header>
 
   {#if accountMenuOpen && $inventoryPresent}
@@ -181,25 +177,21 @@
       class="app-header__account-row"
       transition:slide={{ duration: 180 }}
     >
-      <div class="app-header__inner">
-        <div class="app-header__account-items">
-          <nav
-            class="app-header__handle-export"
-            aria-label="Library tools"
-            in:fly|local={{ duration: 200, x: 80 }}
-            out:fly|local={{ duration: 140, x: 80 }}
-          >
-            {#if displayedHandle}
-              <span class="app-header__handle" title="Library owner">
-                @{displayedHandle}
-              </span>
-            {/if}
-            {#if $inventoryState.status === 'ready'}
-              <ExportMenu />
-            {/if}
-          </nav>
-        </div>
-      </div>
+      <nav
+        class="app-header__handle-export"
+        aria-label="Library tools"
+        in:fly|local={{ duration: 200, x: 80 }}
+        out:fly|local={{ duration: 140, x: 80 }}
+      >
+        {#if displayedHandle}
+          <span class="app-header__handle" title="Library owner">
+            @{displayedHandle}
+          </span>
+        {/if}
+        {#if $inventoryState.status === 'ready'}
+          <ExportMenu />
+        {/if}
+      </nav>
     </div>
   {/if}
 
@@ -268,34 +260,20 @@
     min-height: 100vh;
   }
   .app-header {
-    /* Vertical padding on the outer header; horizontal padding is on
-       the inner gridline-aligned container below. */
-    padding: 1rem 1.5rem;
-  }
-  /* Mirrors .library-hub: max-width 44rem, centered. Items inside align
-     to the same vertical gridline as the library content. Used by both
-     the main topnav row and the slide-down account row so they share
-     the same column. */
-  .app-header__inner {
-    max-width: 44rem;
-    margin: 0 auto;
-  }
-  /* Flex row of nav items extended 10px outboard on each side. Matches
-     the LibraryStatusPanel's outboard bleed: items at the right end
-     (@) align with status-panel-right; items at the left end (app
-     title) align with status-panel-left. */
-  .app-header__items {
+    /* Single row: Title — Library — Settings — @. Title pushed left by
+       margin-right: auto; the rest sits flush right via
+       justify-content: flex-end. Horizontal padding adapts to viewport:
+       at wide widths it's the topnav's natural 1.5rem so items sit at
+       the viewport-edge column; at narrow widths it shrinks to match
+       the .status-panel's outboard bleed (1.5rem - 10px ≈ 0.875rem)
+       so items snap to the gridline that the asset rows define.
+       clamp() interpolates smoothly between the two through the
+       narrow band where they cross. */
     display: flex;
     align-items: center;
     justify-content: flex-end;
     gap: 0.5rem 1rem;
-    margin: 0 -10px;
-  }
-  .app-header__account-items {
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    margin: 0 -10px;
+    padding: 1rem clamp(0.875rem, calc((100vw - 44rem) / 2 - 10px), 1.5rem);
   }
   /* Chained selector (.app-header__navlink.app-header__account-toggle)
      so these rules win the cascade against .app-header__navlink, which
@@ -345,7 +323,9 @@
     display: flex;
     justify-content: flex-end;
     align-items: center;
-    padding: 0.625rem 1.5rem;
+    /* Same clamp() padding as .app-header so the EXPORT button on this
+       row right-aligns with the @ button above. */
+    padding: 0.625rem clamp(0.875rem, calc((100vw - 44rem) / 2 - 10px), 1.5rem);
     background: rgba(0, 0, 0, 0.06);
     border-bottom: 1px solid color-mix(in oklab, CanvasText 12%, transparent);
   }
