@@ -4,18 +4,20 @@
   import { inventoryState, loadFromDb } from '$lib/inventory-loader';
   import { clearInventory, saveInventory } from '$lib/inventory-store';
   import { triggerThreadHydration, triggerImageHydration, triggerArticleHydration } from '$lib/asset-trigger';
-  import { clearCredentials } from '$lib/credentials-store';
+  import { clearCredentials, hasCredentials, saveCredentials as persistCredentials } from '$lib/credentials-store';
   import { clearAccount } from '$lib/account-store';
   import { lastSession, clearLastSession } from '$lib/last-session';
+  import { signInDraft } from '$lib/sign-in-draft';
+  import { persistenceMode } from '$lib/persistence-mode';
+  import { clearSessionHeartbeat } from '$lib/session-heartbeat';
   import { clearBeaconSent } from '$lib/beacon';
   import { loadProxyConfig, clearProxyConfig } from '$lib/proxy-config';
   import { disableOperatorProxy } from '$lib/disable-operator-proxy';
   import {
-    loadBackupPrefs,
+    loadOperatorProxyOptOut,
     setOperatorProxyOptOut,
-    clearBackupPrefs,
-    type BackupPrefs,
-  } from '$lib/backup-prefs';
+    clearOperatorProxyOptOut,
+  } from '$lib/operator-proxy-opt-out';
   import { config } from '$lib/config';
   import { cancelImageBackup } from '$lib/start-image-backup';
   import { cancelArticleBackup } from '$lib/start-article-backup';
@@ -23,13 +25,14 @@
   import { clearImageBlobs } from '$lib/image-store';
   import { clearFailures } from '$lib/failure-store';
   import { resetImageHydration, resetArticleHydration } from '$lib/hydration-state';
+  import { resetLibraryFilters } from '$lib/library-filters';
   import { exportJson } from '../exporters/json-exporter';
   import { downloadFile } from '../exporters/file-download';
   import { parseInventory } from '../reader/inventory-shape';
   import { navigate } from '$lib/router';
   import CustomProxySetupModal from '../components/CustomProxySetupModal.svelte';
-  import { assetToggles, setAssetToggle, loadAssetToggles } from '$lib/asset-toggles';
-  import { installHintDismissed, loadInstallHintPref } from '$lib/install-hint-pref';
+  import { assetToggles, setAssetToggle, loadAssetToggles, clearAssetToggles } from '$lib/asset-toggles';
+  import { installHintDismissed, loadInstallHintPref, clearInstallHintPref } from '$lib/install-hint-pref';
   import InstallHelperHint from '../components/library-status/InstallHelperHint.svelte';
   import { capabilitySnapshot, initCapabilitySnapshot } from '$lib/capability-snapshot';
   import { prospectiveBackendName } from '$lib/dominant-backend';
@@ -38,10 +41,58 @@
   let error = '';
   let importInputEl: HTMLInputElement | undefined;
 
-  let backupPrefs: BackupPrefs | null = null;
+  let operatorProxyOptOut = false;
   let backupAdvancedOpen = false;
   let setupModalOpen = false;
   let customProxyConfigured = false;
+  let savedCredentialsPresent = false;
+
+  // Settings → "Remember my app password" form state. Mirrors the
+  // SignIn → Advanced section: checkbox reveals passphrase + Save
+  // button. Lets a user who forgot to check the box at sign-in time
+  // (or who just signed in fresh) save credentials post-hoc, without
+  // having to sign out and back in.
+  let rememberCredsChecked = false;
+  let rememberPassphrase = '';
+  let rememberCredsStatus = '';
+  let rememberCredsError = '';
+
+  async function handleSaveCredentialsFromSettings(): Promise<void> {
+    rememberCredsError = '';
+    rememberCredsStatus = '';
+    if (rememberPassphrase.length < 8) {
+      rememberCredsError = 'Passphrase must be at least 8 characters.';
+      return;
+    }
+    // We need the plaintext app password to encrypt — it only lives
+    // on signInDraft (in-memory svelte store, populated by
+    // SignIn.submit, cleared by signOut). If the user signed in on
+    // this page life it's available. If they refreshed since signing
+    // in, it isn't — they'd need to sign in again.
+    const draft = get(signInDraft);
+    if (!draft || !draft.appPassword) {
+      rememberCredsError =
+        "Your app password isn't in memory. Sign out and sign in again to save it.";
+      return;
+    }
+    const session = get(lastSession);
+    if (!session) {
+      rememberCredsError = 'Not signed in.';
+      return;
+    }
+    try {
+      await persistCredentials(
+        { handle: session.handle, appPassword: draft.appPassword, pds: session.pds },
+        rememberPassphrase,
+      );
+      savedCredentialsPresent = true;
+      rememberCredsStatus = 'Saved.';
+      rememberPassphrase = '';
+      rememberCredsChecked = false;
+    } catch (e) {
+      rememberCredsError = e instanceof Error ? e.message : String(e);
+    }
+  }
 
   async function refreshCustomProxyStatus(): Promise<void> {
     const cfg = await loadProxyConfig();
@@ -56,37 +107,37 @@
   }
 
   onMount(async () => {
-    backupPrefs = await loadBackupPrefs();
+    operatorProxyOptOut = await loadOperatorProxyOptOut();
+    savedCredentialsPresent = await hasCredentials();
     await refreshCustomProxyStatus();
     void probeOperatorProxy();
     await loadAssetToggles();
     await loadInstallHintPref();
   });
 
-  let operatorProxyReachable: 'unknown' | 'ok' | 'fail' = 'unknown';
+  import {
+    probeOperatorProxy as runOperatorProxyProbe,
+    type OperatorProxyStatus,
+  } from '$lib/operator-proxy-probe';
+  import { slideRoute } from '$lib/slide-transition';
+
+  let operatorProxyReachable: OperatorProxyStatus = 'unknown';
 
   $: operatorProxyConfigured = config.operatorImageProxyUrl !== '';
-  $: operatorProxyOptOut = backupPrefs?.operatorProxyOptOut ?? false;
 
   async function probeOperatorProxy(): Promise<void> {
     if (!operatorProxyConfigured) return;
     operatorProxyReachable = 'unknown';
-    try {
-      const url = config.operatorImageProxyUrl.replace(/\/+$/, '') + '/fetch';
-      const res = await fetch(url, {
-        method: 'OPTIONS',
-        headers: { Origin: window.location.origin },
-      });
-      operatorProxyReachable = res.status === 204 ? 'ok' : 'fail';
-    } catch {
-      operatorProxyReachable = 'fail';
-    }
+    operatorProxyReachable = await runOperatorProxyProbe(
+      config.operatorImageProxyUrl,
+      config.operatorImageProxySecret,
+    );
   }
 
   async function handleToggleOperatorProxyOptOut(event: Event) {
     const checked = (event.target as HTMLInputElement).checked;
     await setOperatorProxyOptOut(checked);
-    await reloadBackupPrefs();
+    operatorProxyOptOut = checked;
     // Recompute the capability snapshot so Library reflects the new
     // image-backend selection (operator-worker → none when opting out).
     await initCapabilitySnapshot();
@@ -94,11 +145,7 @@
 
   async function handleDisableOperatorProxyClick() {
     await disableOperatorProxy();
-    await reloadBackupPrefs();
-  }
-
-  async function reloadBackupPrefs() {
-    backupPrefs = await loadBackupPrefs();
+    operatorProxyOptOut = await loadOperatorProxyOptOut();
   }
 
   $: toggles = $assetToggles;
@@ -157,7 +204,7 @@
       const parsed = parseInventory(JSON.parse(text));
       await saveInventory(parsed);
       await loadFromDb();
-      status = `Imported ${parsed.saves.length} saves.`;
+      status = `Imported ${parsed.saves.length} saved posts.`;
     } catch (err) {
       error = err instanceof Error ? err.message : 'Import failed';
     } finally {
@@ -166,43 +213,82 @@
   }
 
   async function clearAll() {
-    if (!confirm('Clear inventory, saved credentials, backup state, and beacon state? This cannot be undone.')) {
+    if (!confirm('Wipe your Library and saved credentials from this browser? This cannot be undone.')) {
       return;
     }
     cancelImageBackup();
     cancelArticleBackup();
+    // Clear data wipes the user's data, auth, and diagnostics. It
+    // intentionally does NOT touch preferences or setup the user tuned
+    // for this device — asset toggles, operator-proxy opt-out, install
+    // hint, custom proxy configuration, and Library filters all
+    // survive. "Reset preferences" is the separate action for those.
     await Promise.all([
       clearInventory(),
       clearCredentials(),
-      clearProxyConfig(),
       clearBeaconSent(),
       clearAccount(),
-      clearBackupPrefs(),
       clearImageBlobs(),
       clearFailures(),
     ]);
     clearLastSession();
+    clearSessionHeartbeat();
     resetImageHydration();
     resetArticleHydration();
-    // Refresh local UI state so the Backup section disappears immediately.
-    backupPrefs = await loadBackupPrefs();
-    customProxyConfigured = false;
+    savedCredentialsPresent = false;
     operatorProxyReachable = 'unknown';
     void probeOperatorProxy();
     await loadFromDb();
     status = 'All local data cleared.';
   }
 
+  async function clearAllPreferences() {
+    if (!confirm('Reset preferences and custom setup to defaults? Your Library and credentials will not be affected.')) {
+      return;
+    }
+    await Promise.all([
+      clearAssetToggles(),
+      clearOperatorProxyOptOut(),
+      clearInstallHintPref(),
+      clearProxyConfig(),
+    ]);
+    resetLibraryFilters();
+    operatorProxyOptOut = false;
+    customProxyConfigured = false;
+    // Recompute capability snapshot since operator-proxy opt-out and
+    // custom proxy config both affect routing / backend selection.
+    await initCapabilitySnapshot();
+    status = 'All preferences reset to defaults.';
+  }
+
   function signOut() {
-    // Sign out clears only the session token. Inventory, saved credentials,
-    // and account label all stay so the user can sign in again and pick up
-    // where they left off. To wipe everything, use "Clear all local data".
+    // End the active session: clear the JWTs in sessionStorage AND the
+    // in-memory sign-in draft (which holds the app password from the most
+    // recent sign-in form submit). Without clearing the draft, asset
+    // hydration could still authenticate against the PDS using the
+    // residual password — making "Sign out" a no-op for active backups.
+    // Inventory, encrypted credentials, and account label intentionally
+    // stay so signing back in only requires the local-DB passphrase.
+    // To wipe everything, use "Clear data".
+    //
+    // Intentionally NOT clearing the session-only marker: if the user
+    // signed in unchecked, the session-mode banner should stay visible
+    // after sign-out (its copy adapts to drop "and sign you out" when
+    // there's no active session). The marker is cleared only by a
+    // fresh sign-in, "Keep my saves in this browser"
+    // (saveLibraryToDevice), or heartbeat expiry.
+    //
+    // Intentionally NOT navigating away from Settings either: the user
+    // is in the middle of looking at their settings, and signing out
+    // is a settings-side action. The runtime route gate in App.svelte
+    // ensures any later attempt to reach /library or /post via
+    // browser back / address bar redirects them to sign-in.
     clearLastSession();
-    navigate('/');
+    signInDraft.set(null);
   }
 </script>
 
-<section class="route route--settings">
+<section class="route route--settings" use:slideRoute>
   <header class="route__header">
     <h2 class="route__title">Settings</h2>
   </header>
@@ -223,8 +309,53 @@
       <div class="settings-row">
         <button type="button" on:click={signOut}>Sign out</button>
       </div>
+      <p class="help">
+        {#if $persistenceMode === 'session-only' && savedCredentialsPresent}
+          You must be signed in to refresh your saved posts. Saved credentials stay on this device — to wipe them, <strong>Clear data</strong> below.
+        {:else if $persistenceMode === 'session-only'}
+          You must be signed in to refresh your saved posts.
+        {:else if savedCredentialsPresent}
+          You must be signed in to refresh your saved posts. Your Library and saved credentials stay on this device — to wipe them, <strong>Clear data</strong> below.
+        {:else}
+          You must be signed in to refresh your saved posts. Your Library stays on this device — to wipe it, <strong>Clear data</strong> below.
+        {/if}
+      </p>
+
+      {#if !savedCredentialsPresent}
+        <label class="checkbox settings-section--spaced">
+          <input type="checkbox" bind:checked={rememberCredsChecked} />
+          <span>Remember my app password on this device</span>
+        </label>
+        {#if rememberCredsChecked}
+          <div class="card advanced settings-creds-form">
+            <label class="settings-field">
+              Passphrase
+              <input
+                type="password"
+                bind:value={rememberPassphrase}
+                minlength="8"
+                autocomplete="new-password"
+              />
+            </label>
+            <p class="help">
+              Your app password gets locked with this passphrase and stored only
+              in this browser. If you forget the passphrase, you'll just need to
+              type your app password again next time.
+            </p>
+            <div class="settings-row">
+              <button type="button" on:click={handleSaveCredentialsFromSettings}>Save</button>
+            </div>
+            {#if rememberCredsStatus}
+              <p class="status">{rememberCredsStatus}</p>
+            {/if}
+            {#if rememberCredsError}
+              <p class="error" role="alert">{rememberCredsError}</p>
+            {/if}
+          </div>
+        {/if}
+      {/if}
     {:else}
-      <p class="help">Not signed in.</p>
+      <p class="help">Not signed in. You must be signed in to refresh your saved posts.</p>
       <div class="settings-row">
         <button type="button" on:click={() => navigate('/')}>Sign in</button>
       </div>
@@ -235,7 +366,7 @@
     <h3>Library</h3>
     {#if $inventoryState.status === 'ready'}
       <p class="help">
-        {$inventoryState.inventory.saves.length} saves{#if libraryFetchedAt}, last updated {libraryFetchedAt}{/if}.
+        {$inventoryState.inventory.saves.length} saved posts{#if libraryFetchedAt}, last updated {libraryFetchedAt}{/if}.
       </p>
     {:else if $inventoryState.status === 'empty'}
       <p class="help">No saves yet.</p>
@@ -317,7 +448,11 @@
             <code>{config.operatorImageProxyUrl}</code>
             {#if operatorProxyReachable === 'ok'}
               <span class="status-ok">· reachable</span>
-            {:else if operatorProxyReachable === 'fail'}
+            {:else if operatorProxyReachable === 'origin-blocked'}
+              <span class="status-fail">· this origin is not in the worker's ALLOWED_ORIGIN</span>
+            {:else if operatorProxyReachable === 'unauthorized'}
+              <span class="status-fail">· shared-secret mismatch</span>
+            {:else if operatorProxyReachable === 'unreachable'}
               <span class="status-fail">· unreachable</span>
             {/if}
           </p>
@@ -346,10 +481,18 @@
 
   <section class="settings-section">
     <h3>Reset</h3>
+    <div class="settings-row">
+      <button type="button" class="danger" on:click={clearAll}>Clear data</button>
+    </div>
     <p class="help">
-      Wipes the inventory, saved credentials, and beacon state from this browser. This cannot be undone.
+      Wipes your Library and saved credentials from this browser. This cannot be undone.
     </p>
-    <button type="button" class="danger" on:click={clearAll}>Clear all local data</button>
+    <div class="settings-row advanced-heading--spaced">
+      <button type="button" on:click={clearAllPreferences}>Reset preferences</button>
+    </div>
+    <p class="help">
+      Reset preferences and custom setup to defaults. Your Library and credentials are not affected.
+    </p>
   </section>
 
   <CustomProxySetupModal
@@ -365,6 +508,9 @@
     margin: 0 auto;
   }
   .route__header {
+    /* Matches Library's `.route__header` padding-top so both titles sit
+       the same distance below the app navbar. */
+    padding-top: 0.75rem;
     margin-bottom: 1.5rem;
   }
   .route__title {
@@ -391,6 +537,12 @@
     margin: 0 0 0.75rem;
     font-size: 0.875rem;
     opacity: 0.8;
+  }
+  /* When a help paragraph sits immediately after a button row, give
+     it breathing room above so the explanation reads as belonging to
+     the button rather than fused to it. */
+  .settings-section .settings-row + .help {
+    margin-top: 0.5rem;
   }
   /* Inline checkboxes for "Don't ask me" toggles. */
   .settings-section label.checkbox {
@@ -427,8 +579,7 @@
     gap: 0.5rem;
     flex-wrap: wrap;
   }
-  .settings-row button,
-  .settings-section > button {
+  .settings-row button {
     font: inherit;
     line-height: 1.25;
     padding: 0.5rem 0.75rem;
@@ -454,6 +605,31 @@
   .error {
     color: color-mix(in oklab, red 70%, CanvasText);
     font-weight: 500;
+  }
+  /* "Remember my app password" form revealed by the checkbox in
+     Settings → Account. Container reuses .card.advanced so it
+     visually matches the other Advanced cards (Settings backup,
+     SignIn → Advanced) — no background, just an outlined box. */
+  .settings-section--spaced {
+    margin-top: 0.75rem;
+  }
+  .settings-creds-form {
+    margin-top: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .settings-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: 0.875rem;
+  }
+  .settings-field input {
+    font: inherit;
+    padding: 0.4rem 0.5rem;
+    border: 1px solid color-mix(in oklab, CanvasText 25%, transparent);
+    border-radius: 4px;
   }
   .advanced-toggle > summary {
     margin-bottom: 0.75rem;

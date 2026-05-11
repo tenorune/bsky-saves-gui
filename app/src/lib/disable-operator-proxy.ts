@@ -4,7 +4,7 @@
 // next to operator-proxy backend labels and by the matching checkbox in
 // Settings > Advanced backup options.
 
-import { setOperatorProxyOptOut } from './backup-prefs';
+import { setOperatorProxyOptOut } from './operator-proxy-opt-out';
 import { initCapabilitySnapshot } from './capability-snapshot';
 
 export async function disableOperatorProxy(): Promise<void> {

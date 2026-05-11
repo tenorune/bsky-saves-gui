@@ -2,6 +2,16 @@ import { describe, expect, it, beforeEach, vi } from 'vitest';
 import 'fake-indexeddb/auto';
 import { get } from 'svelte/store';
 
+// See image-fetcher.test.ts for the rationale. Tests that need a
+// configured operator proxy override via vi.doMock after vi.resetModules.
+vi.mock('./config', () => ({
+  config: {
+    helperOrigin: 'http://127.0.0.1:47826',
+    operatorImageProxyUrl: '',
+    operatorImageProxySecret: '',
+  },
+}));
+
 beforeEach(async () => {
   vi.unstubAllGlobals();
   vi.resetModules();
@@ -11,8 +21,8 @@ beforeEach(async () => {
   await clearProxyConfig();
   const { resetImageHydration } = await import('./hydration-state');
   resetImageHydration();
-  const { clearBackupPrefs } = await import('./backup-prefs');
-  await clearBackupPrefs();
+  const { clearOperatorProxyOptOut } = await import('./operator-proxy-opt-out');
+  await clearOperatorProxyOptOut();
 });
 
 const okPing = {
@@ -106,45 +116,4 @@ describe('startImageBackup', () => {
     expect(() => cancelImageBackup()).not.toThrow();
   });
 
-  it('sets backup-prefs.images.enabled = true on successful start', async () => {
-    let pingCalls = 0;
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => {
-        pingCalls++;
-        if (pingCalls === 1) return okPing;
-        return {
-          ok: true,
-          headers: { get: () => 'image/png' },
-          blob: async () => new Blob(['IMG'], { type: 'image/png' }),
-        };
-      }),
-    );
-    const { startImageBackup } = await import('./start-image-backup');
-    const { loadBackupPrefs } = await import('./backup-prefs');
-
-    const result = await startImageBackup({
-      saves: [{ images: [{ url: 'https://x/1.jpg' }] }],
-    });
-    expect(result.started).toBe(true);
-
-    // Wait long enough for the fire-and-forget enable write to land.
-    await vi.waitUntil(async () => (await loadBackupPrefs()).images.enabled, { timeout: 1000 });
-    expect((await loadBackupPrefs()).images.enabled).toBe(true);
-  });
-
-  it('does NOT flip enabled when started is false (no backend)', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => {
-        throw new TypeError('Failed to fetch');
-      }),
-    );
-    const { startImageBackup } = await import('./start-image-backup');
-    const { loadBackupPrefs } = await import('./backup-prefs');
-
-    const result = await startImageBackup({ saves: [{ images: [{ url: 'https://x/1.jpg' }] }] });
-    expect(result.started).toBe(false);
-    expect((await loadBackupPrefs()).images.enabled).toBe(false);
-  });
 });

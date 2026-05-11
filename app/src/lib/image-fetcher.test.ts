@@ -1,13 +1,26 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import 'fake-indexeddb/auto';
 
+// Default config for these tests: helper-on-loopback, operator proxy
+// disabled. Without this default-mock in every beforeEach, a developer
+// with a populated .env would see the real operator-proxy URL leak in
+// and the "nothing configured" branches would silently register the
+// operator-proxy backend. Tests that need a configured operator proxy
+// override via vi.doMock after vi.resetModules.
+const DEFAULT_CONFIG = {
+  helperOrigin: 'http://127.0.0.1:47826',
+  operatorImageProxyUrl: '',
+  operatorImageProxySecret: '',
+};
+
 beforeEach(async () => {
   vi.unstubAllGlobals();
   vi.resetModules();
+  vi.doMock('./config', () => ({ config: DEFAULT_CONFIG }));
   const { clearProxyConfig } = await import('./proxy-config');
   await clearProxyConfig();
-  const { clearBackupPrefs } = await import('./backup-prefs');
-  await clearBackupPrefs();
+  const { clearOperatorProxyOptOut } = await import('./operator-proxy-opt-out');
+  await clearOperatorProxyOptOut();
 });
 
 describe('detectBackends', () => {
@@ -144,7 +157,6 @@ describe('operator-proxy backend', () => {
     const { detectBackends } = await import('./image-fetcher');
     const backends = await detectBackends();
     expect(backends.map((b) => b.kind)).toEqual(['operator-proxy']);
-    vi.doUnmock('./config');
   });
 
   it('detectBackends orders operator-proxy AFTER user-worker', async () => {
@@ -166,7 +178,6 @@ describe('operator-proxy backend', () => {
     const { detectBackends } = await import('./image-fetcher');
     const backends = await detectBackends();
     expect(backends.map((b) => b.kind)).toEqual(['user-worker', 'operator-proxy']);
-    vi.doUnmock('./config');
   });
 
   it('detectBackends omits operator-proxy when not configured', async () => {
@@ -196,11 +207,10 @@ describe('operator-proxy backend', () => {
         operatorImageProxySecret: 'op-secret',
       },
     }));
-    const { setOperatorProxyOptOut } = await import('./backup-prefs');
+    const { setOperatorProxyOptOut } = await import('./operator-proxy-opt-out');
     await setOperatorProxyOptOut(true);
     const { detectBackends } = await import('./image-fetcher');
     const backends = await detectBackends();
     expect(backends.map((b) => b.kind)).toEqual([]);
-    vi.doUnmock('./config');
   });
 });

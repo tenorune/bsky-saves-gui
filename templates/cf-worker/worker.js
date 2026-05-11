@@ -1,8 +1,9 @@
 // Cloudflare Worker — CORS proxy for bsky-saves-gui image backup.
 // User-deployed (via the in-app setup guide) or operator-deployed.
 // Environment variables (set via `wrangler secret put`):
-//   ALLOWED_ORIGIN  — the Origin header value allowed to call this worker
-//                     (e.g. "https://saves.lightseed.net")
+//   ALLOWED_ORIGIN  — one or more origins allowed to call this worker,
+//                     comma-separated (e.g. "https://saves.lightseed.net"
+//                     or "https://saves.lightseed.net,https://staging.example.com")
 //   SHARED_SECRET   — arbitrary secret; callers must send it as X-Proxy-Secret
 
 const FETCH_TIMEOUT_MS = 20_000;
@@ -13,16 +14,29 @@ const BODY_SIZE_LIMIT = 10 * 1024 * 1024; // 10 MB
  */
 
 /**
- * Build CORS headers for a given allowed origin.
- * @param {string} allowedOrigin
+ * Parse the ALLOWED_ORIGIN env var into a list of exact-match origins.
+ * @param {string} raw
+ * @returns {string[]}
+ */
+function parseAllowedOrigins(raw) {
+  return raw.split(',').map((o) => o.trim()).filter(Boolean);
+}
+
+/**
+ * Build CORS headers, echoing the matched origin so each request gets the
+ * exact value the browser will accept (Access-Control-Allow-Origin must be
+ * a single origin, not a list). Vary: Origin keeps intermediate caches
+ * from serving a response to the wrong origin.
+ * @param {string} matchedOrigin
  * @returns {Record<string, string>}
  */
-function corsHeaders(allowedOrigin) {
+function corsHeaders(matchedOrigin) {
   return {
-    'Access-Control-Allow-Origin': allowedOrigin,
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Origin': matchedOrigin,
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, X-Proxy-Secret',
     'Access-Control-Max-Age': '86400',
+    'Vary': 'Origin',
   };
 }
 
@@ -54,15 +68,15 @@ export default {
       return jsonError('Worker misconfigured: SHARED_SECRET is not set', 500);
     }
 
-    const allowedOrigin = env.ALLOWED_ORIGIN.trim();
+    const allowedOrigins = parseAllowedOrigins(env.ALLOWED_ORIGIN);
     const requestOrigin = request.headers.get('Origin') ?? '';
 
-    // 2. Validate Origin header.
-    if (requestOrigin !== allowedOrigin) {
+    // 2. Validate Origin header against the allowlist.
+    if (!allowedOrigins.includes(requestOrigin)) {
       return jsonError('Origin not allowed', 403);
     }
 
-    const cors = corsHeaders(allowedOrigin);
+    const cors = corsHeaders(requestOrigin);
 
     // 3. Handle CORS preflight.
     if (request.method === 'OPTIONS') {

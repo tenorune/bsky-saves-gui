@@ -199,6 +199,7 @@ describe('hydrateArticles snapshot-based dispatch', () => {
         threads: { kind: 'pyodide' },
         images: { kind: 'operator-worker' },
         articles: { kind: 'user-worker', url: 'https://w.example/', sharedSecret: 'test-secret' },
+        loaded: true,
       }),
     });
     expect(r.fetched).toBe(1);
@@ -221,6 +222,7 @@ describe('hydrateArticles snapshot-based dispatch', () => {
         threads: { kind: 'pyodide' },
         images: { kind: 'operator-worker' },
         articles: { kind: 'none' },
+        loaded: true,
       }),
     });
     expect(r.failed).toBe(1);
@@ -246,6 +248,7 @@ function fakeSnapshot(articles: CapabilitySnapshot['articles']): CapabilitySnaps
     threads: { kind: 'pyodide' },
     images: { kind: 'operator-worker' },
     articles,
+    loaded: true,
   };
 }
 

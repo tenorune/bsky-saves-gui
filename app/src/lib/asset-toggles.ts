@@ -1,5 +1,5 @@
 import { writable, type Readable } from 'svelte/store';
-import { get as idbGet, set as idbSet } from 'idb-keyval';
+import { get as idbGet, set as idbSet, del as idbDel } from 'idb-keyval';
 
 export type AssetKey = 'threads' | 'images' | 'articles';
 
@@ -49,6 +49,17 @@ export async function setAssetToggle(
     if (key === 'images') deps.onImagesToggleOn?.();
     if (key === 'articles') deps.onArticlesToggleOn?.();
   }
+}
+
+/**
+ * Reset all toggles to their defaults (all off) and drop the IDB entry.
+ * Called by Settings → "Reset all preferences." Sign-out and the data-
+ * focused Reset path intentionally don't touch toggles — they're a
+ * browser-wide preference, not per-account state.
+ */
+export async function clearAssetToggles(): Promise<void> {
+  store.set(DEFAULTS);
+  await idbDel(KEY);
 }
 
 /** For tests only — resets to defaults without touching IndexedDB. */

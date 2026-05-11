@@ -8,20 +8,19 @@
   import { exportMarkdown } from '../exporters/markdown-exporter';
   import { exportArchive } from '../exporters/html-exporter';
   import { downloadFile } from '../exporters/file-download';
+  import { savedImageBlobCount } from '$lib/image-store';
 
   let busy = false;
   let error = '';
   let menuEl: HTMLDetailsElement | undefined;
 
-  // Reactive: when any save has local image blobs, the HTML export becomes
+  // Reactive: when there are saved image blobs, the HTML export becomes
   // a ZIP archive (HTML + images/). When there are none, it's a single
-  // flat HTML file. Surface that distinction in the button label.
-  $: htmlIncludesImages =
-    $inventoryState.status === 'ready' &&
-    $inventoryState.inventory.saves.some(
-      (s) => Array.isArray(s.local_images) && s.local_images.length > 0,
-    );
-  $: htmlButtonLabel = htmlIncludesImages ? 'HTML Archive' : 'HTML';
+  // flat HTML file. savedImageBlobCount is updated by image-store on
+  // every blob mutation (saveImageBlob, deleteImageBlob, clearImageBlobs,
+  // persistInMemoryImageBlobs), so the label updates without waiting
+  // for an unrelated reactive dependency or a page reload.
+  $: htmlButtonLabel = $savedImageBlobCount > 0 ? 'HTML Archive' : 'HTML';
 
   function handleOutsideClick(e: MouseEvent) {
     if (menuEl?.open && !menuEl.contains(e.target as Node)) {

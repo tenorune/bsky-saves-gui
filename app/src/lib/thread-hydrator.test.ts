@@ -40,25 +40,25 @@ describe('threadHydrator (pyodide path)', () => {
     expect(fakeDriver.runThreadsOnly).toHaveBeenCalled();
   });
 
-  it('returns the worker snapshot on cancel instead of discarding partial work', async () => {
-    // Snapshot contains save `a` with thread_replies populated — the partial
-    // result of a hydration that was interrupted before reaching `b`.
-    const partialSnapshot = {
+  it('returns the worker partial inventory on cooperative cancel', async () => {
+    // Worker resolves runThreadsOnly with the disk inventory it had when
+    // the cancel flag was observed between batches. Save `a` is hydrated;
+    // `b` is still pending.
+    const partialInventory = {
       saves: [
         { uri: 'at://a', thread_replies: [], thread_schema_version: 3, thread_fetched_at: '2026-05-08T00:00:00Z' },
         { uri: 'at://b' },
       ],
     };
-    // runThreadsOnly stays pending until the cancel rejects it (mirrors
-    // production: cancelActive() rejects the in-flight send()).
-    let rejectRun: ((e: Error) => void) | null = null;
-    let resolveSnapshot: (v: unknown | null) => void = () => {};
+    let resolveRun: (v: unknown) => void = () => {};
     const fakeDriver = {
       initialise: vi.fn().mockResolvedValue(undefined),
-      runThreadsOnly: vi.fn(() => new Promise((_resolve, reject) => { rejectRun = reject; })),
-      requestSnapshotThenCancel: vi.fn().mockImplementation((): Promise<unknown | null> => {
-        rejectRun?.(new Error('pyodide worker cancelled'));
-        return new Promise<unknown | null>((resolve) => { resolveSnapshot = resolve; });
+      runThreadsOnly: vi.fn(() => new Promise((resolve) => { resolveRun = resolve; })),
+      requestCancel: vi.fn().mockImplementation(() => {
+        // Production: the worker breaks its batched loop, reads disk,
+        // posts `result`. Mock that by resolving runThreadsOnly with the
+        // partial inventory.
+        resolveRun(partialInventory);
       }),
     };
     const inputInventory = { saves: [{ uri: 'at://a' }, { uri: 'at://b' }] };
@@ -75,27 +75,27 @@ describe('threadHydrator (pyodide path)', () => {
     }
     cancelThreadHydration();
     // Status flips to 'cancelling' immediately while we wait for the
-    // worker's on-disk snapshot.
+    // worker to finish its in-flight batch and post the final result.
     expect(get(threadProgress).status).toBe('cancelling');
-    // Now let the snapshot land — start() resumes, persists, flips to 'cancelled'.
-    resolveSnapshot(partialSnapshot);
     const out = await startPromise;
-    expect(fakeDriver.requestSnapshotThenCancel).toHaveBeenCalled();
-    expect(out).toEqual(partialSnapshot);
+    expect(fakeDriver.requestCancel).toHaveBeenCalled();
+    expect(out).toEqual(partialInventory);
     expect(get(threadProgress).status).toBe('cancelled');
   });
 
-  it('falls back to input inventory when snapshot is unavailable', async () => {
-    let rejectRun: ((e: Error) => void) | null = null;
+  it('drives progress store from per-batch onProgress callback', async () => {
+    type ProgressFn = (p: { succeeded: number; failed: number; remaining: number }) => void;
+    let capturedOnProgress: ProgressFn = () => {};
+    let resolveRun: (v: unknown) => void = () => {};
     const fakeDriver = {
       initialise: vi.fn().mockResolvedValue(undefined),
-      runThreadsOnly: vi.fn(() => new Promise((_resolve, reject) => { rejectRun = reject; })),
-      requestSnapshotThenCancel: vi.fn().mockImplementation(async () => {
-        rejectRun?.(new Error('pyodide worker cancelled'));
-        return null; // worker timed out / never wrote a snapshot
+      runThreadsOnly: vi.fn((_input: unknown, opts: { onProgress?: ProgressFn }) => {
+        if (opts.onProgress) capturedOnProgress = opts.onProgress;
+        return new Promise((resolve) => { resolveRun = resolve; });
       }),
+      requestCancel: vi.fn(),
     };
-    const inputInventory = { saves: [{ uri: 'at://a' }] };
+    const inputInventory = { saves: [{ uri: 'at://a' }, { uri: 'at://b' }, { uri: 'at://c' }] };
     const startPromise = threadHydrator.start({
       backend: { kind: 'pyodide' },
       origin: '',
@@ -105,10 +105,12 @@ describe('threadHydrator (pyodide path)', () => {
     while (fakeDriver.runThreadsOnly.mock.calls.length === 0) {
       await new Promise((r) => setTimeout(r, 5));
     }
-    cancelThreadHydration();
-    const out = await startPromise;
-    expect(out).toBe(inputInventory);
-    expect(get(threadProgress).status).toBe('cancelled');
+    capturedOnProgress({ succeeded: 2, failed: 0, remaining: 1 });
+    expect(get(threadProgress).fetched).toBe(2);
+    capturedOnProgress({ succeeded: 2, failed: 1, remaining: 0 });
+    expect(get(threadProgress).failed).toBe(1);
+    resolveRun(inputInventory);
+    await startPromise;
   });
 
   it('helper-path cancel flips status straight to cancelled (no cancelling state)', async () => {

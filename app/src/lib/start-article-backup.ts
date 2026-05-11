@@ -12,7 +12,6 @@
 
 import { get } from 'svelte/store';
 import { hydrateArticles } from './article-hydrator';
-import { setBackupEnabled } from './backup-prefs';
 import { initCapabilitySnapshot, capabilitySnapshot } from './capability-snapshot';
 import { loadProxyConfig } from './proxy-config';
 
@@ -47,9 +46,6 @@ export async function startArticleBackup(inventory: unknown): Promise<StartArtic
 
   const controller = new AbortController();
   activeController = controller;
-
-  // Mark articles as enabled so the discovery banner stops re-showing.
-  void setBackupEnabled('articles', true);
 
   void hydrateArticles(inventory, { signal: controller.signal }).finally(() => {
     if (activeController === controller) activeController = null;

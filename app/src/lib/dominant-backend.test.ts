@@ -9,6 +9,7 @@ const snap = (overrides: Partial<CapabilitySnapshot>): CapabilitySnapshot => ({
   threads: { kind: 'pyodide' },
   images: { kind: 'operator-worker' },
   articles: { kind: 'none' },
+  loaded: true,
   ...overrides,
 });
 

@@ -9,6 +9,11 @@
   import { rkeyOf } from '../reader/inventory-shape';
 
   onMount(() => {
+    // Always start a post at the top. Without this, the browser keeps the
+    // window scroll position from the previous route (typically the
+    // Library, which preserves its own scroll on return), so a tall post
+    // can land the reader mid-content.
+    window.scrollTo(0, 0);
     if (get(inventoryState).status === 'loading') {
       void loadFromDb();
     }
@@ -28,7 +33,7 @@
   {#if $inventoryState.status === 'loading'}
     <p>Loading…</p>
   {:else if $inventoryState.status !== 'ready'}
-    <p>No inventory available. <a href="#/">Sign in</a>.</p>
+    <p>No inventory available. <a href="#/" on:click|preventDefault={() => navigate('/')}>Sign in</a>.</p>
   {:else if save === null}
     <p>Post <code>{rkey}</code> not found in your inventory.</p>
     <button type="button" on:click={() => navigate('/library')}>Back to library</button>

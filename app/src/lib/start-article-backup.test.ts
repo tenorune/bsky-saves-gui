@@ -9,8 +9,8 @@ beforeEach(async () => {
   await clearInventory();
   const { resetArticleHydration } = await import('./hydration-state');
   resetArticleHydration();
-  const { clearBackupPrefs } = await import('./backup-prefs');
-  await clearBackupPrefs();
+  const { clearOperatorProxyOptOut } = await import('./operator-proxy-opt-out');
+  await clearOperatorProxyOptOut();
   const { clearProxyConfig } = await import('./proxy-config');
   await clearProxyConfig();
 });
@@ -68,23 +68,6 @@ describe('startArticleBackup', () => {
     expect(result.started).toBe(true);
     await vi.waitUntil(() => get(articleHydration).status === 'done', { timeout: 1000 });
     expect(get(articleHydration).fetched).toBe(1);
-  });
-
-  it('flips backup-prefs.articles.enabled = true on successful start', async () => {
-    let pingCalls = 0;
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => {
-        pingCalls++;
-        if (pingCalls === 1) return okPing;
-        return okExtract;
-      }),
-    );
-    const { startArticleBackup } = await import('./start-article-backup');
-    const { loadBackupPrefs } = await import('./backup-prefs');
-    await startArticleBackup(sampleInventory());
-    await vi.waitUntil(async () => (await loadBackupPrefs()).articles.enabled, { timeout: 1000 });
-    expect((await loadBackupPrefs()).articles.enabled).toBe(true);
   });
 
   it('cancelArticleBackup aborts the run', async () => {

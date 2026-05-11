@@ -4,12 +4,18 @@
   import { config } from '$lib/config';
   import { navigate } from '$lib/router';
   import { signInDraft } from '$lib/sign-in-draft';
-  import { hasCredentials, loadCredentials } from '$lib/credentials-store';
+  import { markSessionOnly, clearSessionOnlyMarker, persistenceMode } from '$lib/persistence-mode';
+  import { hasCredentials, loadCredentials, saveCredentials as persistCredentials } from '$lib/credentials-store';
   import { DecryptError } from '$lib/crypto';
   import { startLibraryRefresh } from '$lib/library-refresh';
   import { assetToggles, setAssetToggle, loadAssetToggles } from '$lib/asset-toggles';
   import { createSession, InvalidCredentialsError } from '$lib/atproto';
   import { setLastSession } from '$lib/last-session';
+  import { saveAccount } from '$lib/account-store';
+  import { clearInventory } from '$lib/inventory-store';
+  import { clearImageBlobs } from '$lib/image-store';
+  import { clearFailures } from '$lib/failure-store';
+  import { slideRoute } from '$lib/slide-transition';
 
   let savedPresent = false;
   let useDifferentAccount = false;
@@ -21,6 +27,12 @@
   onMount(async () => {
     savedPresent = await hasCredentials();
     await loadAssetToggles();
+    // Reflect the current persistence-mode marker into the form so a
+    // user already in session-only mode sees "Keep my saves in this
+    // browser" unchecked by default (matching their prior choice).
+    // Without this, the form's default saveInventory=true would
+    // override the marker on submit and silently flip them to persist.
+    saveInventory = get(persistenceMode) !== 'session-only';
   });
 
   async function unlockSaved() {
@@ -34,7 +46,15 @@
       handle = creds.handle;
       appPassword = creds.appPassword;
       pds = creds.pds;
-      // Auto-submit the form.
+      // Preserve the prior session-only choice when unlocking. The
+      // form's saveInventory local defaults to true (the natural
+      // default for a fresh sign-in), but if the user was already in
+      // session-only mode — sessionStorage marker is still set —
+      // submitting with saveInventory=true would clear the marker
+      // and silently flip them to persist mode. Reflect the mode
+      // marker into the form so the user's prior intent survives the
+      // passphrase unlock.
+      saveInventory = get(persistenceMode) !== 'session-only';
       submit();
     } catch (e) {
       if (e instanceof DecryptError) {
@@ -78,6 +98,44 @@
       return;
     }
 
+    // Set the draft FIRST so persistence-mode checks during
+    // setLastSession / startLibraryRefresh see the user's choice.
+    // Note: threads-on/off is NOT carried on the draft — the SignIn
+    // form's threads checkbox writes to assetToggles directly via
+    // setAssetToggle, and consumers (Library.svelte, library-refresh,
+    // asset-trigger) read from assetToggles. Same for the implicit
+    // "always fetch on sign-in" behavior — there's no opt-out, so
+    // there's nothing to record on the draft.
+    signInDraft.set({
+      handle,
+      appPassword,
+      pds,
+      saveInventory,
+      saveCredentials,
+      passphrase,
+    });
+
+    // Promote the user's choice to a sessionStorage marker so it survives
+    // refresh — without this, the persistenceMode banner disappears and
+    // (worse) every persistence gate flips back to "persist," leaking
+    // session-only data to disk on the next write. Always write
+    // explicitly (mark or clear) so a fresh sign-in overrides any marker
+    // left over from a previous session-only sign-in on this tab.
+    if (saveInventory) {
+      clearSessionOnlyMarker();
+    } else {
+      markSessionOnly();
+    }
+
+    // If the user opted out of persistence, wipe any pre-existing
+    // disk-backed library data so the fresh session-only session truly
+    // starts clean. Without this, an old persisted inventory from a
+    // previous (checked) sign-in would still be on disk and would
+    // reappear on next persist-mode load.
+    if (!saveInventory) {
+      await Promise.all([clearInventory(), clearImageBlobs(), clearFailures()]);
+    }
+
     setLastSession({
       pds,
       accessJwt: session.accessJwt,
@@ -86,16 +144,31 @@
       handle: session.handle,
     });
 
-    signInDraft.set({
-      handle,
-      appPassword,
-      pds,
-      fetch: true,
-      threads: get(assetToggles).threads,
-      saveInventory,
-      saveCredentials,
-      passphrase,
-    });
+    // Persist the account label so the cached library remains attributed
+    // to its source account even after Sign Out (when lastSession is gone
+    // but the inventory and credentials may still be on the device).
+    // Reads the resolved handle from the createSession response, not the
+    // user-typed input — handles get canonicalized server-side.
+    void saveAccount(session.handle);
+
+    // Honor the "Remember my app password on this device" checkbox.
+    // Without this call, hasCredentials() never flips to true and the
+    // Welcome-back passphrase prompt never appears on subsequent
+    // visits. Use the canonicalized handle from the session response
+    // so a future loadCredentials() returns the same shape.
+    if (saveCredentials) {
+      try {
+        await persistCredentials(
+          { handle: session.handle, appPassword, pds },
+          passphrase,
+        );
+      } catch (e) {
+        // Don't fail the whole sign-in over a credential-save error;
+        // surface it inline and let the user proceed without saved
+        // credentials.
+        error = `Saved credentials failed: ${e instanceof Error ? e.message : String(e)}`;
+      }
+    }
 
     startLibraryRefresh({
       credentials: { handle, appPassword, pds },
@@ -112,12 +185,12 @@
   }
 </script>
 
-<section class="route route--sign-in">
+<section class="route route--sign-in" use:slideRoute>
   <p class="intro">
     {config.appName} exports your Bluesky saved posts as JSON, Markdown, or a
     self-contained HTML archive. Everything runs in your browser — your handle,
     app password, and saved data never leave this device.
-    <a href="#/privacy" class="intro__more">Read more &rsaquo;</a>
+    <a href="#/privacy" class="intro__more" on:click|preventDefault={() => navigate('/privacy')}>Read more &rsaquo;</a>
   </p>
 
   {#if showForm}
@@ -213,7 +286,7 @@
 
         <label class="checkbox">
           <input type="checkbox" bind:checked={saveInventory} />
-          <span>Keep my saves in this browser</span>
+          <span>Keep my saved posts in this browser</span>
         </label>
         <p class="help">
           Come back later to read or refresh without downloading everything

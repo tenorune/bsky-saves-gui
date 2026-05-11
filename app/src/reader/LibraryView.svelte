@@ -4,26 +4,23 @@
   import PostCard from './PostCard.svelte';
   import SearchBar from './SearchBar.svelte';
   import DateRangeFilter from './DateRangeFilter.svelte';
+  import { filterQuery, filterFrom, filterTo } from '../lib/library-filters';
 
   export let inventory: Inventory;
   export let onSelectPost: (save: Save) => void;
 
-  let query = '';
-  let from: string | null = null;
-  let to: string | null = null;
-
   $: sorted = sortByCreatedDesc(inventory.saves);
-  $: visible = filterSaves(sorted, { query, from, to });
+  $: visible = filterSaves(sorted, { query: $filterQuery, from: $filterFrom, to: $filterTo });
 </script>
 
 <section class="library-view">
   <header class="library-view__filters">
-    <SearchBar bind:value={query} />
-    <DateRangeFilter bind:from bind:to />
+    <SearchBar bind:value={$filterQuery} />
+    <DateRangeFilter bind:from={$filterFrom} bind:to={$filterTo} />
   </header>
 
   {#if visible.length === 0}
-    <p class="library-view__empty">No saves match your filters.</p>
+    <p class="library-view__empty">No saved posts match your filters.</p>
   {:else}
     <ul class="library-view__feed">
       {#each visible as save (save.uri)}
@@ -37,6 +34,7 @@
 
 <style>
   .library-view {
+    width: 100%;
     max-width: 44rem;
     margin: 0 auto;
   }

@@ -69,10 +69,7 @@
     <span class="badge badge--off" title={offTooltip ?? undefined}>off</span>
   {/if}
   {#if on && !backendAvailable}
-    <span class="needs-setup">no backend available</span>
-    {#if onSetup}
-      <button type="button" class="action-link" on:click={onSetup}>Set up</button>
-    {/if}
+    <span class="needs-setup">no backend available {#if onSetup}<button type="button" class="action-link" on:click={onSetup}>Set up</button>{/if}</span>
   {:else if on && backendAvailable}
     {#if total !== null && fetched !== null}
       <span>

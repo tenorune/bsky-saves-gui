@@ -22,6 +22,14 @@ export type CapabilitySnapshot = {
     | { readonly kind: 'helper' }
     | { readonly kind: 'user-worker'; readonly url: string; readonly sharedSecret: string }
     | { readonly kind: 'none' };
+  /**
+   * False until initCapabilitySnapshot has populated the store with real
+   * probe results. Consumers (LibraryStatusPanel, etc.) should treat
+   * !loaded as "don't render yet" rather than rendering with the
+   * EMPTY_SNAPSHOT defaults — otherwise the wrong backend label flashes
+   * on screen for the ~100–300ms it takes the helper probe to resolve.
+   */
+  readonly loaded: boolean;
 };
 
 export const EMPTY_SNAPSHOT: CapabilitySnapshot = {
@@ -31,6 +39,7 @@ export const EMPTY_SNAPSHOT: CapabilitySnapshot = {
   threads:  { kind: 'pyodide' },
   images:   { kind: 'operator-worker' },
   articles: { kind: 'none' },
+  loaded: false,
 };
 
 export interface CapabilitySnapshotInputs {
@@ -54,6 +63,7 @@ export function computeCapabilitySnapshot(
       ...EMPTY_SNAPSHOT,
       images:   userWorkerVariant ?? operatorOrNone,
       articles: userWorkerVariant ?? { kind: 'none' },
+      loaded: true,
     };
   }
   const f = new Set(helper.features);
@@ -69,13 +79,14 @@ export function computeCapabilitySnapshot(
     articles:
       f.has('extract-article') ? { kind: 'helper' }
       : userWorkerVariant ?? { kind: 'none' },
+    loaded: true,
   };
 }
 
 import { writable, type Readable } from 'svelte/store';
 import { probeConfiguredHelper } from './helper-client';
 import { loadProxyConfig } from './proxy-config';
-import { loadBackupPrefs } from './backup-prefs';
+import { loadOperatorProxyOptOut } from './operator-proxy-opt-out';
 
 const store = writable<CapabilitySnapshot>(EMPTY_SNAPSHOT);
 export const capabilitySnapshot: Readable<CapabilitySnapshot> = { subscribe: store.subscribe };
@@ -89,7 +100,7 @@ export interface InitDeps {
 export async function initCapabilitySnapshot(deps: InitDeps = {}): Promise<void> {
   const probe = deps.probe ?? probeConfiguredHelper;
   const loadUserWorker = deps.loadUserWorker ?? loadUserWorkerFromProxyConfig;
-  const loadOperatorProxyOptOut = deps.loadOperatorProxyOptOut ?? defaultLoadOperatorProxyOptOut;
+  const loadOperatorOptOut = deps.loadOperatorProxyOptOut ?? loadOperatorProxyOptOut;
   let helper: HelperStatus;
   try {
     helper = await probe();
@@ -104,7 +115,7 @@ export async function initCapabilitySnapshot(deps: InitDeps = {}): Promise<void>
   }
   let operatorProxyOptOut = false;
   try {
-    operatorProxyOptOut = await loadOperatorProxyOptOut();
+    operatorProxyOptOut = await loadOperatorOptOut();
   } catch {
     operatorProxyOptOut = false;
   }
@@ -114,11 +125,6 @@ export async function initCapabilitySnapshot(deps: InitDeps = {}): Promise<void>
 async function loadUserWorkerFromProxyConfig(): Promise<{ readonly url: string; readonly sharedSecret: string } | null> {
   const cfg = await loadProxyConfig();
   return cfg && cfg.url ? { url: cfg.url, sharedSecret: cfg.sharedSecret } : null;
-}
-
-async function defaultLoadOperatorProxyOptOut(): Promise<boolean> {
-  const prefs = await loadBackupPrefs();
-  return prefs.operatorProxyOptOut;
 }
 
 /** For tests only — resets the store to EMPTY_SNAPSHOT. */

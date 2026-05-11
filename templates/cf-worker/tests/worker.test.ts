@@ -45,7 +45,12 @@ describe('OPTIONS preflight', () => {
     });
     expect(res.status).toBe(204);
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe(GOOD_ORIGIN);
-    expect(res.headers.get('Access-Control-Allow-Methods')).toContain('POST');
+    const allowedMethods = res.headers.get('Access-Control-Allow-Methods') ?? '';
+    // GET is required so the modal's probe (GET /capabilities with the
+    // non-simple X-Proxy-Secret header) survives the browser's preflight.
+    expect(allowedMethods).toContain('GET');
+    expect(allowedMethods).toContain('POST');
+    expect(allowedMethods).toContain('OPTIONS');
     expect(res.headers.get('Access-Control-Allow-Headers')).toContain('X-Proxy-Secret');
   });
 
@@ -61,6 +66,53 @@ describe('OPTIONS preflight', () => {
     const res = await worker.fetch('/fetch', {
       method: 'OPTIONS',
       // no Origin header
+    });
+    expect(res.status).toBe(403);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Multi-origin ALLOWED_ORIGIN (comma-separated allowlist)
+// ---------------------------------------------------------------------------
+describe('multi-origin ALLOWED_ORIGIN', () => {
+  const SECOND_ORIGIN = 'https://staging.example.com';
+  let worker: UnstableDevWorker;
+  beforeAll(async () => {
+    worker = await unstable_dev(WORKER_SCRIPT, {
+      vars: {
+        ALLOWED_ORIGIN: `${GOOD_ORIGIN}, ${SECOND_ORIGIN}`,
+        SHARED_SECRET: GOOD_SECRET,
+      },
+      experimental: EXPERIMENTAL,
+    });
+  });
+  afterAll(async () => {
+    await worker.stop();
+  });
+
+  it('allows the first listed origin and echoes it in the CORS reply', async () => {
+    const res = await worker.fetch('/fetch', {
+      method: 'OPTIONS',
+      headers: { Origin: GOOD_ORIGIN },
+    });
+    expect(res.status).toBe(204);
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBe(GOOD_ORIGIN);
+    expect(res.headers.get('Vary')).toContain('Origin');
+  });
+
+  it('allows the second listed origin and echoes it in the CORS reply', async () => {
+    const res = await worker.fetch('/fetch', {
+      method: 'OPTIONS',
+      headers: { Origin: SECOND_ORIGIN },
+    });
+    expect(res.status).toBe(204);
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBe(SECOND_ORIGIN);
+  });
+
+  it('rejects an origin not in the comma-separated list', async () => {
+    const res = await worker.fetch('/fetch', {
+      method: 'OPTIONS',
+      headers: { Origin: 'https://attacker.example.com' },
     });
     expect(res.status).toBe(403);
   });
