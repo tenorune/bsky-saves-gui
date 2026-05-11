@@ -89,8 +89,11 @@
   {:else if !on && (fetched !== null || (failed && failed > 0))}
     <!-- When off, still surface what we have on disk so the user knows
          turning it back on won't start from zero. Greyed out to signal
-         the asset isn't actively being backed up right now. -->
-    <span class="off-info">
+         the asset isn't actively being backed up right now. Uses
+         .off-counts (not .off-info) so the narrow-viewport wrap rule
+         doesn't push the count to its own line — counts read fine
+         inline next to the on/off badge in both states. -->
+    <span class="off-counts">
       {#if fetched !== null && total !== null}
         {fetched} of {total}
       {:else if fetched !== null}
@@ -198,7 +201,7 @@
     font-size: 0.8rem;
     color: color-mix(in oklab, CanvasText 70%, Canvas);
   }
-  .off-info {
+  .off-info, .off-counts {
     font-size: 0.8rem;
     color: color-mix(in oklab, CanvasText 55%, Canvas);
   }

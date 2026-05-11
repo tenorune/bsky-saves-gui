@@ -269,16 +269,27 @@
     border-bottom: 1px solid color-mix(in oklab, CanvasText 15%, transparent);
   }
   .app-header__account-toggle {
-    /* Renders as a square-ish "@" button. Inherits the underline from
-       .app-header__navlink for visual parity with Library / Settings,
-       but the underline is suppressed when open so the toggle reads
-       as the active control of the open menu. */
+    /* Tappable target with padding so the open-state tinted box has
+       room to breathe. Border-radius gives the box rounded corners
+       that pair with the account row's flat top below. */
     font-size: 1.1rem;
     line-height: 1;
+    padding: 0.4rem 0.65rem;
+    border-radius: 6px;
+    transition: background-color 100ms ease;
   }
   .app-header__account-toggle--open {
+    /* When the row is open, fill the @ button with the same tint as
+       the row so the two read as a connected unit. Bold weight stays
+       to mark the toggle's active state. */
     text-decoration: none;
     font-weight: 700;
+    background: rgba(0, 0, 0, 0.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    .app-header__account-toggle--open {
+      background: rgba(255, 255, 255, 0.08);
+    }
   }
   .app-header__account-row {
     /* Drops below the header when accountMenuOpen is true. No
