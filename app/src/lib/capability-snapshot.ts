@@ -22,6 +22,14 @@ export type CapabilitySnapshot = {
     | { readonly kind: 'helper' }
     | { readonly kind: 'user-worker'; readonly url: string; readonly sharedSecret: string }
     | { readonly kind: 'none' };
+  /**
+   * False until initCapabilitySnapshot has populated the store with real
+   * probe results. Consumers (LibraryStatusPanel, etc.) should treat
+   * !loaded as "don't render yet" rather than rendering with the
+   * EMPTY_SNAPSHOT defaults — otherwise the wrong backend label flashes
+   * on screen for the ~100–300ms it takes the helper probe to resolve.
+   */
+  readonly loaded: boolean;
 };
 
 export const EMPTY_SNAPSHOT: CapabilitySnapshot = {
@@ -31,6 +39,7 @@ export const EMPTY_SNAPSHOT: CapabilitySnapshot = {
   threads:  { kind: 'pyodide' },
   images:   { kind: 'operator-worker' },
   articles: { kind: 'none' },
+  loaded: false,
 };
 
 export interface CapabilitySnapshotInputs {
@@ -54,6 +63,7 @@ export function computeCapabilitySnapshot(
       ...EMPTY_SNAPSHOT,
       images:   userWorkerVariant ?? operatorOrNone,
       articles: userWorkerVariant ?? { kind: 'none' },
+      loaded: true,
     };
   }
   const f = new Set(helper.features);
@@ -69,6 +79,7 @@ export function computeCapabilitySnapshot(
     articles:
       f.has('extract-article') ? { kind: 'helper' }
       : userWorkerVariant ?? { kind: 'none' },
+    loaded: true,
   };
 }
 

@@ -149,6 +149,13 @@
     <OutdatedHelperBanner version={helperVersion} />
   {/if}
 
+  <!-- Don't render asset rows until the capability snapshot is real
+       data, not the EMPTY_SNAPSHOT placeholder. Otherwise the rows
+       briefly show "operator-worker" / "no backend available" before
+       the helper probe resolves a few hundred ms later, then re-
+       render with the correct labels — a confusing flash for any
+       user actually running the local helper. -->
+  {#if snap.loaded}
   <AssetRow
     label="Threads"
     on={toggles.threads}
@@ -194,6 +201,7 @@
 
   {#if pyodideOnly && !$installHintDismissed}
     <InstallHelperHint />
+  {/if}
   {/if}
 </section>
 
