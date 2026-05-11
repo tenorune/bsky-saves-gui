@@ -2,6 +2,8 @@ import App from './App.svelte';
 import { initCapabilitySnapshot } from './lib/capability-snapshot';
 import { loadInstallHintPref } from './lib/install-hint-pref';
 import { loadAssetToggles } from './lib/asset-toggles';
+import { registerServiceWorker } from './lib/sw-register';
+import { initStoragePersist } from './lib/storage-persist';
 
 const target = document.getElementById('app');
 if (!target) {
@@ -17,5 +19,8 @@ initCapabilitySnapshot().catch(() => {
 // navigates between routes that load these prefs at different times).
 loadInstallHintPref().catch(() => { /* keep default */ });
 loadAssetToggles().catch(() => { /* keep defaults */ });
+
+initStoragePersist();
+registerServiceWorker();
 
 new App({ target });

@@ -1,4 +1,5 @@
 import type { HelperStatus } from './helper-client';
+import type { PyodideSource } from './pyodide-source';
 
 export type HelperFacts =
   | { readonly detected: false }
@@ -23,6 +24,14 @@ export type CapabilitySnapshot = {
     | { readonly kind: 'user-worker'; readonly url: string; readonly sharedSecret: string }
     | { readonly kind: 'none' };
   /**
+   * Whether the worker should load Pyodide from the jsdelivr CDN ('cdn')
+   * or from a same-origin /pyodide/ path served by the local-served
+   * helper ('local'). Resolved once at startup via pyodide-source.ts —
+   * see docs/superpowers/specs/2026-05-11-pwa-design.md. Used for UI
+   * diagnostics; the worker reads the build flag directly for routing.
+   */
+  readonly pyodideSource: PyodideSource;
+  /**
    * False until initCapabilitySnapshot has populated the store with real
    * probe results. Consumers (LibraryStatusPanel, etc.) should treat
    * !loaded as "don't render yet" rather than rendering with the
@@ -39,6 +48,7 @@ export const EMPTY_SNAPSHOT: CapabilitySnapshot = {
   threads:  { kind: 'pyodide' },
   images:   { kind: 'operator-worker' },
   articles: { kind: 'none' },
+  pyodideSource: 'cdn',
   loaded: false,
 };
 
@@ -46,12 +56,13 @@ export interface CapabilitySnapshotInputs {
   readonly helper: HelperStatus;
   readonly userWorker: { readonly url: string; readonly sharedSecret: string } | null;
   readonly operatorProxyOptOut: boolean;
+  readonly pyodideSource: PyodideSource;
 }
 
 export function computeCapabilitySnapshot(
   inputs: CapabilitySnapshotInputs,
 ): CapabilitySnapshot {
-  const { helper, userWorker, operatorProxyOptOut } = inputs;
+  const { helper, userWorker, operatorProxyOptOut, pyodideSource } = inputs;
   const operatorOrNone = operatorProxyOptOut
     ? { kind: 'none' as const }
     : { kind: 'operator-worker' as const };
@@ -63,6 +74,7 @@ export function computeCapabilitySnapshot(
       ...EMPTY_SNAPSHOT,
       images:   userWorkerVariant ?? operatorOrNone,
       articles: userWorkerVariant ?? { kind: 'none' },
+      pyodideSource,
       loaded: true,
     };
   }
@@ -79,6 +91,7 @@ export function computeCapabilitySnapshot(
     articles:
       f.has('extract-article') ? { kind: 'helper' }
       : userWorkerVariant ?? { kind: 'none' },
+    pyodideSource,
     loaded: true,
   };
 }
@@ -87,6 +100,7 @@ import { writable, type Readable } from 'svelte/store';
 import { probeConfiguredHelper } from './helper-client';
 import { loadProxyConfig } from './proxy-config';
 import { loadOperatorProxyOptOut } from './operator-proxy-opt-out';
+import { resolveDefaultPyodideSource } from './pyodide-source';
 
 const store = writable<CapabilitySnapshot>(EMPTY_SNAPSHOT);
 export const capabilitySnapshot: Readable<CapabilitySnapshot> = { subscribe: store.subscribe };
@@ -95,12 +109,14 @@ export interface InitDeps {
   readonly probe?: () => Promise<HelperStatus>;
   readonly loadUserWorker?: () => Promise<{ readonly url: string; readonly sharedSecret: string } | null>;
   readonly loadOperatorProxyOptOut?: () => Promise<boolean>;
+  readonly resolvePyodideSource?: () => Promise<PyodideSource>;
 }
 
 export async function initCapabilitySnapshot(deps: InitDeps = {}): Promise<void> {
   const probe = deps.probe ?? probeConfiguredHelper;
   const loadUserWorker = deps.loadUserWorker ?? loadUserWorkerFromProxyConfig;
   const loadOperatorOptOut = deps.loadOperatorProxyOptOut ?? loadOperatorProxyOptOut;
+  const resolveSource = deps.resolvePyodideSource ?? resolveDefaultPyodideSource;
   let helper: HelperStatus;
   try {
     helper = await probe();
@@ -119,7 +135,13 @@ export async function initCapabilitySnapshot(deps: InitDeps = {}): Promise<void>
   } catch {
     operatorProxyOptOut = false;
   }
-  store.set(computeCapabilitySnapshot({ helper, userWorker, operatorProxyOptOut }));
+  let pyodideSource: PyodideSource = 'cdn';
+  try {
+    pyodideSource = await resolveSource();
+  } catch {
+    pyodideSource = 'cdn';
+  }
+  store.set(computeCapabilitySnapshot({ helper, userWorker, operatorProxyOptOut, pyodideSource }));
 }
 
 async function loadUserWorkerFromProxyConfig(): Promise<{ readonly url: string; readonly sharedSecret: string } | null> {

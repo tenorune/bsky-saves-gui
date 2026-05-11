@@ -199,6 +199,7 @@ describe('hydrateArticles snapshot-based dispatch', () => {
         threads: { kind: 'pyodide' },
         images: { kind: 'operator-worker' },
         articles: { kind: 'user-worker', url: 'https://w.example/', sharedSecret: 'test-secret' },
+        pyodideSource: 'cdn',
         loaded: true,
       }),
     });
@@ -222,6 +223,7 @@ describe('hydrateArticles snapshot-based dispatch', () => {
         threads: { kind: 'pyodide' },
         images: { kind: 'operator-worker' },
         articles: { kind: 'none' },
+        pyodideSource: 'cdn',
         loaded: true,
       }),
     });
@@ -248,6 +250,7 @@ function fakeSnapshot(articles: CapabilitySnapshot['articles']): CapabilitySnaps
     threads: { kind: 'pyodide' },
     images: { kind: 'operator-worker' },
     articles,
+    pyodideSource: 'cdn',
     loaded: true,
   };
 }

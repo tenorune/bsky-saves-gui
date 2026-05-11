@@ -130,6 +130,7 @@ function fakeSnapshot(images: CapabilitySnapshot['images']): CapabilitySnapshot 
     threads: { kind: 'pyodide' },
     images,
     articles: { kind: 'none' },
+    pyodideSource: 'cdn',
     loaded: true,
   };
 }

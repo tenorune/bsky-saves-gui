@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite';
 import { svelte, vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+import { VitePWA } from 'vite-plugin-pwa';
 import { fileURLToPath, URL } from 'node:url';
 import { resolve } from 'node:path';
 import { execSync } from 'node:child_process';
@@ -29,6 +30,7 @@ export default defineConfig(({ mode }) => {
   // from `.env` files in addition to the VITE_ vars exposed to the app.
   const env = loadEnv(mode, projectRoot, ['VITE_', 'PREVIEW_']);
   const domain = env.VITE_APP_DOMAIN ?? '';
+  const localPyodide = env.VITE_LOCAL_PYODIDE === '1';
 
   // Comma-separated host allowlist for `pnpm preview` and `pnpm dev`.
   // A leading dot allows any subdomain of that host. Localhost variants
@@ -72,6 +74,46 @@ export default defineConfig(({ mode }) => {
         $routes: resolve(projectRoot, 'app/src/routes'),
       },
     },
-    plugins: [svelte({ preprocess: vitePreprocess() }), cnamePlugin({ domain })],
+    plugins: [
+      svelte({ preprocess: vitePreprocess() }),
+      cnamePlugin({ domain }),
+      VitePWA({
+        strategies: 'injectManifest',
+        srcDir: 'app/src',
+        filename: 'sw.ts',
+        registerType: 'prompt',
+        injectRegister: null,
+        manifest: {
+          name: env.VITE_APP_NAME ?? 'BlueSky Saves Exporter',
+          short_name: 'Bsky Saves',
+          description: 'Export your Bluesky saved posts. Runs entirely in your browser.',
+          start_url: '.',
+          scope: '.',
+          display: 'standalone',
+          background_color: '#ffffff',
+          theme_color: '#ffffff',
+          // Provisional SVG icons — replace with proper PNGs in a follow-up.
+          // See docs/superpowers/specs/2026-05-11-pwa-design.md §11.
+          icons: [
+            { src: 'icons/icon.svg', sizes: 'any', type: 'image/svg+xml' },
+            {
+              src: 'icons/icon-maskable.svg',
+              sizes: 'any',
+              type: 'image/svg+xml',
+              purpose: 'maskable',
+            },
+          ],
+        },
+        injectManifest: {
+          globPatterns: localPyodide
+            ? ['**/*.{js,css,html,ico,png,svg,webp,woff2,wasm,whl,zip,data,json,mjs}']
+            : ['**/*.{js,css,html,ico,png,svg,webp,woff2}'],
+          maximumFileSizeToCacheInBytes: 25 * 1024 * 1024,
+        },
+        devOptions: {
+          enabled: false,
+        },
+      }),
+    ],
   };
 });

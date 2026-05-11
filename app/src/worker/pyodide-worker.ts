@@ -109,16 +109,24 @@ const log = (line: string) => post({ type: 'log', line });
 
 const INVENTORY_PATH = '/home/pyodide/saves_inventory.json';
 
+// When VITE_LOCAL_PYODIDE=1 is baked into the build (the local-served
+// distribution target), the helper serves the Pyodide bundle from the same
+// origin under /pyodide/. Loading from same-origin gives offline support
+// after the SW precaches it. Otherwise we load from jsdelivr CDN, the
+// default for the hosted deploy.
+const LOCAL_PYODIDE = import.meta.env.VITE_LOCAL_PYODIDE === '1';
+
 async function initialise(version: string): Promise<void> {
   if (pyodide) return;
   log('Loading Pyodide…');
-  const url = `https://cdn.jsdelivr.net/pyodide/v${version}/full/pyodide.mjs`;
+  const base = LOCAL_PYODIDE
+    ? '/pyodide/'
+    : `https://cdn.jsdelivr.net/pyodide/v${version}/full/`;
+  const url = `${base}pyodide.mjs`;
   const mod = (await import(/* @vite-ignore */ url)) as {
     loadPyodide: (opts?: unknown) => Promise<PyodideLike>;
   };
-  pyodide = await mod.loadPyodide({
-    indexURL: `https://cdn.jsdelivr.net/pyodide/v${version}/full/`,
-  });
+  pyodide = await mod.loadPyodide({ indexURL: base });
 
   // Stream Python stdout/stderr into log messages so the run-page log shows
   // bsky-saves' progress prints as they happen.
