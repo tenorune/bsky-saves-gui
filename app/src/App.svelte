@@ -95,10 +95,15 @@
     try { localStorage.setItem(ACCOUNT_ROW_PREF_KEY, open ? 'open' : 'closed'); }
     catch { /* best-effort */ }
   }
-  let accountMenuOpen = loadAccountRowOpen();
+  let accountMenuOpen = false;
   let accountToggleEl: HTMLButtonElement | undefined;
   let accountRowEl: HTMLDivElement | undefined;
   let headerEl: HTMLElement | undefined;
+  // Track inventory-presence transitions so we can re-apply the stored
+  // pref when the library first appears (post sign-in). Without this
+  // the row would stay closed even though loadAccountRowOpen() returns
+  // true, because the auto-close on no-inventory ran before sign-in.
+  let lastInventoryPresent: boolean | null = null;
   function toggleAccountMenu() {
     accountMenuOpen = !accountMenuOpen;
     saveAccountRowOpen(accountMenuOpen);
@@ -107,11 +112,6 @@
   function userCloseAccountMenu() {
     accountMenuOpen = false;
     saveAccountRowOpen(false);
-  }
-  // Auto-close on sign-out etc. Doesn't persist — the next sign-in
-  // should still respect the user's last explicit preference.
-  function autoCloseAccountMenu() {
-    accountMenuOpen = false;
   }
   function handleDocumentClick(e: MouseEvent) {
     if (!accountMenuOpen) return;
@@ -131,7 +131,22 @@
       accountToggleEl?.focus();
     }
   }
-  $: if (!$inventoryPresent && accountMenuOpen) autoCloseAccountMenu();
+  $: {
+    const present = $inventoryPresent;
+    if (present !== lastInventoryPresent) {
+      if (present) {
+        // Library just became available: open or close per the user's
+        // last persisted choice. First-ever sign-in has no entry, which
+        // loadAccountRowOpen() treats as "open."
+        accountMenuOpen = loadAccountRowOpen();
+      } else if (accountMenuOpen) {
+        // Library went away (sign-out): close without persisting so the
+        // next sign-in still respects the prior preference.
+        accountMenuOpen = false;
+      }
+      lastInventoryPresent = present;
+    }
+  }
 
   onMount(() => {
     document.addEventListener('click', handleDocumentClick);
@@ -333,7 +348,9 @@
     justify-content: flex-end;
     align-items: center;
     padding: 0.625rem 1.5rem;
-    background: color-mix(in oklab, CanvasText 4%, Canvas);
+    /* 10% mix instead of 4% — at 4% the tint was imperceptible on
+       mobile dark-mode displays (and only just visible on desktop). */
+    background: color-mix(in oklab, CanvasText 10%, Canvas);
     border-bottom: 1px solid color-mix(in oklab, CanvasText 12%, transparent);
   }
   .app-header__handle-export {
@@ -357,9 +374,17 @@
     color: inherit;
   }
   .app-header__handle {
+    /* Pad vertically to match the EXPORT summary button's content
+       box height (0.35rem padding + 1-line content). Without this,
+       align-items: center on the row would center the handle's short
+       text-box against the taller EXPORT button — visually correct
+       per spec, but reads as "low" against the button's centered
+       label. */
     opacity: 0.7;
     font-size: 0.875rem;
     font-variant: small-caps;
+    padding: 0.35rem 0;
+    line-height: 1;
   }
   /* Bold static text used in place of the link for the user's current
      route — same visual weight as a link's hover state, no pointer. */

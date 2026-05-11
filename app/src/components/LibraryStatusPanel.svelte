@@ -211,10 +211,12 @@
        margin, and reclaim that space inward with matching padding —
        row text stays at the .library-hub edge (aligned with the
        Library title and search filter), while the background bleeds
-       past those edges for visual separation. */
+       past those edges for visual separation. The tint is 10% so it
+       reads on mobile dark-mode displays; 4% (the prior value) was
+       imperceptible there. */
     margin: 0 -10px;
     padding: 0.6rem 10px;
-    background: color-mix(in oklab, CanvasText 4%, Canvas);
+    background: color-mix(in oklab, CanvasText 10%, Canvas);
     font-size: 0.875rem;
     display: flex;
     flex-direction: column;
