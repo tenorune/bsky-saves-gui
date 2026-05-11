@@ -268,26 +268,29 @@
     padding: 1rem 1.5rem;
     border-bottom: 1px solid color-mix(in oklab, CanvasText 15%, transparent);
   }
-  .app-header__account-toggle {
-    /* Tappable target with padding so the open-state tinted box has
-       room to breathe. Border-radius gives the box rounded corners
-       that pair with the account row's flat top below. */
+  /* Chained selector (.app-header__navlink.app-header__account-toggle)
+     so these rules win the cascade against .app-header__navlink, which
+     is defined later in this stylesheet and would otherwise override
+     padding / background / border. */
+  .app-header__navlink.app-header__account-toggle {
     font-size: 1.1rem;
     line-height: 1;
     padding: 0.4rem 0.65rem;
-    border-radius: 6px;
-    transition: background-color 100ms ease;
+    border-radius: 0;
+    border: 1px solid transparent;
+    transition: background-color 100ms ease, border-color 100ms ease;
   }
-  .app-header__account-toggle--open {
-    /* When the row is open, fill the @ button with the same tint as
-       the row so the two read as a connected unit. Bold weight stays
-       to mark the toggle's active state. */
+  .app-header__navlink.app-header__account-toggle--open {
+    /* Box of right angles around the @ when the account row is open;
+       background matches the row's tint so the toggle and the row
+       read as a connected unit. */
     text-decoration: none;
     font-weight: 700;
     background: rgba(0, 0, 0, 0.06);
+    border-color: color-mix(in oklab, CanvasText 25%, transparent);
   }
   @media (prefers-color-scheme: dark) {
-    .app-header__account-toggle--open {
+    .app-header__navlink.app-header__account-toggle--open {
       background: rgba(255, 255, 255, 0.08);
     }
   }
