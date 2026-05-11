@@ -223,4 +223,18 @@
     cursor: pointer;
   }
   .action-link.inline-error { color: color-mix(in oklab, red 75%, CanvasText); }
+  /* Below the app's narrow breakpoint, drop the backend / off-info /
+     needs-setup / status-hint spans onto their own line under the
+     label + badge. flex-basis: 100% applies to all rows together so
+     when one row needs to wrap, all of them do — keeps the three
+     hydrator rows visually parallel. Matches the Settings → Backups
+     layout for the same reason. */
+  @media (max-width: 768px) {
+    .row > .backend,
+    .row > .off-info,
+    .row > .needs-setup,
+    .row > .status-hint {
+      flex-basis: 100%;
+    }
+  }
 </style>
