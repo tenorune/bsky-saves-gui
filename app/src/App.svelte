@@ -17,6 +17,19 @@
 
   $: routeName = $currentRoute.name;
 
+  // Route components are code-split via dynamic import in routes.ts so
+  // the initial main bundle stays small. Load the resolved component
+  // imperatively in a reactive statement (rather than {#await}) so
+  // repeat navigations to a previously-loaded route hit the module
+  // cache and render instantly — {#await} would re-await each
+  // reactive tick.
+  import type { ComponentType } from 'svelte';
+  let CurrentRouteComponent: ComponentType | null = null;
+  $: void loadRouteComponent($currentRoute);
+  async function loadRouteComponent(route: typeof $currentRoute) {
+    CurrentRouteComponent = await route.def.loadComponent();
+  }
+
   // The handle shown in the topnav represents the owner of the cached
   // Library, not the active sign-in. Same resolution order as
   // ExportMenu.resolveAccount: prefer the live session's handle (most
@@ -138,7 +151,9 @@
   {/if}
 
   <main class="app-main">
-    <svelte:component this={$currentRoute.def.component} />
+    {#if CurrentRouteComponent}
+      <svelte:component this={CurrentRouteComponent} />
+    {/if}
   </main>
 
   <footer class="app-footer">

@@ -1,29 +1,33 @@
 import type { ComponentType } from 'svelte';
-import SignIn from '$routes/SignIn.svelte';
-import Library from '$routes/Library.svelte';
-import Post from '$routes/Post.svelte';
-import Settings from '$routes/Settings.svelte';
-import Privacy from '$routes/Privacy.svelte';
-import NotFound from '$routes/NotFound.svelte';
 
 export interface RouteDef {
   readonly name: string;
   readonly pattern: RegExp;
   readonly paramNames: readonly string[];
-  readonly component: ComponentType;
+  /**
+   * Dynamic import of the route's Svelte component. The router /
+   * App.svelte resolves this on first navigation and the bundler
+   * code-splits each route into its own chunk so the initial main
+   * bundle stays small. Repeat navigations to a previously-loaded
+   * route hit the module loader's cache and resolve synchronously.
+   */
+  readonly loadComponent: () => Promise<ComponentType>;
 }
 
+const lazy = (importer: () => Promise<{ default: ComponentType }>): (() => Promise<ComponentType>) =>
+  () => importer().then((m) => m.default);
+
 export const routes: readonly RouteDef[] = [
-  { name: 'sign-in', pattern: /^\/$/, paramNames: [], component: SignIn },
-  { name: 'library', pattern: /^\/library$/, paramNames: [], component: Library },
-  { name: 'post', pattern: /^\/post\/([^/]+)$/, paramNames: ['rkey'], component: Post },
-  { name: 'settings', pattern: /^\/settings$/, paramNames: [], component: Settings },
-  { name: 'privacy', pattern: /^\/privacy$/, paramNames: [], component: Privacy },
+  { name: 'sign-in',  pattern: /^\/$/,                paramNames: [],       loadComponent: lazy(() => import('$routes/SignIn.svelte')) },
+  { name: 'library',  pattern: /^\/library$/,         paramNames: [],       loadComponent: lazy(() => import('$routes/Library.svelte')) },
+  { name: 'post',     pattern: /^\/post\/([^/]+)$/,   paramNames: ['rkey'], loadComponent: lazy(() => import('$routes/Post.svelte')) },
+  { name: 'settings', pattern: /^\/settings$/,        paramNames: [],       loadComponent: lazy(() => import('$routes/Settings.svelte')) },
+  { name: 'privacy',  pattern: /^\/privacy$/,         paramNames: [],       loadComponent: lazy(() => import('$routes/Privacy.svelte')) },
 ];
 
 export const notFoundRoute: RouteDef = {
   name: 'not-found',
   pattern: /.*/,
   paramNames: [],
-  component: NotFound,
+  loadComponent: lazy(() => import('$routes/NotFound.svelte')),
 };
