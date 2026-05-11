@@ -554,10 +554,27 @@
     font-weight: normal;
     font-size: 0.875rem;
     opacity: 0.85;
+    flex-wrap: wrap;
+  }
+  /* Keep "Back up images" / "Back up articles" on one line so the
+     checkbox label never breaks mid-phrase. Long backend notes drop
+     to their own line via the media query below. */
+  .settings-section label.checkbox > span:not(.backend-note) {
+    white-space: nowrap;
   }
   .backend-note {
     font-size: 0.85em;
     opacity: 0.75;
+  }
+  /* Below the narrow-viewport breakpoint, force the backend note to a
+     new line on both image and article rows together — even when only
+     one would naturally collide — so the two rows stay visually
+     parallel. Indent the note under the label text past the checkbox. */
+  @media (max-width: 768px) {
+    .settings-section label.checkbox .backend-note {
+      flex-basis: 100%;
+      padding-left: 1.5rem;
+    }
   }
   .backend-note .setup-link {
     font: inherit;
