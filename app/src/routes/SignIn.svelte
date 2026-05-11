@@ -188,7 +188,7 @@
 
 <section class="route route--sign-in" use:slideRoute>
   <p class="intro">
-    {config.appName} exports your Bluesky saved posts as JSON, Markdown, or a
+    <strong>{config.appName}</strong> exports your Bluesky saved posts as JSON, Markdown, or a
     self-contained HTML archive. Everything runs in your browser — your handle,
     app password, and saved data never leave this device.
     <a href="#/privacy" class="intro__more" on:click|preventDefault={() => navigate('/privacy')}>Read more &rsaquo;</a>
