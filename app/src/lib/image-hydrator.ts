@@ -54,7 +54,13 @@ export interface HydrateOptions {
 }
 
 function reasonOf(err: unknown): string {
-  if (err instanceof Error) return err.message;
+  if (err instanceof Error) return err.message || err.name || 'Error';
+  if (err === null) return 'null rejection (no error object — likely iOS Safari IDB/Blob bug)';
+  if (err === undefined) return 'undefined rejection';
+  if (typeof err === 'object') {
+    try { return JSON.stringify(err).slice(0, 200); } catch { /* fallthrough */ }
+    return Object.prototype.toString.call(err);
+  }
   return String(err);
 }
 
@@ -154,6 +160,11 @@ export async function hydrateImages(
         failures: s.failures.filter((f) => f.url !== url),
       }));
     } catch (err) {
+      // Surface the raw error on the console so iOS Safari sessions can
+      // inspect it via remote Web Inspector — reasonOf() strings it for
+      // the UI but loses the type/stack/constructor info we need to
+      // distinguish "IDB rejected" from "fetch threw."
+      console.error('[image-hydrator] failed to hydrate image', { url, err });
       const failure: HydrationFailure = { url, reason: reasonOf(err) };
       const i = failures.findIndex((f) => f.url === url);
       if (i >= 0) {
