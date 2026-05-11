@@ -1,4 +1,4 @@
-# BlueSky Saves Exporter
+# Bluesky Saves Exporter
 
 > _Working title — final product name TBD. The user-visible name is set by `VITE_APP_NAME` and can be changed without touching code._
 
@@ -6,9 +6,10 @@ A web GUI for [`bsky-saves`](https://github.com/tenorune/bsky-saves) that lets a
 
 ## What it does
 
-- Exports your Bluesky saves as JSON, Markdown, or a navigable HTML archive.
+- Exports your Bluesky saved posts as JSON, Markdown, or a navigable HTML archive.
 - Runs entirely in your browser — there is no server that holds your credentials or content.
 - Optional hydration of threads, articles, and images via [`bsky-saves`](https://github.com/tenorune/bsky-saves) running under [Pyodide](https://pyodide.org).
+- Two persistence modes: persist (default — your Library survives browser quit) and session mode (your Library is wiped on tab close / browser quit, opt in via the "Keep my saved posts in this browser" checkbox at sign-in).
 
 ## Try it
 
@@ -16,15 +17,13 @@ The reference deployment lives at the domain configured for this build (see `VIT
 
 ## How it works
 
-Static SPA. Pyodide loads the published `bsky-saves` Python package in your browser; AT Protocol requests go directly from your browser to your PDS. Inventory is stored locally in IndexedDB. Exports are generated and downloaded entirely client-side.
+Static SPA. Pyodide loads the published `bsky-saves` Python package in your browser; AT Protocol requests go directly from your browser to your PDS. Inventory is stored locally (IndexedDB in persist mode, sessionStorage in session mode). Exports are generated and downloaded entirely client-side.
 
 See the design spec: [`docs/superpowers/specs/2026-05-01-bsky-saves-gui-design.md`](docs/superpowers/specs/2026-05-01-bsky-saves-gui-design.md).
 
 ## Privacy
 
-No analytics service. No telemetry. The deployer cannot see your credentials, your saves, or any post content. The only signal the deployer ever receives is an explicit "Tell @${operator} you used this" button click, which likes a single pinned beacon post on the operator's account.
-
-Full details once Plan 7 lands: `docs/privacy.md`.
+No analytics service. No telemetry. The deployer cannot see your credentials, your saved posts, or any post content. Full details in [`docs/privacy.md`](docs/privacy.md).
 
 ## Self-host / fork
 
@@ -68,7 +67,7 @@ pnpm format       # prettier
 │   ├── superpowers/
 │   │   ├── specs/        # design specs
 │   │   └── plans/        # implementation plans
-│   └── privacy.md        # (Plan 7)
+│   └── privacy.md        # rendered at #/privacy
 └── .github/workflows/    # CI and deploy
 ```
 
@@ -78,4 +77,4 @@ MIT — see [`LICENSE`](LICENSE).
 
 ## Status
 
-Pre-1.0. Working title for the product is "BlueSky Saves Exporter"; a final brand name has not been chosen. The implementation rolls out across plans under `docs/superpowers/plans/`.
+Pre-1.0. Working title for the product is "Bluesky Saves Exporter"; a final brand name has not been chosen. The implementation rolls out across plans under `docs/superpowers/plans/`.
