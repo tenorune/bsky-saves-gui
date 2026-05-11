@@ -190,6 +190,13 @@
     background: Canvas;
     color: CanvasText;
   }
+  /* Force text-bearing form controls to >=16px so iOS Safari doesn't
+     auto-zoom on focus. Default UA size is ~13px which trips the
+     zoom heuristic; bumping to 1rem (16px at the default html size)
+     keeps the page from rescaling when a user taps an input. */
+  :global(input, textarea, select) {
+    font-size: 1rem;
+  }
   .app {
     display: flex;
     flex-direction: column;

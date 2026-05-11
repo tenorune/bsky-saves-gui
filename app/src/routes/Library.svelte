@@ -233,7 +233,12 @@
     display: flex;
     gap: 1rem;
     align-items: center;
-    padding: 0.75rem 1rem;
+    /* No horizontal padding: align flush with .library-hub edges so
+       the Library title sits under the topnav title at viewport
+       padding 1.5rem, and the Refresh button sits under the topnav
+       right edge. Search filter below also has no inset, completing
+       the column. */
+    padding: 0.75rem 0;
     border-bottom: 1px solid color-mix(in oklab, CanvasText 12%, transparent);
   }
   .route__title-block { flex: 1; display: flex; flex-direction: column; gap: 0.4rem; }

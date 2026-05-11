@@ -207,7 +207,10 @@
 
 <style>
   .status-panel {
-    padding: 0.6rem 1rem;
+    /* Vertical breathing room only — no horizontal padding so the
+       asset rows align flush with the .library-hub edges (the same
+       edges the Library title and search filter sit at). */
+    padding: 0.6rem 0;
     background: color-mix(in oklab, CanvasText 4%, Canvas);
     font-size: 0.875rem;
     display: flex;

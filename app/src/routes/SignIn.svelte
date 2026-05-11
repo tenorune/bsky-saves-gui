@@ -319,7 +319,10 @@
     margin: 0 0 1.5rem;
   }
   .intro__more {
-    margin-left: 0.25rem;
+    /* No margin-left: rely on the natural inter-word space inside the
+       paragraph. With a margin, a wrapped "Read more ›" would land at
+       0.25rem inset from the line start instead of flush-left, which
+       reads as a stray indent. */
     white-space: nowrap;
   }
   .help {
