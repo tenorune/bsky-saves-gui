@@ -72,16 +72,15 @@
   }
 
   // Account row: a second header row (Handle + ExportMenu) that slides
-  // down under the topnav when the user taps "@". A document-level
-  // listener closes it on outside clicks; Escape closes and returns
-  // focus to the toggle. The row auto-closes (without persisting that
-  // intent) when the library disappears so it doesn't linger after
-  // sign-out, but reopens automatically on the next sign-in.
+  // down under the topnav. The ONLY thing that opens or closes it is
+  // the user tapping the "@" toggle. Open/closed is persisted across
+  // reloads. First-ever appearance (no stored pref) is open.
   //
-  // Open/closed is persisted across reloads in localStorage so the user
-  // keeps the layout they last chose. Default is open on the first ever
-  // appearance.
-  const ACCOUNT_ROW_PREF_KEY = 'account-row:v1';
+  // The row is conditionally rendered with $inventoryPresent so it
+  // disappears automatically on sign-out without needing to mutate
+  // state; the persisted preference survives the sign-out and applies
+  // again on the next sign-in.
+  const ACCOUNT_ROW_PREF_KEY = 'account-row:v2';
   function loadAccountRowOpen(): boolean {
     if (typeof localStorage === 'undefined') return true;
     try {
@@ -95,62 +94,13 @@
     try { localStorage.setItem(ACCOUNT_ROW_PREF_KEY, open ? 'open' : 'closed'); }
     catch { /* best-effort */ }
   }
-  let accountMenuOpen = false;
-  let accountToggleEl: HTMLButtonElement | undefined;
-  let accountRowEl: HTMLDivElement | undefined;
-  let headerEl: HTMLElement | undefined;
-  // Track inventory-presence transitions so we can re-apply the stored
-  // pref when the library first appears (post sign-in). Without this
-  // the row would stay closed even though loadAccountRowOpen() returns
-  // true, because the auto-close on no-inventory ran before sign-in.
-  let lastInventoryPresent: boolean | null = null;
+  let accountMenuOpen = loadAccountRowOpen();
   function toggleAccountMenu() {
     accountMenuOpen = !accountMenuOpen;
     saveAccountRowOpen(accountMenuOpen);
   }
-  // User-initiated close (outside click, Escape, toggle). Persists.
-  function userCloseAccountMenu() {
-    accountMenuOpen = false;
-    saveAccountRowOpen(false);
-  }
-  function handleDocumentClick(e: MouseEvent) {
-    if (!accountMenuOpen) return;
-    const t = e.target as Node | null;
-    if (!t) return;
-    // Treat the whole topnav (header + account row) as inside. Without
-    // this, clicking Library / Settings would close the row, which
-    // looks like the row closes "on navigation" — but the close is
-    // actually the outside-click handler firing on the link itself.
-    if (headerEl?.contains(t)) return;
-    if (accountRowEl?.contains(t)) return;
-    userCloseAccountMenu();
-  }
-  function handleDocumentKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape' && accountMenuOpen) {
-      userCloseAccountMenu();
-      accountToggleEl?.focus();
-    }
-  }
-  $: {
-    const present = $inventoryPresent;
-    if (present !== lastInventoryPresent) {
-      if (present) {
-        // Library just became available: open or close per the user's
-        // last persisted choice. First-ever sign-in has no entry, which
-        // loadAccountRowOpen() treats as "open."
-        accountMenuOpen = loadAccountRowOpen();
-      } else if (accountMenuOpen) {
-        // Library went away (sign-out): close without persisting so the
-        // next sign-in still respects the prior preference.
-        accountMenuOpen = false;
-      }
-      lastInventoryPresent = present;
-    }
-  }
 
   onMount(() => {
-    document.addEventListener('click', handleDocumentClick);
-    document.addEventListener('keydown', handleDocumentKeydown);
     const stop = startRouter();
     // Start the heartbeat so any session-only sessionStorage data the
     // browser might have restored (Continue-where-you-left-off) gets a
@@ -174,16 +124,12 @@
     void decideEntryRoute(window.location.hash).then((target) => {
       if (target !== null) navigate(target, { animate: false });
     });
-    return () => {
-      document.removeEventListener('click', handleDocumentClick);
-      document.removeEventListener('keydown', handleDocumentKeydown);
-      stop();
-    };
+    return stop;
   });
 </script>
 
 <div class="app">
-  <header class="app-header" bind:this={headerEl}>
+  <header class="app-header">
     <button
       type="button"
       class="app-header__title"
@@ -217,7 +163,6 @@
         type="button"
         class="app-header__navlink app-header__account-toggle"
         class:app-header__account-toggle--open={accountMenuOpen}
-        bind:this={accountToggleEl}
         on:click={toggleAccountMenu}
         aria-expanded={accountMenuOpen}
         aria-controls="app-header-account-row"
@@ -230,7 +175,6 @@
     <div
       id="app-header-account-row"
       class="app-header__account-row"
-      bind:this={accountRowEl}
       transition:slide={{ duration: 180 }}
     >
       <nav
@@ -337,21 +281,26 @@
     font-weight: 700;
   }
   .app-header__account-row {
-    /* Drops below the header when accountMenuOpen is true. The row's
-       background bleeds full-width like .session-only-banner so the
-       slide-down reads as a structural section of the topnav, not a
-       floating popover. No overflow: hidden at rest — the ExportMenu's
-       popover positions absolutely below its trigger and needs to
-       extend past the row's bottom edge. Svelte's slide transition
-       applies overflow: hidden only for the duration of the animation. */
+    /* Drops below the header when accountMenuOpen is true. No
+       overflow: hidden at rest — the ExportMenu's popover positions
+       absolutely below its trigger and needs to extend past the
+       row's bottom edge. Svelte's slide transition applies
+       overflow: hidden only for the duration of the animation.
+       Explicit rgba per color-scheme: color-mix() with the Canvas
+       system color produced an imperceptible band on mobile dark
+       mode (the system Canvas value renders nearly-identical to
+       the page background at small percentage mixes). */
     display: flex;
     justify-content: flex-end;
     align-items: center;
     padding: 0.625rem 1.5rem;
-    /* 10% mix instead of 4% — at 4% the tint was imperceptible on
-       mobile dark-mode displays (and only just visible on desktop). */
-    background: color-mix(in oklab, CanvasText 10%, Canvas);
+    background: rgba(0, 0, 0, 0.06);
     border-bottom: 1px solid color-mix(in oklab, CanvasText 12%, transparent);
+  }
+  @media (prefers-color-scheme: dark) {
+    .app-header__account-row {
+      background: rgba(255, 255, 255, 0.08);
+    }
   }
   .app-header__handle-export {
     display: flex;

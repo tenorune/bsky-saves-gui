@@ -211,15 +211,21 @@
        margin, and reclaim that space inward with matching padding —
        row text stays at the .library-hub edge (aligned with the
        Library title and search filter), while the background bleeds
-       past those edges for visual separation. The tint is 10% so it
-       reads on mobile dark-mode displays; 4% (the prior value) was
-       imperceptible there. */
+       past those edges for visual separation. Explicit rgba per
+       color-scheme because color-mix() with the Canvas system color
+       renders nearly-identical to the page background on mobile
+       dark mode at small percentage mixes. */
     margin: 0 -10px;
     padding: 0.6rem 10px;
-    background: color-mix(in oklab, CanvasText 10%, Canvas);
+    background: rgba(0, 0, 0, 0.06);
     font-size: 0.875rem;
     display: flex;
     flex-direction: column;
     gap: 0.4rem;
+  }
+  @media (prefers-color-scheme: dark) {
+    .status-panel {
+      background: rgba(255, 255, 255, 0.08);
+    }
   }
 </style>
