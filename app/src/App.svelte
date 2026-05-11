@@ -108,16 +108,18 @@
     >
       {config.appName}
     </button>
-    <nav class="app-header__handle-export" aria-label="Library tools">
-      {#if displayedHandle && $inventoryPresent}
-        <span class="app-header__handle" title="Library owner">
-          @{displayedHandle}
-        </span>
-      {/if}
-      {#if $inventoryState.status === 'ready'}
-        <ExportMenu />
-      {/if}
-    </nav>
+    {#if (displayedHandle && $inventoryPresent) || $inventoryState.status === 'ready'}
+      <nav class="app-header__handle-export" aria-label="Library tools">
+        {#if displayedHandle && $inventoryPresent}
+          <span class="app-header__handle" title="Library owner">
+            @{displayedHandle}
+          </span>
+        {/if}
+        {#if $inventoryState.status === 'ready'}
+          <ExportMenu />
+        {/if}
+      </nav>
+    {/if}
     {#if $inventoryPresent}
       {#if routeName === 'library'}
         <strong class="app-header__current app-header__item-library">Library</strong>
