@@ -219,11 +219,6 @@
   {/if}
 
   {#if showForm}
-    <p class="help intro-help">
-      Your handle and password go straight to Bluesky. Nothing else gets sent
-      anywhere.
-    </p>
-
     <form on:submit|preventDefault={submit}>
     <label>
       Handle
@@ -332,9 +327,6 @@
     opacity: 0.8;
     margin: 0;
   }
-  .help.intro-help {
-    margin-bottom: 2rem;
-  }
   .card {
     border: 1px solid color-mix(in oklab, CanvasText 15%, transparent);
     border-radius: 8px;
@@ -351,6 +343,12 @@
     flex-direction: column;
     gap: 0.25rem;
     margin-top: 0.25rem;
+  }
+  /* Don't double up the card's top padding with this field's margin-top
+     when the field is the first child — keeps the visible top space
+     equal to the card's bottom padding (1.25rem). */
+  .card > .card__field:first-child {
+    margin-top: 0;
   }
   .card__action {
     align-self: flex-start;
