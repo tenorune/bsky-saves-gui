@@ -239,7 +239,6 @@
        right edge. Search filter below also has no inset, completing
        the column. */
     padding: 0.75rem 0;
-    border-bottom: 1px solid color-mix(in oklab, CanvasText 12%, transparent);
   }
   .route__title-block { flex: 1; display: flex; flex-direction: column; gap: 0.4rem; }
   .route__title { margin: 0; }

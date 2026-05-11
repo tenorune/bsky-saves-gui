@@ -234,9 +234,6 @@
       order: 3;
       /* Push the wrapped group to the left edge of row 2. */
       margin-right: auto;
-      /* Visual order on row 2: EXPORT, Handle. Source order is
-         (Handle, Export); row-reverse flips that left-to-right. */
-      flex-direction: row-reverse;
       /* Force onto its own row immediately at this breakpoint, even if
          the remaining inline space could fit it. Without this, there's
          an intermediate width where Title/Library/Settings/Export/Handle
