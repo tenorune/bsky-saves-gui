@@ -130,45 +130,49 @@
 
 <div class="app">
   <header class="app-header">
-    <button
-      type="button"
-      class="app-header__title"
-      on:click={() => navigate('/')}
-      aria-label="Go to sign-in"
-    >
-      {config.appName}
-    </button>
-    {#if $inventoryPresent}
-      {#if routeName === 'library'}
-        <strong class="app-header__current app-header__item-library">Library</strong>
-      {:else}
+    <div class="app-header__inner">
+      <div class="app-header__items">
         <button
           type="button"
-          class="app-header__navlink app-header__item-library"
-          on:click={goToLibraryFromTopNav}
-        >Library</button>
-      {/if}
-    {/if}
-    {#if routeName === 'settings'}
-      <strong class="app-header__current app-header__item-settings">Settings</strong>
-    {:else}
-      <a
-        class="app-header__navlink app-header__item-settings"
-        href="#/settings"
-        on:click|preventDefault={() => navigate('/settings')}
-      >Settings</a>
-    {/if}
-    {#if $inventoryPresent}
-      <button
-        type="button"
-        class="app-header__navlink app-header__account-toggle"
-        class:app-header__account-toggle--open={accountMenuOpen}
-        on:click={toggleAccountMenu}
-        aria-expanded={accountMenuOpen}
-        aria-controls="app-header-account-row"
-        aria-label="Account menu"
-      ><span class="app-header__account-toggle__glyph">@</span></button>
-    {/if}
+          class="app-header__title"
+          on:click={() => navigate('/')}
+          aria-label="Go to sign-in"
+        >
+          {config.appName}
+        </button>
+        {#if $inventoryPresent}
+          {#if routeName === 'library'}
+            <strong class="app-header__current app-header__item-library">Library</strong>
+          {:else}
+            <button
+              type="button"
+              class="app-header__navlink app-header__item-library"
+              on:click={goToLibraryFromTopNav}
+            >Library</button>
+          {/if}
+        {/if}
+        {#if routeName === 'settings'}
+          <strong class="app-header__current app-header__item-settings">Settings</strong>
+        {:else}
+          <a
+            class="app-header__navlink app-header__item-settings"
+            href="#/settings"
+            on:click|preventDefault={() => navigate('/settings')}
+          >Settings</a>
+        {/if}
+        {#if $inventoryPresent}
+          <button
+            type="button"
+            class="app-header__navlink app-header__account-toggle"
+            class:app-header__account-toggle--open={accountMenuOpen}
+            on:click={toggleAccountMenu}
+            aria-expanded={accountMenuOpen}
+            aria-controls="app-header-account-row"
+            aria-label="Account menu"
+          >@</button>
+        {/if}
+      </div>
+    </div>
   </header>
 
   {#if accountMenuOpen && $inventoryPresent}
@@ -177,21 +181,25 @@
       class="app-header__account-row"
       transition:slide={{ duration: 180 }}
     >
-      <nav
-        class="app-header__handle-export"
-        aria-label="Library tools"
-        in:fly|local={{ duration: 200, x: 80 }}
-        out:fly|local={{ duration: 140, x: 80 }}
-      >
-        {#if displayedHandle}
-          <span class="app-header__handle" title="Library owner">
-            @{displayedHandle}
-          </span>
-        {/if}
-        {#if $inventoryState.status === 'ready'}
-          <ExportMenu />
-        {/if}
-      </nav>
+      <div class="app-header__inner">
+        <div class="app-header__account-items">
+          <nav
+            class="app-header__handle-export"
+            aria-label="Library tools"
+            in:fly|local={{ duration: 200, x: 80 }}
+            out:fly|local={{ duration: 140, x: 80 }}
+          >
+            {#if displayedHandle}
+              <span class="app-header__handle" title="Library owner">
+                @{displayedHandle}
+              </span>
+            {/if}
+            {#if $inventoryState.status === 'ready'}
+              <ExportMenu />
+            {/if}
+          </nav>
+        </div>
+      </div>
     </div>
   {/if}
 
@@ -260,16 +268,34 @@
     min-height: 100vh;
   }
   .app-header {
-    /* Single row: Title — Library — Settings — @. Title pushed left by
-       margin-right: auto; the rest sits flush right via
-       justify-content: flex-end. The handle / Export menu is no
-       longer in the header row — it lives in .app-header__account-row,
-       which slides down when the @ toggle is open. */
+    /* Vertical padding on the outer header; horizontal padding is on
+       the inner gridline-aligned container below. */
+    padding: 1rem 1.5rem;
+  }
+  /* Mirrors .library-hub: max-width 44rem, centered. Items inside align
+     to the same vertical gridline as the library content. Used by both
+     the main topnav row and the slide-down account row so they share
+     the same column. */
+  .app-header__inner {
+    max-width: 44rem;
+    margin: 0 auto;
+  }
+  /* Flex row of nav items extended 10px outboard on each side. Matches
+     the LibraryStatusPanel's outboard bleed: items at the right end
+     (@) align with status-panel-right; items at the left end (app
+     title) align with status-panel-left. */
+  .app-header__items {
     display: flex;
     align-items: center;
     justify-content: flex-end;
     gap: 0.5rem 1rem;
-    padding: 1rem 1.5rem;
+    margin: 0 -10px;
+  }
+  .app-header__account-items {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    margin: 0 -10px;
   }
   /* Chained selector (.app-header__navlink.app-header__account-toggle)
      so these rules win the cascade against .app-header__navlink, which
@@ -284,30 +310,22 @@
     transition: background-color 100ms ease;
   }
   .app-header__navlink.app-header__account-toggle--open {
-    /* Extend the painted box up/right/down to meet the viewport edges
-       and the account row beneath. Padding-left stays at 0.65rem
-       (matching closed) so the button's flex slot — its margin-box —
-       is the same width in both states, leaving Library/Settings put.
-       The @ glyph is moved into the visual center of the extended box
-       via a transform on .app-header__account-toggle__glyph below
-       (transforms don't affect layout, so adjacent items stay put). */
+    /* The button's right edge is already at status-panel-right (set by
+       its position as the rightmost flex item inside .app-header__items
+       which has margin: 0 -10px, so its right edge = library-hub-right
+       + 10px). Only vertical extension is needed to reach the viewport
+       top and the account row below; horizontal padding stays
+       symmetric and unchanged from the closed state so the button's
+       margin-box width is identical in both states — Library/Settings
+       don't shift. The @ glyph is naturally centered in the symmetric
+       box. */
     text-decoration: none;
     font-weight: 700;
     background: rgba(0, 0, 0, 0.06);
     margin-top: -1rem;
-    margin-right: -1.5rem;
     margin-bottom: -1rem;
-    padding: calc(0.4rem + 1rem) calc(0.65rem + 1.5rem) calc(0.4rem + 1rem) 0.65rem;
-  }
-  .app-header__account-toggle__glyph {
-    display: inline-block;
-    transition: transform 120ms ease;
-  }
-  .app-header__navlink.app-header__account-toggle--open .app-header__account-toggle__glyph {
-    /* Shift right by half the asymmetric padding (padding-right minus
-       padding-left, halved). Works out to (1.5rem extension) / 2 =
-       0.75rem regardless of the @ glyph's actual width. */
-    transform: translateX(0.75rem);
+    padding-top: calc(0.4rem + 1rem);
+    padding-bottom: calc(0.4rem + 1rem);
   }
   @media (prefers-color-scheme: dark) {
     .app-header__navlink.app-header__account-toggle--open {

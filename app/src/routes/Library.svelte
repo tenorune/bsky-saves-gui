@@ -243,11 +243,15 @@
   /* Single-row layout for title + backend + Refresh button. align-items:
      end aligns each item's bottom edge so the button's bottom lines up
      with the title text's bottom, rather than centering against the
-     title block (which would put the button under the title's midline). */
+     title block (which would put the button under the title's midline).
+     margin: 0 -10px extends the row 10px outboard on each side so the
+     Library title aligns with status-panel-left and the Refresh button
+     aligns with status-panel-right — same gridline as the topnav. */
   .route__title-row {
     display: flex;
     gap: 1rem;
     align-items: end;
+    margin: 0 -10px;
   }
   .route__title-row .route__title {
     flex: 1;
