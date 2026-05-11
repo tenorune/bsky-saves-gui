@@ -242,6 +242,10 @@
     font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
     background: Canvas;
     color: CanvasText;
+    /* Floor the layout at 360px (smallest target in DevTools'
+       common-device list). Below that the page horizontally scrolls
+       rather than crushing the layout further. */
+    min-width: 360px;
   }
   /* Force text-bearing form controls to >=16px so iOS Safari doesn't
      auto-zoom on focus. Default UA size is ~13px which trips the
@@ -266,7 +270,6 @@
     justify-content: flex-end;
     gap: 0.5rem 1rem;
     padding: 1rem 1.5rem;
-    border-bottom: 1px solid color-mix(in oklab, CanvasText 15%, transparent);
   }
   /* Chained selector (.app-header__navlink.app-header__account-toggle)
      so these rules win the cascade against .app-header__navlink, which
@@ -276,30 +279,23 @@
     font-size: 1.1rem;
     line-height: 1;
     padding: 0.4rem 0.65rem;
-    border-radius: 0;
-    /* Base border is fully transparent so toggling state doesn't shift
-       layout when the left edge gets colored. */
     border: 0;
-    border-left: 1px solid transparent;
-    transition: background-color 100ms ease, border-color 100ms ease;
+    border-radius: 0;
+    transition: background-color 100ms ease;
   }
   .app-header__navlink.app-header__account-toggle--open {
-    /* Extend the painted box to the viewport top + right and down
-       through the header's border-bottom so it seamlessly meets the
-       account row below. Negative margins extend the box past the
-       button's flex slot; matching padding restores the @ glyph's
-       position so it doesn't move when opening. Only the left edge
-       is visible (the other three touch the viewport or the row). */
+    /* Extend the painted box to the viewport top + right and down to
+       the account row's top edge via negative margins. Padding on all
+       four sides matches so the @ glyph sits at the center of the
+       resulting box. No borders — the tinted background is what
+       carries the visual connection to the row below. */
     text-decoration: none;
     font-weight: 700;
     background: rgba(0, 0, 0, 0.06);
     margin-top: -1rem;
     margin-right: -1.5rem;
-    margin-bottom: calc(-1rem - 1px);
-    padding-top: calc(0.4rem + 1rem);
-    padding-right: calc(0.65rem + 1.5rem);
-    padding-bottom: calc(0.4rem + 1rem + 1px);
-    border-left-color: color-mix(in oklab, CanvasText 25%, transparent);
+    margin-bottom: -1rem;
+    padding: calc(0.4rem + 1rem) calc(0.65rem + 1.5rem);
   }
   @media (prefers-color-scheme: dark) {
     .app-header__navlink.app-header__account-toggle--open {
