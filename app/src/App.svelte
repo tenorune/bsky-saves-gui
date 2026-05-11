@@ -167,7 +167,7 @@
         aria-expanded={accountMenuOpen}
         aria-controls="app-header-account-row"
         aria-label="Account menu"
-      >@</button>
+      ><span class="app-header__account-toggle__glyph">@</span></button>
     {/if}
   </header>
 
@@ -284,18 +284,30 @@
     transition: background-color 100ms ease;
   }
   .app-header__navlink.app-header__account-toggle--open {
-    /* Extend the painted box to the viewport top + right and down to
-       the account row's top edge via negative margins. Padding on all
-       four sides matches so the @ glyph sits at the center of the
-       resulting box. No borders — the tinted background is what
-       carries the visual connection to the row below. */
+    /* Extend the painted box up/right/down to meet the viewport edges
+       and the account row beneath. Padding-left stays at 0.65rem
+       (matching closed) so the button's flex slot — its margin-box —
+       is the same width in both states, leaving Library/Settings put.
+       The @ glyph is moved into the visual center of the extended box
+       via a transform on .app-header__account-toggle__glyph below
+       (transforms don't affect layout, so adjacent items stay put). */
     text-decoration: none;
     font-weight: 700;
     background: rgba(0, 0, 0, 0.06);
     margin-top: -1rem;
     margin-right: -1.5rem;
     margin-bottom: -1rem;
-    padding: calc(0.4rem + 1rem) calc(0.65rem + 1.5rem);
+    padding: calc(0.4rem + 1rem) calc(0.65rem + 1.5rem) calc(0.4rem + 1rem) 0.65rem;
+  }
+  .app-header__account-toggle__glyph {
+    display: inline-block;
+    transition: transform 120ms ease;
+  }
+  .app-header__navlink.app-header__account-toggle--open .app-header__account-toggle__glyph {
+    /* Shift right by half the asymmetric padding (padding-right minus
+       padding-left, halved). Works out to (1.5rem extension) / 2 =
+       0.75rem regardless of the @ glyph's actual width. */
+    transform: translateX(0.75rem);
   }
   @media (prefers-color-scheme: dark) {
     .app-header__navlink.app-header__account-toggle--open {
