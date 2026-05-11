@@ -98,6 +98,7 @@
   let accountMenuOpen = loadAccountRowOpen();
   let accountToggleEl: HTMLButtonElement | undefined;
   let accountRowEl: HTMLDivElement | undefined;
+  let headerEl: HTMLElement | undefined;
   function toggleAccountMenu() {
     accountMenuOpen = !accountMenuOpen;
     saveAccountRowOpen(accountMenuOpen);
@@ -116,7 +117,11 @@
     if (!accountMenuOpen) return;
     const t = e.target as Node | null;
     if (!t) return;
-    if (accountToggleEl?.contains(t)) return;
+    // Treat the whole topnav (header + account row) as inside. Without
+    // this, clicking Library / Settings would close the row, which
+    // looks like the row closes "on navigation" — but the close is
+    // actually the outside-click handler firing on the link itself.
+    if (headerEl?.contains(t)) return;
     if (accountRowEl?.contains(t)) return;
     userCloseAccountMenu();
   }
@@ -163,7 +168,7 @@
 </script>
 
 <div class="app">
-  <header class="app-header">
+  <header class="app-header" bind:this={headerEl}>
     <button
       type="button"
       class="app-header__title"
