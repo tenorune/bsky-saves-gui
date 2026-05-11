@@ -33,7 +33,7 @@
   {#if $inventoryState.status === 'loading'}
     <p>Loading…</p>
   {:else if $inventoryState.status !== 'ready'}
-    <p>No inventory available. <a href="#/">Sign in</a>.</p>
+    <p>No inventory available. <a href="#/" on:click|preventDefault={() => navigate('/')}>Sign in</a>.</p>
   {:else if save === null}
     <p>Post <code>{rkey}</code> not found in your inventory.</p>
     <button type="button" on:click={() => navigate('/library')}>Back to library</button>

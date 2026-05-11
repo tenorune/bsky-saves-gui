@@ -132,7 +132,11 @@
     {#if routeName === 'settings'}
       <strong class="app-header__current app-header__item-settings">Settings</strong>
     {:else}
-      <a class="app-header__navlink app-header__item-settings" href="#/settings">Settings</a>
+      <a
+        class="app-header__navlink app-header__item-settings"
+        href="#/settings"
+        on:click|preventDefault={() => navigate('/settings')}
+      >Settings</a>
     {/if}
   </header>
 
@@ -164,7 +168,7 @@
     <p>
       <a href={config.repoUrl} target="_blank" rel="noopener noreferrer">Source</a>
       ·
-      <a href="#/privacy">Privacy</a>
+      <a href="#/privacy" on:click|preventDefault={() => navigate('/privacy')}>Privacy</a>
     </p>
     {#if BUILD_BRANCH !== 'main'}
       <p class="app-footer__build" title="Build timestamp and source branch">

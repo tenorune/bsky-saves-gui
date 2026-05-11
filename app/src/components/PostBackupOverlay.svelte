@@ -10,6 +10,17 @@
   import { getPostBackupStatus } from '$lib/post-backup-status';
   import { extractImageUrlsFromSave } from '$lib/extract-image-urls';
   import { clearLibraryScroll } from '$lib/library-scroll';
+  import { navigate } from '$lib/router';
+
+  function openLibrary(e: MouseEvent): void {
+    e.preventDefault();
+    clearLibraryScroll();
+    navigate('/library');
+  }
+  function openSettings(e: MouseEvent): void {
+    e.preventDefault();
+    navigate('/settings');
+  }
   import BackupFailuresModal from './BackupFailuresModal.svelte';
   import { describeAvailableImageBackend, describeArticleBackend } from '$lib/describe-backend';
 
@@ -97,9 +108,9 @@
         {status.summary}
       </button>
     {:else if status.link === 'library'}
-      {librarySubject} not yet backed up in your <a class="post-backup-overlay__button" href="#/library" on:click={clearLibraryScroll}>Library</a>.
+      {librarySubject} not yet backed up in your <a class="post-backup-overlay__button" href="#/library" on:click={openLibrary}>Library</a>.
     {:else if status.link === 'setup'}
-      Not yet saved — <a class="post-backup-overlay__button" href="#/settings">set up a backend</a>.
+      Not yet saved — <a class="post-backup-overlay__button" href="#/settings" on:click={openSettings}>set up a backend</a>.
     {:else}
       {status.summary}
     {/if}

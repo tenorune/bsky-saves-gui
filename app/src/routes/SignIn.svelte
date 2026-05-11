@@ -190,7 +190,7 @@
     {config.appName} exports your Bluesky saved posts as JSON, Markdown, or a
     self-contained HTML archive. Everything runs in your browser — your handle,
     app password, and saved data never leave this device.
-    <a href="#/privacy" class="intro__more">Read more &rsaquo;</a>
+    <a href="#/privacy" class="intro__more" on:click|preventDefault={() => navigate('/privacy')}>Read more &rsaquo;</a>
   </p>
 
   {#if showForm}
