@@ -291,10 +291,12 @@
     font-size: 0.875rem;
   }
   .session-only-banner__msg {
-    /* Don't grow: keep the message its natural width so the action
-       sits right next to it. flex-wrap on the parent handles the
-       narrow-viewport overflow. */
-    flex: 0 0 auto;
+    /* Don't grow past natural width on wide viewports, but allow the
+       message to shrink and wrap on narrow ones so the text doesn't
+       overflow the container. `min-width: 0` defeats flex's implicit
+       `min-width: auto` so the inner text can wrap. */
+    flex: 0 1 auto;
+    min-width: 0;
   }
   /* The "Keep my saves in this browser" affordance functions as a
      button (triggers a multi-step flush) but reads as a link in the
