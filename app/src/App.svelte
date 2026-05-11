@@ -277,17 +277,29 @@
     line-height: 1;
     padding: 0.4rem 0.65rem;
     border-radius: 0;
-    border: 1px solid transparent;
+    /* Base border is fully transparent so toggling state doesn't shift
+       layout when the left edge gets colored. */
+    border: 0;
+    border-left: 1px solid transparent;
     transition: background-color 100ms ease, border-color 100ms ease;
   }
   .app-header__navlink.app-header__account-toggle--open {
-    /* Box of right angles around the @ when the account row is open;
-       background matches the row's tint so the toggle and the row
-       read as a connected unit. */
+    /* Extend the painted box to the viewport top + right and down
+       through the header's border-bottom so it seamlessly meets the
+       account row below. Negative margins extend the box past the
+       button's flex slot; matching padding restores the @ glyph's
+       position so it doesn't move when opening. Only the left edge
+       is visible (the other three touch the viewport or the row). */
     text-decoration: none;
     font-weight: 700;
     background: rgba(0, 0, 0, 0.06);
-    border-color: color-mix(in oklab, CanvasText 25%, transparent);
+    margin-top: -1rem;
+    margin-right: -1.5rem;
+    margin-bottom: calc(-1rem - 1px);
+    padding-top: calc(0.4rem + 1rem);
+    padding-right: calc(0.65rem + 1.5rem);
+    padding-bottom: calc(0.4rem + 1rem + 1px);
+    border-left-color: color-mix(in oklab, CanvasText 25%, transparent);
   }
   @media (prefers-color-scheme: dark) {
     .app-header__navlink.app-header__account-toggle--open {
