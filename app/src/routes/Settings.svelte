@@ -34,6 +34,7 @@
   import { assetToggles, setAssetToggle, loadAssetToggles, clearAssetToggles } from '$lib/asset-toggles';
   import { installHintDismissed, loadInstallHintPref, clearInstallHintPref } from '$lib/install-hint-pref';
   import InstallHelperHint from '../components/library-status/InstallHelperHint.svelte';
+  import DefinitionTerm from '../components/DefinitionTerm.svelte';
   import { capabilitySnapshot, initCapabilitySnapshot } from '$lib/capability-snapshot';
   import { prospectiveBackendName } from '$lib/dominant-backend';
 
@@ -329,7 +330,12 @@
         {#if rememberCredsChecked}
           <div class="card advanced settings-creds-form">
             <label class="settings-field">
-              Passphrase
+              <DefinitionTerm>
+                <span slot="term">Passphrase</span>
+                Your app password gets locked with this passphrase and stored only
+                in this browser. If you forget the passphrase, you'll just need to
+                type your app password again next time.
+              </DefinitionTerm>
               <input
                 type="password"
                 bind:value={rememberPassphrase}
@@ -337,11 +343,6 @@
                 autocomplete="new-password"
               />
             </label>
-            <p class="help">
-              Your app password gets locked with this passphrase and stored only
-              in this browser. If you forget the passphrase, you'll just need to
-              type your app password again next time.
-            </p>
             <div class="settings-row">
               <button type="button" on:click={handleSaveCredentialsFromSettings}>Save</button>
             </div>
@@ -432,10 +433,14 @@
       <summary>Advanced backup options</summary>
 
       <div class="card advanced">
-        <p class="advanced-heading"><strong>Custom Cloudflare Worker proxy</strong></p>
-        <p class="help">
-          Used as a fallback when no local helper is running. The setup is
-          one-time, takes about 10 minutes, and runs on Cloudflare's free tier.
+        <p class="advanced-heading">
+          <strong>
+            <DefinitionTerm>
+              <span slot="term">Custom Cloudflare Worker proxy</span>
+              Used as a fallback when no local helper is running. The setup is
+              one-time, takes about 10 minutes, and runs on Cloudflare's free tier.
+            </DefinitionTerm>
+          </strong>
         </p>
 
         <button type="button" class="setup-guide-trigger" on:click={() => (setupModalOpen = true)}>
@@ -443,7 +448,17 @@
         </button>
 
         {#if operatorProxyConfigured}
-          <p class="advanced-heading advanced-heading--spaced"><strong>Operator's image proxy</strong></p>
+          <p class="advanced-heading advanced-heading--spaced">
+            <strong>
+              <DefinitionTerm>
+                <span slot="term">Operator's image proxy</span>
+                When set up by the site operator, this proxy is used as a fallback
+                for image backup when no local helper or custom Cloudflare Worker is
+                configured. Image bytes flow through the operator's worker; the
+                operator does not log URLs or content.
+              </DefinitionTerm>
+            </strong>
+          </p>
           <p class="help">
             <code>{config.operatorImageProxyUrl}</code>
             {#if operatorProxyReachable === 'ok'}
@@ -455,12 +470,6 @@
             {:else if operatorProxyReachable === 'unreachable'}
               <span class="status-fail">· unreachable</span>
             {/if}
-          </p>
-          <p class="help">
-            When set up by the site operator, this proxy is used as a fallback
-            for image backup when no local helper or custom Cloudflare Worker is
-            configured. Image bytes flow through the operator's worker; the
-            operator does not log URLs or content.
           </p>
           <label class="checkbox">
             <input

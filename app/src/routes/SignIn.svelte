@@ -14,6 +14,7 @@
   import { saveAccount } from '$lib/account-store';
   import { clearInventory } from '$lib/inventory-store';
   import { clearImageBlobs } from '$lib/image-store';
+  import DefinitionTerm from '../components/DefinitionTerm.svelte';
   import { clearFailures } from '$lib/failure-store';
   import { slideRoute } from '$lib/slide-transition';
 
@@ -237,7 +238,17 @@
     </label>
 
     <label>
-      App password
+      <DefinitionTerm>
+        <span slot="term">App password</span>
+        Don't use your real Bluesky password. Make an
+        <a
+          href="https://bsky.app/settings/app-passwords"
+          target="_blank"
+          rel="noopener noreferrer"
+        >app password</a>
+        in Bluesky's settings — it's a temporary password just for tools like
+        this one, and you can revoke it anytime.
+      </DefinitionTerm>
       <input
         type="password"
         autocomplete="current-password"
@@ -247,29 +258,19 @@
         required
       />
     </label>
-    <p class="help">
-      Don't use your real Bluesky password. Make an
-      <a
-        href="https://bsky.app/settings/app-passwords"
-        target="_blank"
-        rel="noopener noreferrer"
-      >app password</a>
-      in Bluesky's settings — it's a temporary password just for tools like
-      this one, and you can revoke it anytime.
-    </p>
 
     <details class="advanced-toggle">
       <summary>Advanced</summary>
 
       <div class="card advanced">
         <label class="card__field">
-          Server address
+          <DefinitionTerm>
+            <span slot="term">Server address</span>
+            Where your Bluesky account lives. The default works for most people;
+            only change this if you know your account is on a different server.
+          </DefinitionTerm>
           <input type="url" bind:value={pds} />
         </label>
-        <p class="help">
-          Where your Bluesky account lives. The default works for most people;
-          only change this if you know your account is on a different server.
-        </p>
 
         <label class="checkbox">
           <input
@@ -277,21 +278,13 @@
             checked={$assetToggles.threads}
             on:change={(e) => setAssetToggle('threads', e.currentTarget.checked)}
           />
-          <span>Include same-author replies</span>
+          <span>Include threads</span>
         </label>
-        <p class="help">
-          When a saved post is part of a longer thread by the same person, also
-          save the rest of the thread.
-        </p>
 
         <label class="checkbox">
           <input type="checkbox" bind:checked={saveInventory} />
-          <span>Keep my saved posts in this browser</span>
+          <span>Keep my saved posts on this device</span>
         </label>
-        <p class="help">
-          Come back later to read or refresh without downloading everything
-          again.
-        </p>
 
         <label class="checkbox">
           <input type="checkbox" bind:checked={saveCredentials} />
@@ -299,14 +292,14 @@
         </label>
         {#if saveCredentials}
           <label class="card__field">
-            Passphrase
+            <DefinitionTerm>
+              <span slot="term">Passphrase</span>
+              Your app password gets locked with this passphrase and stored only
+              in this browser. If you forget the passphrase, you'll just need to
+              type your app password again next time.
+            </DefinitionTerm>
             <input type="password" bind:value={passphrase} minlength="8" />
           </label>
-          <p class="help">
-            Your app password gets locked with this passphrase and stored only
-            in this browser. If you forget the passphrase, you'll just need to
-            type your app password again next time.
-          </p>
         {/if}
       </div>
     </details>
