@@ -71,18 +71,45 @@
     }
   }
 
-  // Account menu: a second header row (Handle + ExportMenu) that slides
+  // Account row: a second header row (Handle + ExportMenu) that slides
   // down under the topnav when the user taps "@". A document-level
-  // listener closes the menu on outside clicks; Escape closes and
-  // returns focus to the toggle. The menu auto-closes when the library
-  // disappears (sign out) so a stale-open row doesn't linger.
-  let accountMenuOpen = false;
+  // listener closes it on outside clicks; Escape closes and returns
+  // focus to the toggle. The row auto-closes (without persisting that
+  // intent) when the library disappears so it doesn't linger after
+  // sign-out, but reopens automatically on the next sign-in.
+  //
+  // Open/closed is persisted across reloads in localStorage so the user
+  // keeps the layout they last chose. Default is open on the first ever
+  // appearance.
+  const ACCOUNT_ROW_PREF_KEY = 'account-row:v1';
+  function loadAccountRowOpen(): boolean {
+    if (typeof localStorage === 'undefined') return true;
+    try {
+      return localStorage.getItem(ACCOUNT_ROW_PREF_KEY) !== 'closed';
+    } catch {
+      return true;
+    }
+  }
+  function saveAccountRowOpen(open: boolean): void {
+    if (typeof localStorage === 'undefined') return;
+    try { localStorage.setItem(ACCOUNT_ROW_PREF_KEY, open ? 'open' : 'closed'); }
+    catch { /* best-effort */ }
+  }
+  let accountMenuOpen = loadAccountRowOpen();
   let accountToggleEl: HTMLButtonElement | undefined;
   let accountRowEl: HTMLDivElement | undefined;
   function toggleAccountMenu() {
     accountMenuOpen = !accountMenuOpen;
+    saveAccountRowOpen(accountMenuOpen);
   }
-  function closeAccountMenu() {
+  // User-initiated close (outside click, Escape, toggle). Persists.
+  function userCloseAccountMenu() {
+    accountMenuOpen = false;
+    saveAccountRowOpen(false);
+  }
+  // Auto-close on sign-out etc. Doesn't persist — the next sign-in
+  // should still respect the user's last explicit preference.
+  function autoCloseAccountMenu() {
     accountMenuOpen = false;
   }
   function handleDocumentClick(e: MouseEvent) {
@@ -91,15 +118,15 @@
     if (!t) return;
     if (accountToggleEl?.contains(t)) return;
     if (accountRowEl?.contains(t)) return;
-    closeAccountMenu();
+    userCloseAccountMenu();
   }
   function handleDocumentKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape' && accountMenuOpen) {
-      closeAccountMenu();
+      userCloseAccountMenu();
       accountToggleEl?.focus();
     }
   }
-  $: if (!$inventoryPresent && accountMenuOpen) closeAccountMenu();
+  $: if (!$inventoryPresent && accountMenuOpen) autoCloseAccountMenu();
 
   onMount(() => {
     document.addEventListener('click', handleDocumentClick);
@@ -293,14 +320,16 @@
     /* Drops below the header when accountMenuOpen is true. The row's
        background bleeds full-width like .session-only-banner so the
        slide-down reads as a structural section of the topnav, not a
-       floating popover. */
+       floating popover. No overflow: hidden at rest — the ExportMenu's
+       popover positions absolutely below its trigger and needs to
+       extend past the row's bottom edge. Svelte's slide transition
+       applies overflow: hidden only for the duration of the animation. */
     display: flex;
     justify-content: flex-end;
     align-items: center;
     padding: 0.625rem 1.5rem;
     background: color-mix(in oklab, CanvasText 4%, Canvas);
     border-bottom: 1px solid color-mix(in oklab, CanvasText 12%, transparent);
-    overflow: hidden;
   }
   .app-header__handle-export {
     display: flex;
@@ -334,7 +363,8 @@
   }
   /* The Library topnav link is a button (so its on:click can clear the
      saved scroll before navigating), but visually it should match the
-     surrounding <a> links. */
+     surrounding <a> links. No underline; the hover affordance is the
+     pointer cursor + the bold weight when the link's route is active. */
   .app-header__navlink {
     background: none;
     border: none;
@@ -343,9 +373,6 @@
     font: inherit;
     color: inherit;
     cursor: pointer;
-    text-decoration: underline;
-  }
-  .app-header__navlink:hover {
     text-decoration: none;
   }
   .app-main {
