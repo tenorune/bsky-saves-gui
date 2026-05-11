@@ -207,9 +207,12 @@
 
 <style>
   .status-panel {
-    /* 10px horizontal inset so the asset rows breathe inside the
-       status panel's tinted band; row text aligns slightly inboard
-       of the Library title and search filter above/below. */
+    /* Extend the tinted band 10px outboard on each side via negative
+       margin, and reclaim that space inward with matching padding —
+       row text stays at the .library-hub edge (aligned with the
+       Library title and search filter), while the background bleeds
+       past those edges for visual separation. */
+    margin: 0 -10px;
     padding: 0.6rem 10px;
     background: color-mix(in oklab, CanvasText 4%, Canvas);
     font-size: 0.875rem;
