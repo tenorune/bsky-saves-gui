@@ -83,7 +83,14 @@ Add a build step (`scripts/fetch_gui.py`, Hatch custom build hook, or setuptools
 2. Downloads `https://github.com/tenorune/bsky-saves-gui/releases/download/v{GUI_VERSION}/dist.tar.gz` over HTTPS. **No redirects to non-GitHub hosts** (validate the response chain).
 3. Verifies the SHA-256 against the pinned value. **Aborts the build on mismatch**, with an error message that mentions both expected and actual hashes.
 4. Extracts the tarball to `src/bsky_saves/_gui/`. Strip the `CNAME` file at this step (GitHub-Pages-specific).
-5. Idempotent: if `_gui/` is already populated with the right version (e.g. tracked via a `_gui/.gui-version` marker file), skip the download.
+5. Idempotent: skip the download/extract only if `_gui/.gui-version` exists AND both lines match the pinned values:
+
+   ```
+   version=v0.5.2
+   sha256=<hex>
+   ```
+
+   The hook treats any mismatch — including "version matches but SHA doesn't" — as "re-fetch." Writing the marker is the last step of a successful fetch.
 
 ### 3.3 Package data + gitignore
 
@@ -99,6 +106,15 @@ Add a build step (`scripts/fetch_gui.py`, Hatch custom build hook, or setuptools
 
 The pinned SHA-256 mitigates the risk of tarball tampering between GUI release and wheel build (compromised GitHub Action, CDN cache, MITM). Without the pin, any wheel built after a compromise would ship the malicious payload. With the pin, the wheel build aborts unless the bytes match what a reviewer signed off on.
 
+### 3.6 Dev and test workflow
+
+The build hook only fires under `python -m build` (or equivalent). Two scenarios fall outside that path and need explicit handling:
+
+- **Editable installs** (`pip install -e .`): the hook is not invoked by editable installs in most build backends. Contributors must run `python scripts/fetch_gui.py` manually after clone, and re-run it after pulling a `GUI_VERSION` bump. The script is idempotent (§3.2.5) — repeated runs are cheap no-ops when the marker matches.
+- **Tests**: pytest must not depend on a real network fetch. `--gui` tests use a temporary directory containing a minimal `index.html` (and whatever assets the test under-test requires) and monkeypatch the daemon's `_gui/` path resolution to point at the tempdir. Recommended fixture shape: a `pytest` fixture that builds the tempdir lazily and yields the path; `--gui` tests parameterise on it.
+
+The real `_gui/` tree is touched only by the build hook. Tests, editable installs, and ad-hoc development environments never depend on its contents.
+
 ---
 
 ## 4. Daemon behaviour requirements
@@ -112,6 +128,7 @@ These apply to `bsky-saves serve --gui`. The `--gui` flag is required to enable 
 - Asset files under `/assets/*` are Vite-hashed (immutable). Send `Cache-Control: public, max-age=31536000, immutable`.
 - `index.html` is **not** hashed and must be revalidated. Send `Cache-Control: no-store`.
 - The API endpoint paths in §5 are reserved — they must take precedence over the SPA fallback.
+- **If `--gui` is passed but `_gui/` is missing or doesn't contain `index.html`, refuse to start.** Print to stderr: `Error: GUI bundle not found at <path>; install from a wheel or run scripts/fetch_gui.py.` Exit 1. Silent degradation under explicit user intent is surprising and hides problems.
 
 ### 4.2 Bind localhost-only by default
 
@@ -127,14 +144,18 @@ These apply to `bsky-saves serve --gui`. The `--gui` flag is required to enable 
 
 ### 4.4 Origin allowlist on the API
 
-- Every API route validates the `Origin` header.
+- Every API route validates the `Origin` header — including `/ping`. There is no per-route bypass.
 - Default allowlist:
   - `http://127.0.0.1:<port>`
   - `http://localhost:<port>`
   - `https://saves.lightseed.net`
-- Configurable via `--allow-origin <origin>` (repeatable) for users running their own hosted GUI deploy.
-- Non-allowlisted origins receive **`403 Forbidden`** with body `{"error":"Origin not allowed"}`. Missing `Origin` header (e.g. from `curl`) is allowed — CORS is a browser-side mechanism and non-browser callers wouldn't honour the response headers anyway.
-- CORS preflight (`OPTIONS`) returns 204 with the matched origin echoed in `Access-Control-Allow-Origin`; never `*`. See §5.9 for full CORS rules.
+- `--allow-origin <origin>` (repeatable) **adds to** the default allowlist; it does not replace it. So `bsky-saves serve --gui --allow-origin https://example.com` permits all four origins (the three defaults plus `example.com`).
+
+  > **Behaviour change for `bsky-saves`.** Today the flag *replaces* the defaults — passing `--allow-origin foo` silently drops `saves.lightseed.net` and the loopback origins, which is a footgun. The new contract is additive. The hosted GUI deploy at `saves.lightseed.net` keeps working unconditionally; advanced users add their own origins without re-declaring the defaults. If you ever need replace-semantics, propose `--allow-origin-only` as a separate flag — but no current use case requires it.
+- Non-allowlisted origins receive **`403 Forbidden`** with body `{"error":"Origin not allowed"}`. Same enforcement on CORS preflight: `OPTIONS` from a disallowed origin also returns 403, not 204. Same allowlist check, same status code — one consistent rule across every method.
+- Missing `Origin` header (e.g. from `curl` or a non-browser script) is allowed on every endpoint. CORS is a browser-side mechanism; non-browser callers don't have an `Origin` to check, and serving them is a deliberate accommodation for diagnostic tooling.
+- For allowed origins, CORS preflight (`OPTIONS`) returns 204 with the matched origin echoed in `Access-Control-Allow-Origin`; never `*`. See §5.9 for full CORS rules.
+- **Vite dev server origins are not pre-allowlisted.** Developers running both `vite dev` and `bsky-saves serve --gui` simultaneously (rare; only when iterating on the GUI itself) pass `--allow-origin http://localhost:5173` ad-hoc.
 
 ### 4.5 Authentication model: origin allowlist + 127.0.0.1 only
 
@@ -183,14 +204,14 @@ The daemon exposes six endpoints. All paths are flat (no `/api/` prefix). All re
 
 Health check, version reporting, and capability advertisement, combined. The GUI calls this on startup to detect a running helper and to feature-flag its routing.
 
-**No origin check required** (the GUI needs to call this before knowing whether the helper is up).
+**Origin enforcement applies** — same rule as every other endpoint (§4.4). A request from a non-allowlisted origin gets 403; a request with no `Origin` header (`curl`, scripts) is permitted. The GUI never probes `/ping` from a non-allowlisted origin in practice (the loopback origin and `saves.lightseed.net` are both default-allowlisted), so this isn't a behavioural regression — it just removes a special case from your routing table.
 
 **Response** (200, `application/json`):
 
 ```json
 {
   "name": "bsky-saves",
-  "version": "0.4.1",
+  "version": "0.4.3",
   "features": ["fetch-image", "extract-article", "fetch", "enrich", "hydrate-threads", "jwt-credentials"]
 }
 ```
@@ -450,6 +471,8 @@ For each given URI, walk the reply tree to collect same-author follow-up replies
 
 **Batching**: callers SHOULD batch as many URIs per request as they have on hand (up to a few hundred). The daemon performs one `createSession` per request under the app-password path, and Bluesky rate-limits `createSession` aggressively, so chatty calling patterns can hit per-account limits.
 
+> **Note: HTTP path vs. Python-function path.** This is the HTTP endpoint contract. The `bsky-saves` Python package also exposes a `bsky_saves.threads.hydrate_threads()` function used by the CLI and by Pyodide consumers that import the package directly. As of `bsky-saves` 0.4.3, that *Python function* gained an optional `limit` kwarg for bounded-batch processing — it has no analogue on the HTTP endpoint and is irrelevant to clients of `/hydrate-threads`. If the GUI's Pyodide worker calls `hydrate_threads(...)` directly (not via HTTP), see the `bsky-saves` Python API docs for `limit` semantics; it's recommended for large inventories to keep the worker from blocking on a single call.
+
 ### 5.7 CORS
 
 Applies to every endpoint:
@@ -468,7 +491,8 @@ Applies to every endpoint:
 
 ### 5.9 Capability versioning
 
-- The `/ping` `version` field is the public compatibility marker; the GUI's `MIN_HELPER_VERSION` constant (currently in `app/src/lib/min-helper-version.ts`) is the floor below which the GUI shows `OutdatedHelperBanner` and refuses to enter local mode.
+- The `/ping` `version` field is the public compatibility marker; the GUI's `MIN_HELPER_VERSION` constant (in `app/src/lib/min-helper-version.ts`) is the floor below which the GUI shows `OutdatedHelperBanner` and refuses to enter local mode.
+- **Current value: `MIN_HELPER_VERSION = '0.4.1'`.** PyPI's current `bsky-saves` is `0.4.3`, comfortably above the floor. The GUI does not display `OutdatedHelperBanner` against the current wheel. Bumping `MIN_HELPER_VERSION` is a forward-looking GUI-side change tied to specific feature requirements (e.g. the v0.4.1 bump was driven by needing `"jwt-credentials"`); the bsky-saves team is not blocked on it for the MVP work in this spec.
 - New endpoints land as additions to `features`. The GUI feature-detects per-capability rather than version-gating wholesale, so an old GUI talking to a new daemon works for the subset it knows about.
 - Removing or renaming endpoints is a breaking change and must bump the `bsky-saves` major version.
 
@@ -499,6 +523,41 @@ Run before publishing. Steps:
 
 Failure of any step blocks the release.
 
+### 6.4 Cross-repo release coordination
+
+For the MVP cut and for any future `MIN_HELPER_VERSION` bumps, the published sequence is **`bsky-saves` ships first, GUI bumps `MIN_HELPER_VERSION` after**.
+
+- The bsky-saves team cuts the wheel that introduces a new capability.
+- The wheel reaches PyPI.
+- The GUI team observes the wheel works and opens a one-line PR raising `MIN_HELPER_VERSION` in `app/src/lib/min-helper-version.ts`.
+- The GUI tag picks up the bump on the next release.
+
+This sequencing avoids the "GUI ships first, users see `OutdatedHelperBanner` against a still-current wheel" scenario. It does mean wheels can ship features the GUI doesn't yet require — that's harmless; the GUI feature-detects per-capability via the `features` array (§5.1) and just doesn't use what it doesn't know about.
+
+Lockstep releases are not required and are not the published policy — too costly to coordinate. If a specific future feature genuinely needs lockstep, treat it as the exception and call it out in the issue/PR.
+
+### 6.5 GUI release readiness — v0.5.2
+
+Status as of this spec: the GUI release-CI workflow (`bsky-saves-gui/.github/workflows/release.yml`) is live on `main`. It runs S1–S6 + SBOM + static Playwright (S5 static) on every tag push and produces:
+
+- `dist.tar.gz` — production bundle, sourcemaps stripped.
+- `dist.tar.gz.sha256` — checksum file.
+- `dist-with-maps.tar.gz` — debug bundle. **Not consumed by the wheel**; ignore.
+- `SBOM.cdx.json` — CycloneDX SBOM of production deps.
+
+All four are attached to the GitHub release on tag push.
+
+**The first real release through this pipeline will be `v0.5.2`** (the GUI team is ready to cut the tag now that the spec back-and-forth is settled). Once `v0.5.2` is pushed, the bsky-saves fetch hook (§3.2) can be wired against:
+
+```
+https://github.com/tenorune/bsky-saves-gui/releases/download/v0.5.2/dist.tar.gz
+https://github.com/tenorune/bsky-saves-gui/releases/download/v0.5.2/dist.tar.gz.sha256
+```
+
+with `gui-dist.sha256` in the bsky-saves repo populated from the latter file's contents.
+
+**Interim plan if you want to start integration before `v0.5.2` lands**: dispatch the GUI's `release` workflow manually via the Actions tab, download the resulting `release-<label>` workflow artifact, and use its `dist.tar.gz` as a vendored test fixture. That gives you a real build of the current `main` to write integration tests against; swap to the released URL once `v0.5.2` is up.
+
 ---
 
 ## 7. Non-goals for MVP
@@ -512,6 +571,8 @@ Failure of any step blocks the release.
 - **Streaming responses** (SSE, chunked JSON). Single request / single response in v1.
 - **System tray / autostart integration.** CLI command only.
 - **`POST /run`** (the v1-spec's Phase 2 one-shot endpoint). Planned, but out of scope here.
+- **Pre-allowlisting Vite dev server origins** (e.g. `http://localhost:5173`). Developers running both `vite dev` and `bsky-saves serve --gui` simultaneously pass `--allow-origin` ad-hoc. The daemon's defaults target end-users, not the GUI team's dev loop.
+- **Supporting non-HTTPS PDS hosts.** The GUI's CSP `connect-src` admits `https:` broadly to cover the federated AT Protocol PDS space, but not `http:` (other than the loopback helper). Users with a non-HTTPS PDS (e.g. a LAN dev PDS) either configure HTTPS on their PDS (recommended) or build a custom GUI with a relaxed CSP. Mainstream support is HTTPS-only.
 
 ---
 
