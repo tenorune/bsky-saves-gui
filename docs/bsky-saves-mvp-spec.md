@@ -4,7 +4,12 @@
 >
 > **Purpose.** Define the smallest change set in `bsky-saves` that lets the project consume the [`bsky-saves-gui`](https://github.com/tenorune/bsky-saves-gui) release artifact and serve it from `bsky-saves serve --gui` on a user's localhost.
 >
-> **Source.** Section 4 of `bsky-saves-gui/docs/bsky-saves-gui-dist-workstream.md`, restated standalone with security context inlined. This document supersedes any informal asks; the workstream doc itself remains the GUI-side cross-team source of truth.
+> **Sources reconciled.** This spec consolidates:
+> - Section 4 of `bsky-saves-gui/docs/bsky-saves-gui-dist-workstream.md` (GUI-vendoring and `--gui`-serving requirements; security rationale).
+> - `bsky-saves-gui/docs/bsky-saves-serve-requirements.md` (v1 `serve` API: `/ping`, `/fetch-image`, `/extract-article`; CORS; bind/origin rules).
+> - `bsky-saves-gui/docs/bsky-saves-serve-fetch-enrich-threads-requirements.md` (v0.4 API expansion: `/fetch`, `/enrich`, `/hydrate-threads`; JWT-pair credentials).
+>
+> Where the workstream doc and the `serve` requirements docs disagreed, this spec follows the `serve` requirements (which describe the design already shipping). Each such reconciliation is called out inline so reviewers can override.
 
 ---
 
@@ -13,18 +18,18 @@
 `bsky-saves-gui` is a Svelte/Vite PWA. It compiles to a static `dist/` tree that runs identically in three contexts:
 
 - Hosted on `saves.lightseed.net` (production deploy).
-- Served locally from a Python daemon (this spec).
+- Served locally from `bsky-saves serve --gui` on the user's machine (this spec).
 - Frozen into a standalone binary or OS installer (later, out of MVP scope).
 
-The same JS bundle handles all three. At runtime, the GUI probes for a local helper at `127.0.0.1`; if present and capability-compatible, it upgrades to "local mode" (Bluesky API calls and image fetches run through the helper instead of cross-origin worker proxies). If absent, it falls back gracefully.
+The same JS bundle handles all three. At runtime the GUI probes for a local helper at `http://127.0.0.1:47826`; if present and capability-compatible, it upgrades to "local mode" (Bluesky API calls, image fetches, article extraction, and thread hydration all run through the helper instead of cross-origin proxies or in-browser Pyodide). If absent, it falls back gracefully.
 
 What this spec asks of `bsky-saves`:
 
 1. Consume the GUI's release tarball as a build-time input to the wheel.
-2. Serve that tarball on a localhost-bound HTTP server with appropriate security headers and an authenticated API.
-3. Expose a small, versioned API the GUI can probe and call.
+2. Add a `--gui` flag to `bsky-saves serve` that mounts the bundled GUI on the same loopback port the API listens on.
+3. Continue exposing the documented HTTP API (`/ping`, `/fetch-image`, `/extract-article`, `/fetch`, `/enrich`, `/hydrate-threads`) — already specified in the `serve` requirements docs, summarised here for the GUI team's contract reference.
 
-This is **not** about changing the GUI; the GUI side is already shipping. This is about the wheel side catching up so the local-mode experience works end-to-end.
+This is **not** a rewrite of `serve`. It is the MVP path that lets a `pipx install bsky-saves` user open the GUI without ever touching a browser tab.
 
 ---
 
@@ -98,21 +103,22 @@ The pinned SHA-256 mitigates the risk of tarball tampering between GUI release a
 
 ## 4. Daemon behaviour requirements
 
-These apply to `bsky-saves serve --gui`. The `--gui` flag is required to enable GUI-serving — `bsky-saves serve` without it must continue to behave as it does today (no static-file mount, no `index.html` token injection), so users who only want the API surface aren't forced to consume the bundled GUI.
+These apply to `bsky-saves serve --gui`. The `--gui` flag is required to enable GUI-serving — `bsky-saves serve` without it must continue to behave as it does today (API endpoints only, no static-file mount), so users who only want the API surface aren't forced to consume the bundled GUI.
 
-### 4.1 Static file serving
+### 4.1 Static file serving (only under `--gui`)
 
 - Mount `_gui/` at `/`.
-- Apply SPA fallback: any path that does not resolve to a real file in `_gui/` returns `index.html` (the GUI handles routing client-side).
+- Apply SPA fallback: any path that does not resolve to a real file in `_gui/` and is not a documented API path (see §5) returns `index.html` (the GUI handles routing client-side via the URL hash).
 - Asset files under `/assets/*` are Vite-hashed (immutable). Send `Cache-Control: public, max-age=31536000, immutable`.
 - `index.html` is **not** hashed and must be revalidated. Send `Cache-Control: no-store`.
+- The API endpoint paths in §5 are reserved — they must take precedence over the SPA fallback.
 
 ### 4.2 Bind localhost-only by default
 
-- Default bind address: `127.0.0.1` (IPv4 loopback). Not `0.0.0.0`, not `::`.
-- Require an explicit `--host` flag for any other bind address.
-- `--host 0.0.0.0` is permitted but prints a security warning to stderr explaining the user is exposing the helper to their LAN.
-- Default port: pick one and document it (e.g. `47826` — what the GUI's `VITE_HELPER_ORIGIN` currently probes). Allow `--port` override.
+- Default bind address: `127.0.0.1` (IPv4 loopback). Not `0.0.0.0`, not `::`. This is a hard requirement — see §4.7.
+- Default port: `47826`. This is the port the GUI's `VITE_HELPER_ORIGIN` probes; changing it breaks discovery.
+- `--port <n>` overrides the port.
+- The `serve` command must not expose a `--host` flag in v1. Localhost-only is non-negotiable for the MVP threat model.
 
 ### 4.3 Host header validation
 
@@ -121,26 +127,26 @@ These apply to `bsky-saves serve --gui`. The `--gui` flag is required to enable 
 
 ### 4.4 Origin allowlist on the API
 
-- Every `/api/*` route validates the `Origin` header.
+- Every API route validates the `Origin` header.
 - Default allowlist:
   - `http://127.0.0.1:<port>`
   - `http://localhost:<port>`
   - `https://saves.lightseed.net`
-- Configurable via `--allowed-origin <origin>` (repeatable) for users running their own hosted GUI deploy.
-- Non-allowlisted origins receive **`403 Forbidden`**. Missing `Origin` header on a CORS-relevant request is also rejected.
-- CORS preflight (`OPTIONS`) returns the matched origin in `Access-Control-Allow-Origin`; never `*`.
+- Configurable via `--allow-origin <origin>` (repeatable) for users running their own hosted GUI deploy.
+- Non-allowlisted origins receive **`403 Forbidden`** with body `{"error":"Origin not allowed"}`. Missing `Origin` header (e.g. from `curl`) is allowed — CORS is a browser-side mechanism and non-browser callers wouldn't honour the response headers anyway.
+- CORS preflight (`OPTIONS`) returns 204 with the matched origin echoed in `Access-Control-Allow-Origin`; never `*`. See §5.9 for full CORS rules.
 
-### 4.5 Session token authentication
+### 4.5 Authentication model: origin allowlist + 127.0.0.1 only
 
-- On daemon startup, generate a random session token: 256 bits, base64-encoded, regenerated on every restart.
-- Embed the token in the served `index.html` via a `<meta name="bsky-saves-token" content="...">` tag injected at serve time. The GUI reads this on boot.
-- Every `/api/*` request must present `Authorization: Bearer <token>` matching the current session token.
-- Missing or mismatched token returns **`401 Unauthorized`**.
-- Static asset routes (`/`, `/assets/*`, `/manifest.webmanifest`, etc.) do **not** require the token. Only `/api/*` does.
+**No per-request authentication.** No session tokens, no `Authorization` headers, no shared secrets. The daemon trusts any browser-context request whose `Host` and `Origin` headers satisfy §4.3 and §4.4.
+
+This is intentional. Rationale, from the `serve` requirements doc: *"The origin allowlist + 127.0.0.1 binding is the auth layer. Don't add a shared-secret system; the user has nowhere to copy a secret to."*
+
+> **Reconciliation note.** The workstream doc (`bsky-saves-gui-dist-workstream.md` §4 item 11) proposed a session token embedded in `index.html` via `<meta name="bsky-saves-token">` and required on every request. The `serve` requirements doc rejects this design as user-hostile and unnecessary given the localhost-only bind. This spec follows the `serve` requirements. If the destructive-endpoint roadmap (§4.7) is brought forward, the auth question may need to be reopened — at that point, daemon-issued out-of-band confirmation (terminal prompt, system tray) is the favoured pattern over an in-browser token.
 
 ### 4.6 Security headers on the served GUI
 
-Send the following headers on every response (HTML and assets):
+When `--gui` is mounting the bundled GUI, send the following headers on every static-file response (HTML, JS, CSS, manifest, icons):
 
 ```
 X-Frame-Options: DENY
@@ -150,51 +156,321 @@ Cross-Origin-Opener-Policy: same-origin
 ```
 
 Notes:
-- The CSP matches what the GUI sets via `<meta>` already, with `frame-ancestors 'none'` added — that directive can only be set via header, not meta, and is the one gap when the GUI is hosted on GitHub Pages. Closing that gap is one of the wins of the daemon-served path.
-- `'wasm-unsafe-eval'` is required because Pyodide compiles WASM. Don't tighten this — it'll break image backup.
-- `connect-src https:` is required so the GUI can reach arbitrary Bluesky PDS hosts (federated). `connect-src 'self'` is too tight.
+
+- The CSP largely matches what the GUI sets via `<meta>` already (in `index.html`), with `frame-ancestors 'none'` added. That directive can only be set via header, not meta, and is one of the wins of the daemon-served path over the GitHub-Pages-hosted path.
+- `'wasm-unsafe-eval'` is required because Pyodide compiles WebAssembly. Don't tighten this — it'll break image backup when the GUI falls back to Pyodide.
+- `connect-src https:` is required so the GUI can reach arbitrary Bluesky PDS hosts (Bluesky is federated). `connect-src 'self'` is too tight.
+
+The API endpoints (§5) do not need these headers — they return JSON, not HTML — but applying the same set uniformly is acceptable.
 
 ### 4.7 Security rationale
 
 These rules mitigate three concrete attacks:
 
-- **DNS rebinding.** A user visits `evil.com`. The page's JS waits; DNS for `evil.com` re-resolves to `127.0.0.1`; same-origin policy now lets `evil.com` script the daemon. Defences: localhost-only bind (the attacker can't reach the helper from another host), Host-header validation (rebound request has `Host: evil.com`, gets `421`), Origin-allowlist (rebound request has `Origin: https://evil.com`, gets `403`), session token (the attacker doesn't have it).
-- **Compromised hosted PWA driving every helper.** If `saves.lightseed.net` is XSS'd or its dependency tree is compromised, the attacker has scripted access to the GUI's origin. The Origin allowlist *does* admit that origin (by design — that's the legitimate hosted GUI), so the defence here is: the helper must not blindly trust the GUI for destructive operations. See §5.3.
-- **Clickjacking of the local-mode GUI.** `X-Frame-Options: DENY` plus `frame-ancestors 'none'` prevents any other origin from embedding the local GUI in an iframe.
+- **DNS rebinding.** A user visits `evil.com`. The page's JS waits; DNS for `evil.com` re-resolves to `127.0.0.1`; same-origin policy now lets `evil.com` script the daemon. Defences: localhost-only bind (the attacker can't reach the daemon from another host), Host-header validation (rebound request has `Host: evil.com`, gets `421`), Origin allowlist (rebound request has `Origin: https://evil.com`, gets `403`).
+- **Compromised hosted PWA driving every helper.** If `saves.lightseed.net` is XSS'd or its dependency tree is compromised, the attacker has scripted access to the GUI's origin. The Origin allowlist *does* admit that origin (by design — that's the legitimate hosted GUI), so the defence here is **the daemon's read-only API surface**. The current endpoints (`/ping`, `/fetch-image`, `/extract-article`, `/fetch`, `/enrich`, `/hydrate-threads`) are all read-only: they fetch data from upstream and return it. None mutate user state on the server side. A compromised hosted GUI calling `/fetch` against your daemon learns nothing it couldn't learn by asking you for your bookmarks directly. **If destructive endpoints (`/saves/delete`, `/run` with side effects, etc.) are added later, they MUST require an out-of-band user confirmation** (terminal prompt, system tray pop-up, or similar) — not just trust the GUI to ask. Until then, the read-only-surface property carries the load.
+- **Clickjacking of the local-mode GUI.** `X-Frame-Options: DENY` plus `frame-ancestors 'none'` prevents any other origin from embedding the local GUI in an iframe and tricking the user into clicking through a transparent overlay.
 
 ---
 
-## 5. API endpoint contract
+## 5. HTTP API endpoint contract
 
-The GUI talks to the daemon at the bound origin (e.g. `http://127.0.0.1:47826`). All endpoints listed below; only the version + health endpoints skip auth.
+The daemon exposes six endpoints. All paths are flat (no `/api/` prefix). All responses are JSON except where noted.
 
-### 5.1 `GET /api/version`
+> **Reconciliation note.** The workstream doc proposed an `/api/` prefix, `/api/version`, `/api/health`, and a `/api/v1/...` versioning scheme. The shipping design (per the `serve` requirements docs) uses flat paths and folds health + version + capability into a single `/ping` endpoint. This spec follows the shipping design.
 
-No auth required. Returns 200 with:
+### 5.1 `GET /ping`
+
+Health check, version reporting, and capability advertisement, combined. The GUI calls this on startup to detect a running helper and to feature-flag its routing.
+
+**No origin check required** (the GUI needs to call this before knowing whether the helper is up).
+
+**Response** (200, `application/json`):
 
 ```json
 {
-  "helper": "0.4.3",
-  "protocol": "1",
-  "gui_bundled": "0.5.0"
+  "name": "bsky-saves",
+  "version": "0.4.1",
+  "features": ["fetch-image", "extract-article", "fetch", "enrich", "hydrate-threads", "jwt-credentials"]
 }
 ```
 
-- `helper`: the `bsky-saves` package version (semver string).
-- `protocol`: the API protocol version. Increment when adding endpoints or changing existing shapes. The GUI's `MIN_HELPER_VERSION` constant uses this to decide whether to proceed or render `OutdatedHelperBanner`.
-- `gui_bundled`: the `GUI_VERSION` value the wheel was built against.
+- `name` — exactly `"bsky-saves"`. The GUI's `probeHelper()` requires this exact string to consider the daemon detected.
+- `version` — matches `bsky_saves.__version__` (semver).
+- `features` — strings naming the operations the daemon supports. The GUI feature-detects per-endpoint:
+  - `"fetch-image"` — `/fetch-image` works.
+  - `"extract-article"` — `/extract-article` works.
+  - `"fetch"` — `/fetch` works (added in `bsky-saves` 0.4.0).
+  - `"enrich"` — `/enrich` works (added in 0.4.0).
+  - `"hydrate-threads"` — `/hydrate-threads` works (added in 0.4.0).
+  - `"jwt-credentials"` — `/fetch` and `/hydrate-threads` accept the JWT-pair credential shape (added in 0.4.1).
+  - Unknown future features are silently tolerated by the GUI.
 
-### 5.2 `GET /api/health`
+### 5.2 `POST /fetch-image`
 
-No auth required. Returns `200 OK` with empty body. Used by `probeHelper()` for liveness.
+Fetch a single image URL on behalf of the GUI and stream the bytes back.
 
-### 5.3 All other endpoints
+**Request body** (`application/json`):
 
-- Require the session token (§4.5) and the Origin allowlist check (§4.4).
-- Destructive operations (bulk delete, export-to-disk, credential rotation if added later) **must require an additional confirmation that the user took an explicit local action** — not just a POST from the GUI. This is the second-layer defence against a compromised hosted GUI: even if `saves.lightseed.net` is XSS'd or supply-chain-attacked, a POST to `/api/saves/delete-all` from that origin shouldn't be enough; the user has to click "yes" in a daemon-issued confirmation (terminal prompt, system tray, or similar). The hosted GUI is a legitimate caller for *reading* the helper's state, but not for *destroying* it without local consent.
-- Versioned endpoint paths (`/api/v1/...`). Endpoints introduced in a newer protocol version return `426 Upgrade Required` when called against an older daemon that doesn't implement them.
+```json
+{ "url": "https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:.../bafkrei..." }
+```
 
-The GUI's actual endpoint usage (the set you must implement to make the existing GUI work) is enumerated in the `bsky-saves-serve-distribution-requirements.md` doc. This spec only covers the contract-level shape; the per-endpoint specs live there.
+**URL allowlist (hardcoded).** Only `https://cdn.bsky.app/...` and `https://*.bsky.app/...` are permitted. Any other URL returns `400 {"error":"url not allowed"}`. Not configurable. Rationale: the daemon is reachable from any local browser tab; the URL allowlist is the only thing stopping a malicious page from using it as an open image proxy for arbitrary destinations.
+
+**Response** (200, `image/*`): the upstream image bytes. `Content-Type` echoes the upstream response (e.g. `image/jpeg`, `image/png`). `Content-Length` set if known.
+
+**On upstream failure**: the upstream status code is propagated. Body: `{"error":"upstream <code>"}`. Network errors → 502.
+
+**Timeout**: 30 seconds per image, hard cap.
+
+### 5.3 `POST /extract-article`
+
+Fetch an article URL and run `trafilatura`-based extraction. Returns extracted text + metadata.
+
+**Request body** (`application/json`):
+
+```json
+{ "url": "https://example.com/some-article" }
+```
+
+**URL allowlist**: any `http://` or `https://` URL. Articles are user-saved Bluesky-linked URLs; the URL space is the open web by definition. The Origin allowlist (§4.4), not a URL allowlist, is the protective layer here.
+
+**Response** (200, `application/json`):
+
+```json
+{
+  "url": "https://example.com/some-article",
+  "title": "Article title",
+  "text": "Extracted body text…",
+  "fetched_at": "2026-05-03T12:34:56Z"
+}
+```
+
+If extraction succeeds but no body text is found (paywall, JS-rendered, login wall): 200 with `text: ""` and a `note: "no extractable body"` field. The GUI treats this as "fetched but empty," not an error.
+
+If the upstream fetch fails: upstream status (or 502 on network error), body `{"error":"<message>"}`.
+
+**Timeout**: 60 seconds.
+
+### 5.4 `POST /fetch`
+
+Enumerate the signed-in user's bookmarked posts. Added in `bsky-saves` 0.4.0.
+
+**Request body** (`application/json`):
+
+Two accepted credential shapes, detected by which fields are present.
+
+App-password shape (0.4.0+):
+
+```json
+{
+  "credentials": {
+    "handle": "alice.bsky.social",
+    "app_password": "xxxx-xxxx-xxxx-xxxx",
+    "pds": "https://bsky.social"
+  },
+  "cursor": null,
+  "limit": 100
+}
+```
+
+JWT-pair shape (0.4.1+, for clients that already hold a session):
+
+```json
+{
+  "credentials": {
+    "access_jwt": "...",
+    "refresh_jwt": "...",
+    "did": "did:plc:...",
+    "pds": "https://bsky.social"
+  },
+  "cursor": null,
+  "limit": 100
+}
+```
+
+- `pds` is optional and defaults to `https://bsky.social`.
+- `cursor` is opaque, optional, omit / `null` for the first page.
+- `limit` is optional, default 100, max 100.
+- If neither `app_password` nor `access_jwt` is present: `400 {"error":"missing credentials"}`.
+
+**Response** (200, `application/json`):
+
+```json
+{
+  "saves": [
+    {
+      "uri": "at://did:plc:.../app.bsky.feed.post/...",
+      "saved_at": "2026-05-05T20:41:52.913Z",
+      "author": {
+        "did": "did:plc:...",
+        "handle": "alice.bsky.social",
+        "display_name": "Alice"
+      },
+      "post_text": "Hello world",
+      "embed": null,
+      "images": [
+        { "kind": "image", "url": "https://...", "thumb": "https://...", "alt": "..." }
+      ],
+      "quoted_post": null
+    }
+  ],
+  "cursor": "opaque-string-or-null"
+}
+```
+
+Field notes:
+
+- `embed` is normalised: `null` if absent; `{type, url, title, description}` for external link embeds. Quoted-post and image embeds are folded into `quoted_post` / `images` respectively.
+- `images`: `[]` if none; otherwise an array of `{kind, url, thumb, alt}`. `kind` is `"image"` for native attachments and `"embed_thumb"` for external-link thumbnails.
+- `quoted_post`: `null` or a nested record with the same snake_case shape (`{uri, cid, author, text, created_at, images, thread_replies}`).
+- `post_created_at` is **not** populated here — added by `/enrich`.
+- `thread_replies` / `thread_schema_version` / `thread_fetched_at` are **not** populated here — added by `/hydrate-threads`.
+- `cursor` is an opaque pagination token; `null` when there are no more pages. The GUI **MUST** treat it as fully opaque and round-trip it byte-for-byte.
+
+**Rotated credentials** (JWT-pair path only): when the daemon refreshes a session mid-request (because `access_jwt` expired), the response includes:
+
+```json
+{
+  "rotated_credentials": {
+    "access_jwt": "<new>",
+    "refresh_jwt": "<new>",
+    "did": "did:plc:..."
+  }
+}
+```
+
+When present, the GUI **MUST** persist the new pair synchronously before issuing the next request — AT Protocol invalidates the old `refresh_jwt` once it's been used to mint a new one, so async persistence risks losing the rotation. Absent on responses that didn't trigger a refresh, and never present under the app-password path.
+
+**GUI-side obligations** (JWT-pair path):
+
+- Persist `rotated_credentials` synchronously.
+- Serialise `/fetch` calls per session — two concurrent calls can both trigger refresh; one will lose the race and fail.
+
+**Errors**:
+
+- `400 {"error":"missing credentials"}`
+- `400 {"error":"invalid cursor"}` — cursor decode failure; GUI retries with `cursor: null`.
+- `401 {"error":"createSession failed: <message>"}` — app-password path, bad credentials.
+- `401 {"error":"auth refresh failed", "code":"refresh_failed"|"upstream_rejected_after_refresh"}` — JWT-pair path, expired session can't be recovered. The `code` field is informational; GUI treats both values identically (re-prompt for app password).
+- `5xx {"error":"..."}`
+
+**Timeout**: 30 seconds per page.
+
+**Cursor encoding** (daemon-internal; GUI must NOT inspect): the cursor is `urlsafe-base64(JSON({v, endpoint, upstream}))` so the daemon stays stateless across paginated calls while remembering which bookmark-endpoint probe succeeded. Credentials are NEVER encoded in the cursor — cursors can land in logs or diagnostic surfaces; auth never leaves the request body.
+
+### 5.5 `POST /enrich`
+
+Decode `post_created_at` from each URI's record-key TID. Pure offline operation — no network, no auth. Added in `bsky-saves` 0.4.0.
+
+**Request body** (`application/json`):
+
+```json
+{ "uris": ["at://did:plc:.../app.bsky.feed.post/...", "..."] }
+```
+
+No `credentials` field. Enrich is offline-only.
+
+**Response** (200, `application/json`):
+
+```json
+{
+  "enriched": [
+    { "uri": "at://did:plc:.../app.bsky.feed.post/...", "post_created_at": "2026-05-05T16:28:04Z" }
+  ],
+  "errors": [
+    { "uri": "at://...", "reason": "invalid at-uri" }
+  ]
+}
+```
+
+- `enriched` is a sparse delta: only the fields enrichment populates. The GUI merges these into the existing save records by `uri`.
+- Today, exactly one field: `post_created_at`. Most of what users might think of as "enrichment" (display name, embeds, images) is already populated by `/fetch`.
+- Malformed at-URIs go into `errors`, not the top-level error.
+
+**Errors**:
+
+- `400 {"error":"missing uris"}`
+- `5xx {"error":"..."}`
+
+**Timeout**: sub-second. Pure string parsing.
+
+### 5.6 `POST /hydrate-threads`
+
+For each given URI, walk the reply tree to collect same-author follow-up replies (the "self-thread" pattern). Added in `bsky-saves` 0.4.0.
+
+**Request body** (`application/json`): same two credential shapes as `/fetch` (app-password or JWT-pair), plus `uris`:
+
+```json
+{
+  "uris": ["at://...", "..."],
+  "credentials": {
+    "handle": "alice.bsky.social",
+    "app_password": "xxxx-xxxx-xxxx-xxxx",
+    "pds": "https://bsky.social"
+  }
+}
+```
+
+**Credential use**: under the app-password path, the daemon validates with `createSession`, then discards the JWT and reads threads anonymously from the public AppView (`public.api.bsky.app`). Under the JWT-pair path, the daemon does not use the JWT at all — the endpoint's upstream calls are all anonymous. Credentials function as a gate, not as authentication for the upstream call.
+
+**Response** (200, `application/json`):
+
+```json
+{
+  "threaded": [
+    {
+      "uri": "at://...",
+      "thread_replies": [
+        {
+          "uri": "at://...",
+          "text": "...",
+          "indexedAt": "2026-05-05T...Z",
+          "images": [],
+          "created_at": "2026-05-05T...Z"
+        }
+      ],
+      "thread_schema_version": 4,
+      "thread_fetched_at": "2026-05-06T...Z"
+    }
+  ],
+  "errors": [
+    { "uri": "at://...", "reason": "thread fetch failed" }
+  ]
+}
+```
+
+- `thread_schema_version` reflects the version the daemon used. Current value: `4` (after the 0.3.1 fix that scoped same-author traversal to unbroken chains).
+- `rotated_credentials` never appears on this endpoint — no upstream call that could trigger refresh.
+
+**Errors**: same shape as `/enrich`.
+
+**Timeout**: 300 seconds. Thread walks can fan out across hundreds of `getPostThread` calls.
+
+**Batching**: callers SHOULD batch as many URIs per request as they have on hand (up to a few hundred). The daemon performs one `createSession` per request under the app-password path, and Bluesky rate-limits `createSession` aggressively, so chatty calling patterns can hit per-account limits.
+
+### 5.7 CORS
+
+Applies to every endpoint:
+
+- `Access-Control-Allow-Origin` echoes the request's `Origin` header **if and only if** that origin is in the allowlist (§4.4). Otherwise the header is omitted (browser fails closed).
+- `Access-Control-Allow-Methods: GET, POST, OPTIONS`
+- `Access-Control-Allow-Headers: Content-Type`
+- Preflight `OPTIONS` returns 204 with the same headers and no body.
+- `Access-Control-Max-Age: 600`
+
+### 5.8 Reserved paths
+
+- Unknown API paths (anything that looks like a documented endpoint but isn't one) return `404 {"error":"not found"}`.
+- The daemon must not serve files from outside `_gui/` (when under `--gui`) and must not expose any debugging surface (`/__debug__`, `/api`, `/console`, etc.).
+- SPA fallback (§4.1) only applies to paths that don't collide with any documented API endpoint.
+
+### 5.9 Capability versioning
+
+- The `/ping` `version` field is the public compatibility marker; the GUI's `MIN_HELPER_VERSION` constant (currently in `app/src/lib/min-helper-version.ts`) is the floor below which the GUI shows `OutdatedHelperBanner` and refuses to enter local mode.
+- New endpoints land as additions to `features`. The GUI feature-detects per-capability rather than version-gating wholesale, so an old GUI talking to a new daemon works for the subset it knows about.
+- Removing or renaming endpoints is a breaking change and must bump the `bsky-saves` major version.
 
 ---
 
@@ -202,11 +478,11 @@ The GUI's actual endpoint usage (the set you must implement to make the existing
 
 ### 6.1 Changelog
 
-- Each wheel release's changelog notes the bundled `GUI_VERSION`. A bump to `GUI_VERSION` without a corresponding wheel release is fine; the next wheel release picks it up automatically.
+Each wheel release's changelog notes the bundled `GUI_VERSION`. A bump to `GUI_VERSION` without a corresponding wheel release is fine; the next wheel release picks it up automatically.
 
 ### 6.2 PyPI publishing
 
-- Use PyPI Trusted Publishers (OIDC), not long-lived API tokens.
+Use PyPI Trusted Publishers (OIDC), not long-lived API tokens.
 
 ### 6.3 Pre-release smoke test in CI
 
@@ -214,11 +490,12 @@ Run before publishing. Steps:
 
 1. Build the wheel (which runs the fetch hook from §3.2).
 2. Install the wheel in a fresh venv.
-3. Start `bsky-saves serve --gui` on a non-default port (avoid colliding with anyone's local daemon).
-4. `curl http://127.0.0.1:<port>/` returns the bundled `index.html` (`grep -q '<meta name="bsky-saves-token"'`).
-5. `curl http://127.0.0.1:<port>/api/version` returns valid JSON with the expected three fields.
-6. `curl http://127.0.0.1:<port>/api/health` returns 200.
-7. Shut down the daemon.
+3. Start `bsky-saves serve --gui --port 0` (or another ephemeral port) in the background.
+4. `curl -fsS http://127.0.0.1:<port>/` → returns the bundled `index.html` (`grep -q '<title>'`).
+5. `curl -fsS http://127.0.0.1:<port>/ping` → returns JSON with `name == "bsky-saves"` and a non-empty `features` array.
+6. `curl -fsS http://127.0.0.1:<port>/assets/<first-hashed-asset>` → returns 200.
+7. `curl -fsS -X POST http://127.0.0.1:<port>/fetch-image -H 'Content-Type: application/json' -d '{"url":"https://evil.com/x.png"}'` → returns `400 {"error":"url not allowed"}`.
+8. Shut down the daemon.
 
 Failure of any step blocks the release.
 
@@ -226,11 +503,15 @@ Failure of any step blocks the release.
 
 ## 7. Non-goals for MVP
 
-- **Auto-update.** The wheel does not self-update. Users `pipx upgrade bsky-saves`.
-- **Mutual TLS or hardware-attested pairing** between hosted PWA and helper. Session token over HTTP-on-localhost is sufficient for MVP; pairing UX can iterate later.
-- **Tier 2/3 installers** (frozen binaries, OS-native installers). Once the wheel reliably ships with a vendored GUI, that's a separate workstream in `bsky-saves-installers`.
-- **Sigstore/cosign signing of the GUI tarball.** Stretch goal once basic SHA-256 pinning is in place.
-- **Anything not listed above.** Keep MVP small.
+- **Authenticated endpoints** (sessions, JWT outside the AT Protocol credential shape, shared secrets). The daemon is unauthenticated within its origin allowlist; see §4.5.
+- **Auto-update of the wheel.** Users `pipx upgrade bsky-saves`.
+- **Mutual TLS or hardware-attested pairing** between the hosted PWA and the local daemon. Origin allowlist on HTTP-on-localhost is sufficient for MVP.
+- **Tier 2/3 installers** (frozen binaries, OS-native installers). Once the wheel reliably ships with a vendored GUI, that's a separate workstream.
+- **Sigstore/cosign signing of the GUI tarball.** Stretch goal once SHA-256 pinning is in place.
+- **Configurable URL allowlist for `/fetch-image`.** Hardcoded to bsky.app domains.
+- **Streaming responses** (SSE, chunked JSON). Single request / single response in v1.
+- **System tray / autostart integration.** CLI command only.
+- **`POST /run`** (the v1-spec's Phase 2 one-shot endpoint). Planned, but out of scope here.
 
 ---
 
@@ -238,13 +519,13 @@ Failure of any step blocks the release.
 
 The GUI team considers this work done when all of the following hold against the next published wheel:
 
-1. `pip install bsky-saves` followed by `bsky-saves serve --gui` mounts the GUI at `http://127.0.0.1:<port>/`.
-2. The page renders, the manifest validates, and `GET /api/version` returns the expected shape.
-3. The GUI's `probeHelper()` resolves on the served origin (i.e. the helper appears in `detectBackends()`).
-4. `OutdatedHelperBanner` does **not** render against the current wheel — i.e. the wheel's `protocol` value is `>= MIN_HELPER_VERSION` in the GUI.
-5. A cross-origin request from `evil.com` to `http://127.0.0.1:<port>/api/version` is blocked (Origin check or CORS preflight rejection).
-6. A request with `Host: evil.com` (DNS rebinding sim) returns `421`.
-7. A request to `/api/...` without the session token returns `401`.
+1. `pip install bsky-saves` followed by `bsky-saves serve --gui` mounts the GUI at `http://127.0.0.1:47826/`.
+2. The page renders, the manifest validates, and `GET /ping` returns `{name: "bsky-saves", version: "<X.Y.Z>", features: [...]}` with at least `["fetch-image", "extract-article"]` in `features`.
+3. The GUI's `probeHelper()` resolves on the served origin (i.e. the helper appears in the GUI's `detectBackends()` output).
+4. `OutdatedHelperBanner` does **not** render against the current wheel — i.e. the wheel's `version` is `>= MIN_HELPER_VERSION` in the GUI.
+5. A cross-origin request from `evil.com` to `http://127.0.0.1:47826/fetch-image` is blocked (Origin check returns `403` or CORS preflight rejects the actual request).
+6. A request with `Host: evil.com` (DNS-rebinding simulation) returns `421`.
+7. `POST /fetch-image` with `{"url":"https://evil.com/x.png"}` returns `400 {"error":"url not allowed"}`.
 8. Build-hook CI failure on a deliberately corrupted `dist.tar.gz.sha256` pin.
 
 When these eight pass, the GUI team can wire up the deferred runtime-smoke and version-coordination gates in the GUI's release workflow against the real wheel (currently stubbed pending this work).
@@ -254,23 +535,26 @@ When these eight pass, the GUI team can wire up the deferred runtime-smoke and v
 ## 9. Glossary
 
 - **GUI bundle / `dist.tar.gz`** — the static Svelte build attached to each `bsky-saves-gui` release. ~270 KB.
-- **Helper / daemon** — `bsky-saves serve`. Long-running localhost process.
+- **Daemon / helper / `bsky-saves serve`** — long-running localhost Python process exposing the HTTP API; with `--gui`, also mounts the GUI bundle.
 - **`saves.lightseed.net`** — the operator's hosted PWA deploy. Same bundle as the wheel ships.
-- **Session token** — random 256-bit value, regenerated per daemon start, embedded in `index.html`, required on all `/api/*` calls.
-- **Protocol version** — coarse-grained integer carried in `/api/version`. Increment on contract-breaking changes.
 - **`GUI_VERSION`** — the tag of `bsky-saves-gui` the current wheel is built against. Pinned in `bsky-saves`'s source.
-- **`MIN_HELPER_VERSION`** — the minimum protocol the GUI requires to enter local mode. Defined in `bsky-saves-gui/app/src/lib/min-helper-version.ts`.
-- **Capability resolution** — runtime probing; the same JS bundle behaves correctly with or without a helper present.
+- **`MIN_HELPER_VERSION`** — the minimum daemon version the GUI requires to enter local mode. Defined in `bsky-saves-gui/app/src/lib/min-helper-version.ts`.
+- **Capability resolution** — runtime probing via `/ping`'s `features` array; the same JS bundle behaves correctly with or without a daemon present and with whatever subset of features the daemon advertises.
+- **Origin allowlist** — the set of HTTP `Origin` headers the daemon will accept on API routes. The full auth layer.
+- **App-password path** — credentials shape `{handle, app_password, pds?}`; daemon does its own `createSession`.
+- **JWT-pair path** — credentials shape `{access_jwt, refresh_jwt, did, pds?}`; daemon reuses an existing session and may rotate it.
+- **Rotated credentials** — new JWT pair the daemon returns when it refreshes a session mid-request. MUST be persisted synchronously by the GUI.
 
 ---
 
 ## 10. Cross-references
 
-If you want more context than this doc provides, the following exist in `bsky-saves-gui`:
+The following GUI-repo docs informed this spec; share them alongside if the bsky-saves team wants the underlying source material:
 
-- `docs/bsky-saves-gui-dist-workstream.md` — the GUI-side multi-repo workstream doc. Includes the GUI's release-gate test list (the smoke tests the GUI runs before producing `dist.tar.gz`) and the full threat catalogue behind requirements in this spec. This MVP spec is Section 4 of that doc, restated standalone.
-- `docs/bsky-saves-serve-distribution-requirements.md` — the broader vision for `bsky-saves serve` (capability probes, error responses, installer story). Source-of-truth for per-endpoint API shapes when you get to them.
-- `app/src/lib/helper-client.ts` — the GUI's helper-probing code. Read this to see what the GUI actually expects from `/api/version` and `/api/health`.
-- `app/src/lib/min-helper-version.ts` — the current minimum protocol version the GUI accepts.
+- `docs/bsky-saves-gui-dist-workstream.md` — multi-repo workstream doc. Section 4 is the origin of the GUI-vendoring + `--gui`-serving requirements (§3, §4 here). The doc's threat catalogue (R1–R7) informs the security rationale here; only R1, R2, and R3 directly drove requirements in this spec.
+- `docs/bsky-saves-serve-requirements.md` — v1 `serve` API. Inlined into §5.1–§5.3 (`/ping`, `/fetch-image`, `/extract-article`) and §5.7 (CORS). Authoritative for any disputed detail in those endpoints.
+- `docs/bsky-saves-serve-fetch-enrich-threads-requirements.md` — v0.4 expansion. Inlined into §5.4–§5.6 (`/fetch`, `/enrich`, `/hydrate-threads`). Authoritative for cursor encoding, credential paths, rotated-credentials semantics, and capability advertisement.
+- `app/src/lib/helper-client.ts` — the GUI-side client for the HTTP API. Read this to see exactly what the GUI sends and expects.
+- `app/src/lib/min-helper-version.ts` — the current minimum daemon version the GUI accepts.
 
-If anything in this spec contradicts those source files, the source files are authoritative — file a GUI-side issue and the workstream doc gets updated.
+**If anything in this spec contradicts the source docs above, the source docs are authoritative — file a GUI-side issue and this spec gets updated.**
