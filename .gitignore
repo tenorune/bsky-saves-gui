@@ -12,3 +12,9 @@ __pycache__/
 *.egg-info/
 helper/dist/
 .venv/
+
+# Playwright (e2e)
+/playwright-report/
+/test-results/
+/blob-report/
+/playwright/.cache/
