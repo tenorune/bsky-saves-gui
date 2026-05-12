@@ -129,7 +129,10 @@
 </script>
 
 <div class="app">
-  <header class="app-header">
+  <header
+    class="app-header"
+    class:app-header--account-open={accountMenuOpen && $inventoryPresent}
+  >
     <button
       type="button"
       class="app-header__title"
@@ -271,6 +274,22 @@
     justify-content: flex-end;
     gap: 0.5rem 1rem;
     padding: 1rem 0.875rem;
+    /* A thin underline sits below the topnav whenever the account row
+       is closed (so there's a visible separator between header and
+       page content). When the row opens, the underline disappears at
+       the start of the slide-down so the @ button's tinted box can
+       merge seamlessly with the row. When the row closes, the
+       underline reappears at the END of the slide-up — the
+       border-bottom-color transition has 0ms duration but a 180ms
+       delay, matching the slide animation. The override below
+       (.app-header--account-open) sets the same transition with no
+       delay so opening is instant. */
+    border-bottom: 1px solid color-mix(in oklab, CanvasText 15%, transparent);
+    transition: border-bottom-color 0ms 180ms;
+  }
+  .app-header--account-open {
+    border-bottom-color: transparent;
+    transition: border-bottom-color 0ms 0ms;
   }
   /* Chained selector (.app-header__navlink.app-header__account-toggle)
      so these rules win the cascade against .app-header__navlink, which
@@ -440,7 +459,9 @@
     text-decoration: none;
   }
   .app-footer {
-    padding: 1rem 1.5rem;
+    /* Same 0.875rem horizontal as .app-header so the footer's left
+       and right edges line up with the topnav columns. */
+    padding: 1rem 0.875rem;
     border-top: 1px solid color-mix(in oklab, CanvasText 15%, transparent);
     font-size: 0.875rem;
     opacity: 0.85;
