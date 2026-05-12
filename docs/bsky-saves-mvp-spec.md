@@ -98,7 +98,7 @@ The pinned SHA-256 mitigates the risk of tarball tampering between GUI release a
 
 ## 4. Daemon behaviour requirements
 
-These apply to `bsky-saves serve` (or `bsky-saves serve --gui` if you prefer gating GUI-serving behind a flag — both are acceptable; default-on is friendlier).
+These apply to `bsky-saves serve --gui`. The `--gui` flag is required to enable GUI-serving — `bsky-saves serve` without it must continue to behave as it does today (no static-file mount, no `index.html` token injection), so users who only want the API surface aren't forced to consume the bundled GUI.
 
 ### 4.1 Static file serving
 
@@ -158,9 +158,9 @@ Notes:
 
 These rules mitigate three concrete attacks:
 
-- **DNS rebinding** (R3 in the workstream doc). A user visits `evil.com`. The page's JS waits; DNS for `evil.com` re-resolves to `127.0.0.1`; same-origin policy now lets `evil.com` script the daemon. Defences: localhost-only bind (the attacker can't reach the helper from another host), Host-header validation (rebound request has `Host: evil.com`, gets `421`), Origin-allowlist (rebound request has `Origin: https://evil.com`, gets `403`), session token (the attacker doesn't have it).
-- **Compromised hosted PWA driving every helper** (R2). If `saves.lightseed.net` is XSS'd, the attacker has scripted access to the GUI's origin. The Origin allowlist *does* admit that origin (by design — that's the legitimate hosted GUI), so the defence here is: helper must not blindly trust the GUI for destructive operations. See §5.3.
-- **Clickjacking of the local-mode GUI**. `X-Frame-Options: DENY` plus `frame-ancestors 'none'` prevents any other origin from embedding the local GUI in an iframe.
+- **DNS rebinding.** A user visits `evil.com`. The page's JS waits; DNS for `evil.com` re-resolves to `127.0.0.1`; same-origin policy now lets `evil.com` script the daemon. Defences: localhost-only bind (the attacker can't reach the helper from another host), Host-header validation (rebound request has `Host: evil.com`, gets `421`), Origin-allowlist (rebound request has `Origin: https://evil.com`, gets `403`), session token (the attacker doesn't have it).
+- **Compromised hosted PWA driving every helper.** If `saves.lightseed.net` is XSS'd or its dependency tree is compromised, the attacker has scripted access to the GUI's origin. The Origin allowlist *does* admit that origin (by design — that's the legitimate hosted GUI), so the defence here is: the helper must not blindly trust the GUI for destructive operations. See §5.3.
+- **Clickjacking of the local-mode GUI.** `X-Frame-Options: DENY` plus `frame-ancestors 'none'` prevents any other origin from embedding the local GUI in an iframe.
 
 ---
 
@@ -191,7 +191,7 @@ No auth required. Returns `200 OK` with empty body. Used by `probeHelper()` for 
 ### 5.3 All other endpoints
 
 - Require the session token (§4.5) and the Origin allowlist check (§4.4).
-- Destructive operations (bulk delete, export-to-disk, credential rotation if added later) **must require an additional confirmation that the user took an explicit local action** — not just a POST from the GUI. This blunts the R2 attack: even if `saves.lightseed.net` is compromised, a POST to `/api/saves/delete-all` shouldn't be enough; the user has to click "yes" in a daemon-issued confirmation (terminal prompt, system tray, or similar).
+- Destructive operations (bulk delete, export-to-disk, credential rotation if added later) **must require an additional confirmation that the user took an explicit local action** — not just a POST from the GUI. This is the second-layer defence against a compromised hosted GUI: even if `saves.lightseed.net` is XSS'd or supply-chain-attacked, a POST to `/api/saves/delete-all` from that origin shouldn't be enough; the user has to click "yes" in a daemon-issued confirmation (terminal prompt, system tray, or similar). The hosted GUI is a legitimate caller for *reading* the helper's state, but not for *destroying* it without local consent.
 - Versioned endpoint paths (`/api/v1/...`). Endpoints introduced in a newer protocol version return `426 Upgrade Required` when called against an older daemon that doesn't implement them.
 
 The GUI's actual endpoint usage (the set you must implement to make the existing GUI work) is enumerated in the `bsky-saves-serve-distribution-requirements.md` doc. This spec only covers the contract-level shape; the per-endpoint specs live there.
@@ -247,7 +247,7 @@ The GUI team considers this work done when all of the following hold against the
 7. A request to `/api/...` without the session token returns `401`.
 8. Build-hook CI failure on a deliberately corrupted `dist.tar.gz.sha256` pin.
 
-When these eight pass, the GUI team can drop the placeholder S5/S7/S8 jobs in the GUI's release workflow and wire them up against the real wheel.
+When these eight pass, the GUI team can wire up the deferred runtime-smoke and version-coordination gates in the GUI's release workflow against the real wheel (currently stubbed pending this work).
 
 ---
 
@@ -268,7 +268,7 @@ When these eight pass, the GUI team can drop the placeholder S5/S7/S8 jobs in th
 
 If you want more context than this doc provides, the following exist in `bsky-saves-gui`:
 
-- `docs/bsky-saves-gui-dist-workstream.md` — full multi-repo workstream including the GUI-side release gate (S1–S9) and security risk matrix (R1–R7). This spec is Section 4 of that doc, restated.
+- `docs/bsky-saves-gui-dist-workstream.md` — the GUI-side multi-repo workstream doc. Includes the GUI's release-gate test list (the smoke tests the GUI runs before producing `dist.tar.gz`) and the full threat catalogue behind requirements in this spec. This MVP spec is Section 4 of that doc, restated standalone.
 - `docs/bsky-saves-serve-distribution-requirements.md` — the broader vision for `bsky-saves serve` (capability probes, error responses, installer story). Source-of-truth for per-endpoint API shapes when you get to them.
 - `app/src/lib/helper-client.ts` — the GUI's helper-probing code. Read this to see what the GUI actually expects from `/api/version` and `/api/health`.
 - `app/src/lib/min-helper-version.ts` — the current minimum protocol version the GUI accepts.
