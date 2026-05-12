@@ -14,7 +14,7 @@ describe('orchestrateRefresh', () => {
       snapshot: {
         helper: { detected: true, version: '0.4.1', features: ['fetch', 'enrich', 'hydrate-threads', 'jwt-credentials'] },
         fetch: { kind: 'helper' }, enrich: { kind: 'helper' }, threads: { kind: 'helper' },
-        images: { kind: 'helper' }, articles: { kind: 'helper' }, loaded: true,
+        images: { kind: 'helper' }, articles: { kind: 'helper' }, pyodideSource: 'cdn', loaded: true,
       },
       origin: 'http://x',
     }, { fetchHydrator: { start: fetchH }, enrichHydrator: { start: enrichH }, threadHydrator: { start: threadH } });
@@ -32,7 +32,7 @@ describe('orchestrateRefresh', () => {
       snapshot: {
         helper: { detected: true, version: '0.4.1', features: ['fetch', 'enrich', 'hydrate-threads', 'jwt-credentials'] },
         fetch: { kind: 'helper' }, enrich: { kind: 'helper' }, threads: { kind: 'helper' },
-        images: { kind: 'helper' }, articles: { kind: 'helper' }, loaded: true,
+        images: { kind: 'helper' }, articles: { kind: 'helper' }, pyodideSource: 'cdn', loaded: true,
       },
       origin: 'http://x',
     }, { fetchHydrator: { start: fetchH }, enrichHydrator: { start: enrichH }, threadHydrator: { start: threadH } });

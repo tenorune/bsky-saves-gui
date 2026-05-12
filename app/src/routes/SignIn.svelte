@@ -14,6 +14,7 @@
   import { saveAccount } from '$lib/account-store';
   import { clearInventory } from '$lib/inventory-store';
   import { clearImageBlobs } from '$lib/image-store';
+  import DefinitionTerm from '../components/DefinitionTerm.svelte';
   import { clearFailures } from '$lib/failure-store';
   import { slideRoute } from '$lib/slide-transition';
 
@@ -187,7 +188,7 @@
 
 <section class="route route--sign-in" use:slideRoute>
   <p class="intro">
-    {config.appName} exports your Bluesky saved posts as JSON, Markdown, or a
+    <strong>{config.appName}</strong> exports your Bluesky saved posts as JSON, Markdown, or a
     self-contained HTML archive. Everything runs in your browser — your handle,
     app password, and saved data never leave this device.
     <a href="#/privacy" class="intro__more" on:click|preventDefault={() => navigate('/privacy')}>Read more &rsaquo;</a>
@@ -218,11 +219,6 @@
   {/if}
 
   {#if showForm}
-    <p class="help intro-help">
-      Your handle and password go straight to Bluesky. Nothing else gets sent
-      anywhere.
-    </p>
-
     <form on:submit|preventDefault={submit}>
     <label>
       Handle
@@ -237,7 +233,17 @@
     </label>
 
     <label>
-      App password
+      <DefinitionTerm>
+        <span slot="term">App password</span>
+        Don't use your real Bluesky password. Make an
+        <a
+          href="https://bsky.app/settings/app-passwords"
+          target="_blank"
+          rel="noopener noreferrer"
+        >app password</a>
+        in Bluesky's settings — it's a temporary password just for tools like
+        this one, and you can revoke it anytime.
+      </DefinitionTerm>
       <input
         type="password"
         autocomplete="current-password"
@@ -247,29 +253,19 @@
         required
       />
     </label>
-    <p class="help">
-      Don't use your real Bluesky password. Make an
-      <a
-        href="https://bsky.app/settings/app-passwords"
-        target="_blank"
-        rel="noopener noreferrer"
-      >app password</a>
-      in Bluesky's settings — it's a temporary password just for tools like
-      this one, and you can revoke it anytime.
-    </p>
 
     <details class="advanced-toggle">
       <summary>Advanced</summary>
 
       <div class="card advanced">
         <label class="card__field">
-          Server address
+          <DefinitionTerm>
+            <span slot="term">Server address</span>
+            Where your Bluesky account lives. The default works for most people;
+            only change this if you know your account is on a different server.
+          </DefinitionTerm>
           <input type="url" bind:value={pds} />
         </label>
-        <p class="help">
-          Where your Bluesky account lives. The default works for most people;
-          only change this if you know your account is on a different server.
-        </p>
 
         <label class="checkbox">
           <input
@@ -277,21 +273,13 @@
             checked={$assetToggles.threads}
             on:change={(e) => setAssetToggle('threads', e.currentTarget.checked)}
           />
-          <span>Include same-author replies</span>
+          <span>Include threads</span>
         </label>
-        <p class="help">
-          When a saved post is part of a longer thread by the same person, also
-          save the rest of the thread.
-        </p>
 
         <label class="checkbox">
           <input type="checkbox" bind:checked={saveInventory} />
-          <span>Keep my saved posts in this browser</span>
+          <span>Keep my saved posts on this device</span>
         </label>
-        <p class="help">
-          Come back later to read or refresh without downloading everything
-          again.
-        </p>
 
         <label class="checkbox">
           <input type="checkbox" bind:checked={saveCredentials} />
@@ -299,14 +287,14 @@
         </label>
         {#if saveCredentials}
           <label class="card__field">
-            Passphrase
+            <DefinitionTerm>
+              <span slot="term">Passphrase</span>
+              Your app password gets locked with this passphrase and stored only
+              in this browser. If you forget the passphrase, you'll just need to
+              type your app password again next time.
+            </DefinitionTerm>
             <input type="password" bind:value={passphrase} minlength="8" />
           </label>
-          <p class="help">
-            Your app password gets locked with this passphrase and stored only
-            in this browser. If you forget the passphrase, you'll just need to
-            type your app password again next time.
-          </p>
         {/if}
       </div>
     </details>
@@ -331,16 +319,16 @@
     margin: 0 0 1.5rem;
   }
   .intro__more {
-    margin-left: 0.25rem;
+    /* No margin-left: rely on the natural inter-word space inside the
+       paragraph. With a margin, a wrapped "Read more ›" would land at
+       0.25rem inset from the line start instead of flush-left, which
+       reads as a stray indent. */
     white-space: nowrap;
   }
   .help {
     font-size: 0.875rem;
     opacity: 0.8;
     margin: 0;
-  }
-  .help.intro-help {
-    margin-bottom: 2rem;
   }
   .card {
     border: 1px solid color-mix(in oklab, CanvasText 15%, transparent);
@@ -358,6 +346,12 @@
     flex-direction: column;
     gap: 0.25rem;
     margin-top: 0.25rem;
+  }
+  /* Don't double up the card's top padding with this field's margin-top
+     when the field is the first child — keeps the visible top space
+     equal to the card's bottom padding (1.25rem). */
+  .card > .card__field:first-child {
+    margin-top: 0;
   }
   .card__action {
     align-self: flex-start;

@@ -157,32 +157,32 @@
 <section class="route route--library" use:slideFromRight>
   <div class="library-hub">
     <header class="route__header">
-      <div class="route__title-block">
+      <div class="route__title-row">
         <h2 class="route__title">
           Library
           {#if $inventoryState.status === 'ready'}
             <span class="route__count">— {postCount} posts</span>
           {/if}
         </h2>
-        <!-- Always-rendered slot so the bar's appearance doesn't shift the
-             header layout. Inner span is empty (hence invisible) when idle;
-             when fetching, gets the indeterminate animation. -->
-        <div
-          class="progress-bar progress-bar--header"
-          class:progress-bar--indeterminate={fetchRunning}
-          aria-hidden={!fetchRunning}
-          aria-label={fetchRunning ? 'Fetching posts' : ''}
-          role={fetchRunning ? 'progressbar' : undefined}
-        ><span></span></div>
+        {#if dominantBackend}
+          <span class="route__backend">via {dominantBackend}</span>
+        {/if}
+        {#if refreshing}
+          <button type="button" class="route__refresh" on:click={stop}>Stop</button>
+        {:else}
+          <button type="button" class="route__refresh" on:click={refresh}>Refresh</button>
+        {/if}
       </div>
-      {#if dominantBackend}
-        <span class="route__backend">via {dominantBackend}</span>
-      {/if}
-      {#if refreshing}
-        <button type="button" class="route__refresh" on:click={stop}>Stop</button>
-      {:else}
-        <button type="button" class="route__refresh" on:click={refresh}>Refresh</button>
-      {/if}
+      <!-- Always-rendered slot so the bar's appearance doesn't shift the
+           header layout. Inner span is empty (hence invisible) when idle;
+           when fetching, gets the indeterminate animation. -->
+      <div
+        class="progress-bar progress-bar--header"
+        class:progress-bar--indeterminate={fetchRunning}
+        aria-hidden={!fetchRunning}
+        aria-label={fetchRunning ? 'Fetching posts' : ''}
+        role={fetchRunning ? 'progressbar' : undefined}
+      ><span></span></div>
     </header>
 
     <LibraryStatusPanel
@@ -231,12 +231,31 @@
   }
   .route__header {
     display: flex;
-    gap: 1rem;
-    align-items: center;
-    padding: 0.75rem 1rem;
-    border-bottom: 1px solid color-mix(in oklab, CanvasText 12%, transparent);
+    flex-direction: column;
+    gap: 0.4rem;
+    /* No horizontal padding: align flush with .library-hub edges so
+       the Library title sits under the topnav title at viewport
+       padding 1.5rem, and the Refresh button sits under the topnav
+       right edge. Search filter below also has no inset, completing
+       the column. */
+    padding: 0.75rem 0;
   }
-  .route__title-block { flex: 1; display: flex; flex-direction: column; gap: 0.4rem; }
+  /* Single-row layout for title + backend + Refresh button. align-items:
+     end aligns each item's bottom edge so the button's bottom lines up
+     with the title text's bottom, rather than centering against the
+     title block (which would put the button under the title's midline).
+     margin: 0 -10px extends the row 10px outboard on each side so the
+     Library title aligns with status-panel-left and the Refresh button
+     aligns with status-panel-right — same gridline as the topnav. */
+  .route__title-row {
+    display: flex;
+    gap: 1rem;
+    align-items: end;
+    margin: 0 -10px;
+  }
+  .route__title-row .route__title {
+    flex: 1;
+  }
   .route__title { margin: 0; }
   .route__count { font-weight: 400; opacity: 0.7; }
   /* Indeterminate progress bar for posts fetch — same shape as AssetRow's.

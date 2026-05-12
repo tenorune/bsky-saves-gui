@@ -5,6 +5,15 @@
 // In session-only mode (signInDraft.saveInventory === false), writes go to
 // an in-memory map instead of IDB, and reads consult the map first. The
 // "Save Library to this device" flow flushes the map to IDB.
+//
+// IDB representation:
+//   v1 (legacy): the raw Blob, stored directly. Reads still accept this.
+//   v2: { buffer: ArrayBuffer, type: string }. iOS Safari has a long-
+//   standing bug where storing a Blob in IDB rejects with a null
+//   IDBRequest.error for certain Blobs (notably those constructed from
+//   ArrayBuffers with non-image MIME types). Storing the ArrayBuffer
+//   directly and reconstructing the Blob on read sidesteps the quirk
+//   on all platforms with no behavior change for working ones.
 
 import { createStore, get, set, del, clear, keys } from 'idb-keyval';
 import { writable, type Readable } from 'svelte/store';
@@ -12,6 +21,32 @@ import { shouldPersistLibraryData } from './persistence-mode';
 
 const store = createStore('bsky-saves:images', 'blobs');
 const inMemoryBlobs = new Map<string, Blob>();
+
+interface BlobRecord {
+  readonly buffer: ArrayBuffer;
+  readonly type: string;
+}
+
+function isBlobRecord(v: unknown): v is BlobRecord {
+  if (!v || typeof v !== 'object') return false;
+  if (v instanceof Blob) return false;
+  // Duck-typed: real ArrayBuffer instanceof check fails after some
+  // IDB-implementation round-trips (notably fake-indexeddb across
+  // realms). buffer present + type string is enough to dispatch.
+  const r = v as { buffer?: unknown; type?: unknown };
+  return r.buffer !== undefined && typeof r.type === 'string';
+}
+
+async function blobToRecord(blob: Blob): Promise<BlobRecord> {
+  return { buffer: await blob.arrayBuffer(), type: blob.type };
+}
+
+function recordToBlob(rec: BlobRecord): Blob {
+  // Blob constructor accepts ArrayBuffer, ArrayBufferView, or Blob in
+  // the parts array — covers the worst-case where rec.buffer was
+  // round-tripped as a typed-array view instead of a raw ArrayBuffer.
+  return new Blob([rec.buffer as BlobPart], { type: rec.type });
+}
 
 // Reactive count of saved image blobs (sum of IDB + in-memory map).
 // Subscribers (e.g., ExportMenu's HTML / HTML Archive label) get
@@ -40,7 +75,7 @@ void refreshBlobCount();
 
 export async function saveImageBlob(url: string, blob: Blob): Promise<void> {
   if (shouldPersistLibraryData()) {
-    await set(url, blob, store);
+    await set(url, await blobToRecord(blob), store);
     inMemoryBlobs.delete(url);
   } else {
     inMemoryBlobs.set(url, blob);
@@ -51,7 +86,11 @@ export async function saveImageBlob(url: string, blob: Blob): Promise<void> {
 export async function loadImageBlob(url: string): Promise<Blob | undefined> {
   const m = inMemoryBlobs.get(url);
   if (m !== undefined) return m;
-  return get<Blob>(url, store);
+  const v = await get<Blob | BlobRecord>(url, store);
+  if (v === undefined) return undefined;
+  if (v instanceof Blob) return v; // legacy v1 entries
+  if (isBlobRecord(v)) return recordToBlob(v);
+  return undefined;
 }
 
 export async function hasImageBlob(url: string): Promise<boolean> {
@@ -87,7 +126,7 @@ export async function clearImageBlobs(): Promise<void> {
 export async function persistInMemoryImageBlobs(): Promise<void> {
   if (inMemoryBlobs.size === 0) return;
   for (const [url, blob] of inMemoryBlobs) {
-    await set(url, blob, store);
+    await set(url, await blobToRecord(blob), store);
   }
   inMemoryBlobs.clear();
   // Total count is unchanged — blobs just moved from one backing to

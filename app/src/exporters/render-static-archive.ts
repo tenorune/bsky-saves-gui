@@ -619,16 +619,21 @@ export function renderIndex(
   const count = saves.length;
   const hrefPrefix = mode === 'multi' ? 'posts/' : '';
 
-  // In single-file mode include full post detail; in multi-file mode just summary card
+  // In single-file mode include full post detail wrapped in a
+  // data-searchable container; in multi-file mode just the summary
+  // card (which links to the per-post page).
   const cardsHtml = saves
     .map((save) => {
-      const card = renderPostCardSummary(save, pathMap, hrefPrefix);
       if (mode === 'single') {
-        // Append full detail below the card, inside the same container
+        const rkey = rkeyOf(save.uri);
+        const text = save.record.text ?? '';
+        const author = formatAuthor(save.author);
+        const handle = formatHandle(save.author.handle);
+        const searchable = escapeAttr(`${text} ${author} ${handle}`.toLowerCase());
         const detail = renderPostFocusContent(save, pathMap, '');
-        return `${card}\n<div class="post-card__detail">\n${detail}\n</div>`;
+        return `<div class="post-card__detail" id="post-${escapeAttr(rkey)}" data-searchable="${searchable}">\n${detail}\n</div>`;
       }
-      return card;
+      return renderPostCardSummary(save, pathMap, hrefPrefix);
     })
     .join('\n');
 
