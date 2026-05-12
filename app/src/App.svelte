@@ -241,6 +241,13 @@
     height: 100%;
     margin: 0;
   }
+  /* Suppress the translucent grey/blue overlay iOS Safari and Android
+     Chrome paint over every tapped element. Interactive elements
+     still get visible feedback via their own :active / :focus-visible
+     styles. */
+  :global(html) {
+    -webkit-tap-highlight-color: transparent;
+  }
   :global(body) {
     font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
     background: Canvas;
