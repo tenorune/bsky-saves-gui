@@ -12,8 +12,9 @@ name: release
 #   S4 PWA / service-worker sanity · S6 secret scan + dependency audit
 #   S9 artifact production (dist.tar.gz + .sha256, plus dist-with-maps.tar.gz)
 # Phase 2 additions:
+#   S5 (static) Playwright runtime smoke against a statically-served dist/.
 #   S6 SBOM — CycloneDX bill of materials attached to the release.
-# Deferred to later phases: S5 Playwright vs real helper,
+# Deferred to later phases: S5 (helper-served) Playwright vs real wheel,
 # S7 cross-context boot, S8 MIN_HELPER_VERSION coordination.
 
 on:
@@ -150,6 +151,34 @@ jobs:
       # ── S4 — PWA / service-worker sanity ─────────────────────────────────
       - name: S4 — Precache manifest references resolve
         run: node tools/verify-precache.mjs
+
+      # ── S5 (static) — Playwright runtime smoke against served dist/ ─────
+      #
+      # Boots the production bundle behind `python -m http.server` (matches
+      # the GitHub-Pages-style static-serving context, not vite preview) and
+      # runs the e2e suite in headless Chromium. Catches bundle-level
+      # regressions that unit tests can't see: page mount failures, CSP
+      # violations, broken route guards, malformed manifest, missing icons.
+      #
+      # The "helper-served" S5 variant (against a real `bsky-saves serve
+      # --gui` wheel) is deferred until the wheel ships with the GUI
+      # vendored — tracked in docs/bsky-saves-mvp-spec.md.
+      - name: S5 (static) — Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: S5 (static) — Playwright e2e
+        run: pnpm exec playwright test
+
+      - name: S5 (static) — Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+          if-no-files-found: ignore
 
       # ── S6 — Security scans ──────────────────────────────────────────────
       - name: S6 — Credential-shape scan (gate)
