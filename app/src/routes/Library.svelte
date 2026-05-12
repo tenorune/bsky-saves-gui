@@ -237,8 +237,10 @@
        the Library title sits under the topnav title at viewport
        padding 1.5rem, and the Refresh button sits under the topnav
        right edge. Search filter below also has no inset, completing
-       the column. */
-    padding: 0.75rem 0;
+       the column. Bottom padding is 0.4rem (matching the gap above
+       the progress bar) so the spacing below the title row collapses
+       to fit just the progress indicator. */
+    padding: 0.75rem 0 0.4rem;
   }
   /* Single-row layout for title + backend + Refresh button. align-items:
      end aligns each item's bottom edge so the button's bottom lines up
@@ -270,6 +272,10 @@
   }
   .progress-bar--header {
     background: transparent;
+    /* Match the title-row and status-panel outboard bleed so the
+       indicator spans from the Library title's left edge to the
+       Refresh button's right edge. */
+    margin: 0 -10px;
   }
   .progress-bar--header.progress-bar--indeterminate {
     background: color-mix(in oklab, CanvasText 12%, transparent);
