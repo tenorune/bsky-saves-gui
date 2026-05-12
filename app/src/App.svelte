@@ -262,48 +262,53 @@
   .app-header {
     /* Single row: Title — Library — Settings — @. Title pushed left by
        margin-right: auto; the rest sits flush right via
-       justify-content: flex-end. Horizontal padding adapts to viewport:
-       at wide widths it's the topnav's natural 1.5rem so items sit at
-       the viewport-edge column; at narrow widths it shrinks to match
-       the .status-panel's outboard bleed (1.5rem - 10px ≈ 0.875rem)
-       so items snap to the gridline that the asset rows define.
-       clamp() interpolates smoothly between the two through the
-       narrow band where they cross. */
+       justify-content: flex-end. Horizontal padding is 0.875rem
+       (= 1.5rem - 10px), matching the .status-panel's outboard bleed
+       so items in both narrow and wide viewports sit at the same
+       0.875rem-from-the-edge column. */
     display: flex;
     align-items: center;
     justify-content: flex-end;
     gap: 0.5rem 1rem;
-    padding: 1rem clamp(0.875rem, calc((100vw - 44rem) / 2 - 10px), 1.5rem);
+    padding: 1rem 0.875rem;
   }
   /* Chained selector (.app-header__navlink.app-header__account-toggle)
      so these rules win the cascade against .app-header__navlink, which
      is defined later in this stylesheet and would otherwise override
      padding / background / border. */
   .app-header__navlink.app-header__account-toggle {
+    /* Closed state: padding-right is 0 so the @ glyph touches the
+       button's right border (which sits at header-content-right =
+       viewport-right - 0.875rem = column G, the same column as
+       EXPORT's right edge below). Padding-left gives a tappable
+       breathing area on the left and visually pads the glyph from
+       the Settings link. */
     font-size: 1.1rem;
     line-height: 1;
-    padding: 0.4rem 0.65rem;
+    padding: 0.4rem 0 0.4rem 0.875rem;
     border: 0;
     border-radius: 0;
     transition: background-color 100ms ease;
   }
   .app-header__navlink.app-header__account-toggle--open {
-    /* The button's right edge is already at status-panel-right (set by
-       its position as the rightmost flex item inside .app-header__items
-       which has margin: 0 -10px, so its right edge = library-hub-right
-       + 10px). Only vertical extension is needed to reach the viewport
-       top and the account row below; horizontal padding stays
-       symmetric and unchanged from the closed state so the button's
-       margin-box width is identical in both states — Library/Settings
-       don't shift. The @ glyph is naturally centered in the symmetric
-       box. */
+    /* Open state: the painted box extends to viewport-right via
+       margin-right: -0.875rem (eating the header's padding-right) and
+       to viewport-top + account-row-top via the vertical margins.
+       Symmetric 0.875rem horizontal padding centers the @ glyph in
+       the box; the glyph's right edge stays at column G (= border-box
+       right - padding-right = viewport-right - 0.875rem), so the glyph
+       doesn't visually move from its closed-state position.
+       Margin-box width equals the closed state (0.875rem + glyph wide
+       in both, since border-box gains 0.875rem from padding-right and
+       loses 0.875rem to margin-right), so Library / Settings stay put
+       when the menu opens. */
     text-decoration: none;
     font-weight: 700;
     background: rgba(0, 0, 0, 0.06);
     margin-top: -1rem;
+    margin-right: -0.875rem;
     margin-bottom: -1rem;
-    padding-top: calc(0.4rem + 1rem);
-    padding-bottom: calc(0.4rem + 1rem);
+    padding: calc(0.4rem + 1rem) 0.875rem;
   }
   @media (prefers-color-scheme: dark) {
     .app-header__navlink.app-header__account-toggle--open {
@@ -323,9 +328,9 @@
     display: flex;
     justify-content: flex-end;
     align-items: center;
-    /* Same clamp() padding as .app-header so the EXPORT button on this
-       row right-aligns with the @ button above. */
-    padding: 0.625rem clamp(0.875rem, calc((100vw - 44rem) / 2 - 10px), 1.5rem);
+    /* Same 0.875rem horizontal padding as .app-header so EXPORT's right
+       edge sits at the same column as the @ glyph above. */
+    padding: 0.625rem 0.875rem;
     background: rgba(0, 0, 0, 0.06);
     border-bottom: 1px solid color-mix(in oklab, CanvasText 12%, transparent);
   }
