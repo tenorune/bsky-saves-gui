@@ -10,7 +10,7 @@ import 'fake-indexeddb/auto';
 const DEFAULT_CONFIG = {
   helperOrigin: 'http://127.0.0.1:47826',
   operatorImageProxyUrl: '',
-  operatorImageProxySecret: '',
+  operatorImageProxyKey: '',
 };
 
 beforeEach(async () => {
@@ -151,7 +151,7 @@ describe('operator-proxy backend', () => {
       config: {
         helperOrigin: 'http://127.0.0.1:47826',
         operatorImageProxyUrl: 'https://operator.example/fetch',
-        operatorImageProxySecret: 'op-secret',
+        operatorImageProxyKey: 'op-secret',
       },
     }));
     const { detectBackends } = await import('./image-fetcher');
@@ -170,7 +170,7 @@ describe('operator-proxy backend', () => {
       config: {
         helperOrigin: 'http://127.0.0.1:47826',
         operatorImageProxyUrl: 'https://operator.example/fetch',
-        operatorImageProxySecret: 'op-secret',
+        operatorImageProxyKey: 'op-secret',
       },
     }));
     const { saveProxyConfig } = await import('./proxy-config');
@@ -204,7 +204,7 @@ describe('operator-proxy backend', () => {
       config: {
         helperOrigin: 'http://127.0.0.1:47826',
         operatorImageProxyUrl: 'https://operator.example/fetch',
-        operatorImageProxySecret: 'op-secret',
+        operatorImageProxyKey: 'op-secret',
       },
     }));
     const { setOperatorProxyOptOut } = await import('./operator-proxy-opt-out');

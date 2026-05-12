@@ -50,7 +50,11 @@ export interface Config {
   readonly repoUrl: string;
   readonly pyodideVersion: string;
   readonly operatorImageProxyUrl: string;
-  readonly operatorImageProxySecret: string;
+  // Public — inlined into the bundle by Vite, exposed to anyone who
+  // downloads the deployed JS. Not a confidential secret; the real
+  // worker-side protection is the URL allowlist + rate limiting.
+  // See templates/cf-worker/README.md and .env.example.
+  readonly operatorImageProxyKey: string;
 }
 
 export const config: Config = Object.freeze({
@@ -63,5 +67,5 @@ export const config: Config = Object.freeze({
   repoUrl: required('VITE_REPO_URL'),
   pyodideVersion: required('VITE_PYODIDE_VERSION'),
   operatorImageProxyUrl: optionalAbsoluteHttpUrl('VITE_OPERATOR_IMAGE_PROXY_URL'),
-  operatorImageProxySecret: optionalString('VITE_OPERATOR_IMAGE_PROXY_SECRET'),
+  operatorImageProxyKey: optionalString('VITE_OPERATOR_IMAGE_PROXY_KEY'),
 });

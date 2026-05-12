@@ -11,7 +11,7 @@ interface ImportMetaEnv {
   readonly VITE_REPO_URL: string;
   readonly VITE_PYODIDE_VERSION: string;
   readonly VITE_OPERATOR_IMAGE_PROXY_URL: string;
-  readonly VITE_OPERATOR_IMAGE_PROXY_SECRET: string;
+  readonly VITE_OPERATOR_IMAGE_PROXY_KEY: string;
   readonly VITE_LOCAL_PYODIDE?: string;
 }
 

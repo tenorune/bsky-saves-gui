@@ -3,6 +3,23 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Content Security Policy. Notes on choices:
+         - script-src 'self' 'wasm-unsafe-eval': all JS comes from this origin;
+           wasm-unsafe-eval allows WebAssembly compilation (Pyodide). No
+           'unsafe-eval' — the Pyodide worker runs in its own context.
+         - style-src 'self' 'unsafe-inline': required for Svelte's dynamic
+           style="" attributes (e.g. progress-bar width).
+         - connect-src: https: covers arbitrary user PDS hosts and the
+           Pyodide CDN; http://127.0.0.1:* + http://localhost:* covers the
+           local helper across configurable ports.
+         - worker-src 'self' blob:: Vite emits hashed worker files at /assets
+           in prod and blob: URLs in dev.
+         - frame-ancestors cannot be set from a meta tag and must come from
+           a real response header (X-Frame-Options / CSP header). See
+           docs/bsky-saves-gui-dist-workstream.md (§3 R2) for the deploy
+           options that would enable it. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self'; connect-src 'self' https: http://127.0.0.1:* http://localhost:*; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
     <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />

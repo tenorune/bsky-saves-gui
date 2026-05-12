@@ -131,7 +131,7 @@
     operatorProxyReachable = 'unknown';
     operatorProxyReachable = await runOperatorProxyProbe(
       config.operatorImageProxyUrl,
-      config.operatorImageProxySecret,
+      config.operatorImageProxyKey,
     );
   }
 

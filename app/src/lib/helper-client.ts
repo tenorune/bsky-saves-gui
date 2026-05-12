@@ -77,6 +77,11 @@ export async function pingHelper(origin: string): Promise<boolean> {
  * The helper does the outbound HTTP from the user's machine and streams the
  * raw bytes back. Throws on non-2xx response or network error.
  */
+// 25 MB cap: comfortably larger than any Bluesky image / video thumbnail
+// while preventing a misbehaving or compromised helper from filling the
+// page's memory with arbitrary bytes.
+const HELPER_IMAGE_MAX_BYTES = 25 * 1024 * 1024;
+
 export async function fetchImageViaHelper(origin: string, imageUrl: string): Promise<Blob> {
   const base = origin.replace(/\/+$/, '');
   const res = await fetch(`${base}/fetch-image`, {
@@ -87,7 +92,22 @@ export async function fetchImageViaHelper(origin: string, imageUrl: string): Pro
   if (!res.ok) {
     throw new Error(`helper /fetch-image returned ${res.status}`);
   }
-  return res.blob();
+  const contentType = res.headers.get('content-type') ?? '';
+  if (!contentType.startsWith('image/') && !contentType.startsWith('application/octet-stream')) {
+    throw new Error(`helper /fetch-image returned non-image content-type: ${contentType}`);
+  }
+  const contentLength = res.headers.get('content-length');
+  if (contentLength !== null) {
+    const announced = parseInt(contentLength, 10);
+    if (Number.isFinite(announced) && announced > HELPER_IMAGE_MAX_BYTES) {
+      throw new Error(`helper /fetch-image announced ${announced} bytes (cap ${HELPER_IMAGE_MAX_BYTES})`);
+    }
+  }
+  const blob = await res.blob();
+  if (blob.size > HELPER_IMAGE_MAX_BYTES) {
+    throw new Error(`helper /fetch-image returned ${blob.size} bytes (cap ${HELPER_IMAGE_MAX_BYTES})`);
+  }
+  return blob;
 }
 
 export interface ExtractedArticle {

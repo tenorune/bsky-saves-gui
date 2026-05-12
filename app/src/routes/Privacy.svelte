@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { marked } from 'marked';
+  import DOMPurify from 'dompurify';
   import { config } from '$lib/config';
   import { slideRoute } from '$lib/slide-transition';
   // Vite's `?raw` import returns the file contents as a string at build time.
@@ -18,7 +19,12 @@
   // headings, the old <h1> below the new <h2>.
   const bodyMarkdown = substituted.replace(/^#\s+Privacy\s*\n+/, '');
 
-  const html = marked.parse(bodyMarkdown, { async: false }) as string;
+  // marked allows raw HTML passthrough in markdown. The current source is
+  // build-time only (privacy.md plus three VITE_* substitutions) so there's
+  // no user path into this sink today, but {@html} ships a working XSS
+  // vector if any untrusted content ever enters the pipeline. DOMPurify
+  // strips <script>, on* handlers, and javascript: URLs as defence-in-depth.
+  const html = DOMPurify.sanitize(marked.parse(bodyMarkdown, { async: false }) as string);
 
   onMount(() => {
     // Always open Privacy at the top — typical entry points (footer

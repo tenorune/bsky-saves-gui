@@ -7,7 +7,7 @@ vi.mock('./config', () => ({
   config: {
     helperOrigin: 'http://127.0.0.1:47826',
     operatorImageProxyUrl: '',
-    operatorImageProxySecret: '',
+    operatorImageProxyKey: '',
   },
 }));
 
@@ -59,7 +59,7 @@ describe('describeAvailableImageBackend', () => {
       config: {
         helperOrigin: 'http://127.0.0.1:47826',
         operatorImageProxyUrl: 'https://operator.example/fetch',
-        operatorImageProxySecret: 'op-secret',
+        operatorImageProxyKey: 'op-secret',
       },
     }));
     const { describeAvailableImageBackend } = await import('./describe-backend');

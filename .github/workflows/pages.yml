@@ -40,7 +40,11 @@ jobs:
           VITE_REPO_URL: ${{ vars.VITE_REPO_URL }}
           VITE_PYODIDE_VERSION: ${{ vars.VITE_PYODIDE_VERSION }}
           VITE_OPERATOR_IMAGE_PROXY_URL: ${{ vars.VITE_OPERATOR_IMAGE_PROXY_URL }}
-          VITE_OPERATOR_IMAGE_PROXY_SECRET: ${{ secrets.VITE_OPERATOR_IMAGE_PROXY_SECRET }}
+          # Not a confidential secret — Vite inlines every VITE_* var into the
+          # public bundle. Sourced from vars.* (not secrets.*) so the workflow
+          # reflects the actual threat model and downstream consumers (wheel,
+          # installer) don't mistake the value for a credential.
+          VITE_OPERATOR_IMAGE_PROXY_KEY: ${{ vars.VITE_OPERATOR_IMAGE_PROXY_KEY }}
         run: pnpm build
 
       - uses: actions/configure-pages@v5

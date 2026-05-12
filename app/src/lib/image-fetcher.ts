@@ -64,13 +64,13 @@ export async function detectBackends(): Promise<Backend[]> {
   if (
     !operatorProxyOptOut &&
     config.operatorImageProxyUrl !== '' &&
-    config.operatorImageProxySecret !== ''
+    config.operatorImageProxyKey !== ''
   ) {
     out.push({
       kind: 'operator-proxy',
       config: {
         url: config.operatorImageProxyUrl,
-        sharedSecret: config.operatorImageProxySecret,
+        sharedSecret: config.operatorImageProxyKey,
         supportsArticles: false,
       },
     });

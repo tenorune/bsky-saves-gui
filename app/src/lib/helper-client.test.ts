@@ -110,6 +110,37 @@ describe('helper-client fetchImageViaHelper', () => {
       fetchImageViaHelper('http://127.0.0.1:47826', 'https://cdn.bsky.app/img/foo.jpg'),
     ).rejects.toThrow();
   });
+
+  it('rejects non-image content-types', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      headers: { get: (h: string) => (h.toLowerCase() === 'content-type' ? 'text/html' : null) },
+      blob: async () => new Blob(['<script>'], { type: 'text/html' }),
+    })));
+    const { fetchImageViaHelper } = await import('./helper-client');
+    await expect(
+      fetchImageViaHelper('http://127.0.0.1:47826', 'https://cdn.bsky.app/img/foo.jpg'),
+    ).rejects.toThrow(/non-image/);
+  });
+
+  it('rejects oversized announced content-length', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      headers: {
+        get: (h: string) => {
+          const k = h.toLowerCase();
+          if (k === 'content-type') return 'image/png';
+          if (k === 'content-length') return String(100 * 1024 * 1024);
+          return null;
+        },
+      },
+      blob: async () => new Blob(['IMG'], { type: 'image/png' }),
+    })));
+    const { fetchImageViaHelper } = await import('./helper-client');
+    await expect(
+      fetchImageViaHelper('http://127.0.0.1:47826', 'https://cdn.bsky.app/img/foo.jpg'),
+    ).rejects.toThrow(/cap/);
+  });
 });
 
 describe('helper-client extractArticleViaHelper', () => {

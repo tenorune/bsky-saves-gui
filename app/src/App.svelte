@@ -241,6 +241,13 @@
     height: 100%;
     margin: 0;
   }
+  /* Suppress the translucent grey/blue overlay iOS Safari and Android
+     Chrome paint over every tapped element. Interactive elements
+     still get visible feedback via their own :active / :focus-visible
+     styles. */
+  :global(html) {
+    -webkit-tap-highlight-color: transparent;
+  }
   :global(body) {
     font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
     background: Canvas;
@@ -275,21 +282,17 @@
     gap: 0.5rem 1rem;
     padding: 1rem 0.875rem;
     /* A thin underline sits below the topnav whenever the account row
-       is closed (so there's a visible separator between header and
-       page content). When the row opens, the underline disappears at
-       the start of the slide-down so the @ button's tinted box can
-       merge seamlessly with the row. When the row closes, the
-       underline reappears at the END of the slide-up — the
-       border-bottom-color transition has 0ms duration but a 180ms
-       delay, matching the slide animation. The override below
-       (.app-header--account-open) sets the same transition with no
-       delay so opening is instant. */
-    border-bottom: 1px solid color-mix(in oklab, CanvasText 15%, transparent);
-    transition: border-bottom-color 0ms 180ms;
+       is closed. Rendered as a box-shadow (not border-bottom) so the
+       line occupies zero layout space — when the row opens, the
+       header sits flush against the account row with no residual gap.
+       Color transitions: instant on open, delayed by 180ms on close
+       to match the slide-up animation. */
+    box-shadow: 0 1px 0 0 color-mix(in oklab, CanvasText 15%, transparent);
+    transition: box-shadow 0ms 180ms;
   }
   .app-header--account-open {
-    border-bottom-color: transparent;
-    transition: border-bottom-color 0ms 0ms;
+    box-shadow: 0 1px 0 0 transparent;
+    transition: box-shadow 0ms 0ms;
   }
   /* Chained selector (.app-header__navlink.app-header__account-toggle)
      so these rules win the cascade against .app-header__navlink, which
