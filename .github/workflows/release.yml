@@ -11,7 +11,9 @@ name: release
 #   S1 build cleanliness · S2 bundle integrity · S3 bundle hygiene
 #   S4 PWA / service-worker sanity · S6 secret scan + dependency audit
 #   S9 artifact production (dist.tar.gz + .sha256, plus dist-with-maps.tar.gz)
-# Deferred to later phases: SBOM (S6 stretch), S5 Playwright vs real helper,
+# Phase 2 additions:
+#   S6 SBOM — CycloneDX bill of materials attached to the release.
+# Deferred to later phases: S5 Playwright vs real helper,
 # S7 cross-context boot, S8 MIN_HELPER_VERSION coordination.
 
 on:
@@ -192,6 +194,28 @@ jobs:
       - name: S6 — Dependency audit (production, high+)
         run: pnpm audit --prod --audit-level=high
 
+      - name: S6 — CycloneDX SBOM
+        # Scans the production dependency tree (per --required-only) and emits
+        # a CycloneDX 1.x JSON SBOM. Pinned to a specific cdxgen version so
+        # the SBOM shape is stable across runs; bump deliberately. The SBOM
+        # ships alongside the release tarball so downstream consumers (wheel,
+        # installers) can audit the exact transitive deps the bundle was
+        # built against and diff between releases.
+        run: |
+          set -euo pipefail
+          pnpm dlx @cyclonedx/cdxgen@12.3.3 -o SBOM.cdx.json -t pnpm --required-only
+          echo "SBOM produced:"
+          ls -l SBOM.cdx.json
+          # Sanity-check: must be valid JSON with the CycloneDX shape and a
+          # non-zero component count.
+          node -e '
+            const sbom = JSON.parse(require("fs").readFileSync("SBOM.cdx.json", "utf8"));
+            if (sbom.bomFormat !== "CycloneDX") { console.error("Not a CycloneDX SBOM"); process.exit(1); }
+            const n = (sbom.components || []).length;
+            if (n < 10) { console.error(`SBOM component count suspiciously low: ${n}`); process.exit(1); }
+            console.log(`OK: CycloneDX ${sbom.specVersion}, ${n} components`);
+          '
+
       # ── S9 — Artifact production ─────────────────────────────────────────
       - name: Determine version label
         id: version
@@ -226,6 +250,7 @@ jobs:
             dist.tar.gz
             dist.tar.gz.sha256
             dist-with-maps.tar.gz
+            SBOM.cdx.json
           if-no-files-found: error
 
       - name: Attach to GitHub release (tag push)
@@ -236,5 +261,6 @@ jobs:
             dist.tar.gz
             dist.tar.gz.sha256
             dist-with-maps.tar.gz
+            SBOM.cdx.json
           fail_on_unmatched_files: true
           generate_release_notes: true
