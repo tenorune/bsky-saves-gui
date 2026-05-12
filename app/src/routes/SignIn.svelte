@@ -14,6 +14,7 @@
   import { saveAccount } from '$lib/account-store';
   import { clearInventory } from '$lib/inventory-store';
   import { clearImageBlobs } from '$lib/image-store';
+  import { terminateSharedDriver } from '$lib/pyodide-worker-driver';
   import DefinitionTerm from '../components/DefinitionTerm.svelte';
   import { clearFailures } from '$lib/failure-store';
   import { slideRoute } from '$lib/slide-transition';
@@ -88,6 +89,18 @@
       error = 'Passphrase must be at least 8 characters to save credentials.';
       return;
     }
+
+    // Terminate any shared Pyodide worker before this sign-in's library
+    // refresh fires. The worker's emulated filesystem retains
+    // /home/pyodide/saves_inventory.json across runs in the same tab
+    // session, and bsky_saves.fetch.fetch_to_inventory() merges new
+    // fetches into whatever is at that path — so a fresh sign-in (which
+    // may be a different account than whoever was last fetched) would
+    // otherwise inherit the previous user's saves and write back a mixed
+    // inventory. Pay the ~10s Pyodide cold-start on the next fetch to
+    // guarantee account isolation. See
+    // pyodide-worker-driver.ts::terminateSharedDriver for full notes.
+    terminateSharedDriver();
 
     let session;
     try {

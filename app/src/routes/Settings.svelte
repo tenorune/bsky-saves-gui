@@ -23,6 +23,7 @@
   import { cancelArticleBackup } from '$lib/start-article-backup';
   import { cancelThreadHydration } from '$lib/thread-hydrator';
   import { clearImageBlobs } from '$lib/image-store';
+  import { terminateSharedDriver } from '$lib/pyodide-worker-driver';
   import { clearFailures } from '$lib/failure-store';
   import { resetImageHydration, resetArticleHydration } from '$lib/hydration-state';
   import { resetLibraryFilters } from '$lib/library-filters';
@@ -224,6 +225,17 @@
     // for this device — asset toggles, operator-proxy opt-out, install
     // hint, custom proxy configuration, and Library filters all
     // survive. "Reset preferences" is the separate action for those.
+    //
+    // The Pyodide worker is terminated as part of the data wipe. Its
+    // emulated filesystem retains the inventory at
+    // /home/pyodide/saves_inventory.json across runs in the same worker
+    // session, and `bsky_saves.fetch.fetch_to_inventory()` merges new
+    // fetches into whatever is at that path. Without termination, the
+    // next sign-in (potentially a different account) would read the
+    // previous user's saves off the worker's FS and merge new fetches
+    // into them — a cross-account data leak. See
+    // pyodide-worker-driver.ts::terminateSharedDriver for full notes.
+    terminateSharedDriver();
     await Promise.all([
       clearInventory(),
       clearCredentials(),
@@ -284,6 +296,13 @@
     // is a settings-side action. The runtime route gate in App.svelte
     // ensures any later attempt to reach /library or /post via
     // browser back / address bar redirects them to sign-in.
+    //
+    // Pyodide worker IS terminated here: a sign-out implies the next
+    // sign-in may be a different account, and a reused worker carries
+    // the previous user's inventory in its emulated FS (see
+    // pyodide-worker-driver.ts::terminateSharedDriver). Cost: ~10s
+    // cold-start on next fetch.
+    terminateSharedDriver();
     clearLastSession();
     signInDraft.set(null);
   }

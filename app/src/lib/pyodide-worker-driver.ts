@@ -169,6 +169,31 @@ export function requestCancelSharedDriver(): void {
   _shared?.requestCancel();
 }
 
+/**
+ * Terminate the shared driver and discard the reference so the NEXT call
+ * to getSharedDriver() spins up a fresh Pyodide worker with a clean
+ * emulated filesystem.
+ *
+ * This is a privacy boundary, NOT just a memory-management nicety. The
+ * Pyodide worker writes the current user's saves to
+ * /home/pyodide/saves_inventory.json (see worker/pyodide-worker.ts), and
+ * `bsky_saves.fetch.fetch_to_inventory()` merges new fetches into
+ * whatever is already at that path. If the worker is reused across
+ * sign-ins for different accounts in the same tab session, account B's
+ * fetch reads account A's leftover inventory and writes back the merged
+ * result — account A's saves end up in account B's Library.
+ *
+ * Call this from any flow that ends a user's session (Clear data, sign
+ * out, "use a different account"). Cost: ~10s Pyodide cold-start on the
+ * next fetch. Correctness wins.
+ */
+export function terminateSharedDriver(): void {
+  if (_shared) {
+    _shared.terminate();
+    _shared = null;
+  }
+}
+
 /** For tests only — resets the shared driver. */
 export function _resetSharedDriverForTests(): void {
   _shared = null;
