@@ -8,7 +8,7 @@ vi.mock('./config', () => ({
   config: {
     helperOrigin: 'http://127.0.0.1:47826',
     operatorImageProxyUrl: '',
-    operatorImageProxySecret: '',
+    operatorImageProxyKey: '',
   },
 }));
 

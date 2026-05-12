@@ -210,12 +210,12 @@ The GUI reads these build-time environment variables:
 
 ```
 VITE_OPERATOR_IMAGE_PROXY_URL=https://your-operator-worker.workers.dev
-VITE_OPERATOR_IMAGE_PROXY_SECRET=<same value as SHARED_SECRET>
+VITE_OPERATOR_IMAGE_PROXY_KEY=<same value as SHARED_SECRET>
 ```
 
-In a GitHub Pages deploy (see `.github/workflows/pages.yml`), add these as repository **variables** (URL) and **secrets** (the secret), then reference them under the build step's `env:` block.
+In a GitHub Pages deploy (see `.github/workflows/pages.yml`), add both as repository **variables** (`vars.*`, not `secrets.*`) and reference them under the build step's `env:` block.
 
-The secret is baked into the deployed JS bundle and is therefore visible to anyone who inspects the page. This is acceptable: the secret's purpose is to deter random internet traffic, not to keep the URL or auth flow secret. The real protection is the **URL allowlist** (which makes the proxy useless for anything other than the bsky CDN) plus Cloudflare's standard rate-limiting and abuse defenses.
+The key is baked into the deployed JS bundle and is visible to anyone who inspects the page — and travels with every downstream bundle (the Python wheel and OS installers vendor the same `dist/`). This is acceptable: its purpose is to deter random internet traffic, not to authenticate. The real protection is the **URL allowlist** (which makes the proxy useless for anything other than the bsky image CDN) plus Cloudflare's standard rate-limiting and abuse defenses.
 
 ### Opt-out behavior
 

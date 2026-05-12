@@ -87,7 +87,7 @@ function fetcherFromSnapshot(snapshot: CapabilitySnapshot): (url: string) => Pro
     fetchImageViaUserWorker(
       {
         url: config.operatorImageProxyUrl,
-        sharedSecret: config.operatorImageProxySecret,
+        sharedSecret: config.operatorImageProxyKey,
         supportsArticles: false,
       },
       imageUrl,
