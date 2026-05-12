@@ -475,13 +475,15 @@ For each given URI, walk the reply tree to collect same-author follow-up replies
 
 ### 5.7 CORS
 
-Applies to every endpoint:
+Applies to every endpoint. Requests from allowlisted origins (see §4.4):
 
-- `Access-Control-Allow-Origin` echoes the request's `Origin` header **if and only if** that origin is in the allowlist (§4.4). Otherwise the header is omitted (browser fails closed).
+- `Access-Control-Allow-Origin` echoes the request's `Origin` header; never `*`.
 - `Access-Control-Allow-Methods: GET, POST, OPTIONS`
 - `Access-Control-Allow-Headers: Content-Type`
-- Preflight `OPTIONS` returns 204 with the same headers and no body.
+- Preflight `OPTIONS` from an allowed origin returns 204 with the same headers and no body.
 - `Access-Control-Max-Age: 600`
+
+Requests from non-allowlisted origins — including preflight `OPTIONS` — return 403 per §4.4; no CORS headers are echoed.
 
 ### 5.8 Reserved paths
 
