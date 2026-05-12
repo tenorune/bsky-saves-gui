@@ -475,13 +475,15 @@ For each given URI, walk the reply tree to collect same-author follow-up replies
 
 ### 5.7 CORS
 
-Applies to every endpoint:
+Applies to every endpoint. Requests from allowlisted origins (see §4.4):
 
-- `Access-Control-Allow-Origin` echoes the request's `Origin` header **if and only if** that origin is in the allowlist (§4.4). Otherwise the header is omitted (browser fails closed).
+- `Access-Control-Allow-Origin` echoes the request's `Origin` header; never `*`.
 - `Access-Control-Allow-Methods: GET, POST, OPTIONS`
 - `Access-Control-Allow-Headers: Content-Type`
-- Preflight `OPTIONS` returns 204 with the same headers and no body.
+- Preflight `OPTIONS` from an allowed origin returns 204 with the same headers and no body.
 - `Access-Control-Max-Age: 600`
+
+Requests from non-allowlisted origins — including preflight `OPTIONS` — return 403 per §4.4; no CORS headers are echoed.
 
 ### 5.8 Reserved paths
 
@@ -536,27 +538,27 @@ This sequencing avoids the "GUI ships first, users see `OutdatedHelperBanner` ag
 
 Lockstep releases are not required and are not the published policy — too costly to coordinate. If a specific future feature genuinely needs lockstep, treat it as the exception and call it out in the issue/PR.
 
-### 6.5 GUI release readiness — v0.5.2
+### 6.5 GUI release readiness — `v0.5.2` released
 
-Status as of this spec: the GUI release-CI workflow (`bsky-saves-gui/.github/workflows/release.yml`) is live on `main`. It runs S1–S6 + SBOM + static Playwright (S5 static) on every tag push and produces:
+The GUI release-CI workflow (`bsky-saves-gui/.github/workflows/release.yml`) has been live on `main` since PR #7 and was first exercised on a real `v*` tag with **`v0.5.2`, released 2026-05-12**. Workflow run completed cleanly; all expected artifacts attached to the release entry at <https://github.com/tenorune/bsky-saves-gui/releases/tag/v0.5.2>:
 
-- `dist.tar.gz` — production bundle, sourcemaps stripped.
-- `dist.tar.gz.sha256` — checksum file.
-- `dist-with-maps.tar.gz` — debug bundle. **Not consumed by the wheel**; ignore.
-- `SBOM.cdx.json` — CycloneDX SBOM of production deps.
+| Asset | Purpose | Size at v0.5.2 |
+|---|---|---|
+| `dist.tar.gz` | Production bundle (sourcemaps stripped). The wheel consumes this. | 273 KB |
+| `dist.tar.gz.sha256` | Checksum file. **Copy this byte-for-byte into the bsky-saves repo's `gui-dist.sha256` when bumping `GUI_VERSION`.** | 78 B |
+| `dist-with-maps.tar.gz` | Debug bundle with sourcemaps. **Not consumed by the wheel.** Useful only when the GUI team needs to debug a deployed bundle. | 734 KB |
+| `SBOM.cdx.json` | CycloneDX SBOM of production deps. Optional audit artifact; not required at build time. | 28 KB |
 
-All four are attached to the GitHub release on tag push.
-
-**The first real release through this pipeline will be `v0.5.2`** (the GUI team is ready to cut the tag now that the spec back-and-forth is settled). Once `v0.5.2` is pushed, the bsky-saves fetch hook (§3.2) can be wired against:
+The bsky-saves fetch hook (§3.2) should pin against:
 
 ```
-https://github.com/tenorune/bsky-saves-gui/releases/download/v0.5.2/dist.tar.gz
-https://github.com/tenorune/bsky-saves-gui/releases/download/v0.5.2/dist.tar.gz.sha256
+https://github.com/tenorune/bsky-saves-gui/releases/download/v{GUI_VERSION}/dist.tar.gz
+https://github.com/tenorune/bsky-saves-gui/releases/download/v{GUI_VERSION}/dist.tar.gz.sha256
 ```
 
-with `gui-dist.sha256` in the bsky-saves repo populated from the latter file's contents.
+**Initial pin: `GUI_VERSION=v0.5.2`.**
 
-**Interim plan if you want to start integration before `v0.5.2` lands**: dispatch the GUI's `release` workflow manually via the Actions tab, download the resulting `release-<label>` workflow artifact, and use its `dist.tar.gz` as a vendored test fixture. That gives you a real build of the current `main` to write integration tests against; swap to the released URL once `v0.5.2` is up.
+Future releases follow the same URL pattern automatically. The release-CI workflow fires on every `v*` tag push; if the GUI team ever needs to exercise the workflow without cutting a real release (e.g. while testing a workflow change), they use `workflow_dispatch` from the Actions tab — that path uploads artifacts to the workflow run only, no release entry, so it doesn't pollute the release page or trigger downstream consumers.
 
 ---
 
