@@ -109,6 +109,14 @@ function writeToStorage(session: LastSession | null): void {
   } catch { /* quota — fall through */ }
 }
 
+// USER-SPECIFIC. In-memory + storage-backed JWT pair (accessJwt /
+// refreshJwt / did / handle / pds) for the active session. Cleared
+// on every identity-change boundary by clearLastSession:
+//   - Settings → Clear data (Settings.svelte::clearAll).
+//   - Settings → Sign out (Settings.svelte::signOut).
+// SignIn.submit replaces this with the new account's tokens via
+// setLastSession — no path leaks one account's JWT into another's.
+// See issue #19 for the singleton-audit catalogue.
 const store = writable<LastSession | null>(readFromStorage());
 export const lastSession: Readable<LastSession | null> = { subscribe: store.subscribe };
 

@@ -20,6 +20,14 @@ import { writable, type Readable } from 'svelte/store';
 import { shouldPersistLibraryData } from './persistence-mode';
 
 const store = createStore('bsky-saves:images', 'blobs');
+
+// USER-SPECIFIC. In-memory cache of decoded image Blobs keyed by remote
+// URL — used by the session-only mode path (signInDraft.saveInventory
+// === false) so the Library can render images without the IDB round-trip
+// that would commit them to disk. Cleared by clearImageBlobs() at every
+// identity-change boundary: Settings → Clear data, and SignIn.submit
+// when starting a session-only sign-in. Survives sign-out alone (same
+// user signs back in). See issue #19 for the singleton-audit catalogue.
 const inMemoryBlobs = new Map<string, Blob>();
 
 interface BlobRecord {
