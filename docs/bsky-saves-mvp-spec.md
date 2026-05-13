@@ -211,7 +211,7 @@ Health check, version reporting, and capability advertisement, combined. The GUI
 ```json
 {
   "name": "bsky-saves",
-  "version": "0.4.4",
+  "version": "0.5.1",
   "features": ["fetch-image", "extract-article", "fetch", "enrich", "hydrate-threads", "jwt-credentials"]
 }
 ```
@@ -503,7 +503,7 @@ Requests from non-allowlisted origins — including preflight `OPTIONS` — retu
 ### 5.9 Capability versioning
 
 - The `/ping` `version` field is the public compatibility marker; the GUI's `MIN_HELPER_VERSION` constant (in `app/src/lib/min-helper-version.ts`) is the floor below which the GUI shows `OutdatedHelperBanner` and refuses to enter local mode.
-- **Current value: `MIN_HELPER_VERSION = '0.4.1'`.** PyPI's current `bsky-saves` is `0.4.4` (security + write-hygiene release, including the `/extract-article` SSRF guard documented in §5.3), comfortably above the floor. The GUI does not display `OutdatedHelperBanner` against the current wheel. Bumping `MIN_HELPER_VERSION` is a forward-looking GUI-side change tied to specific feature requirements (e.g. the v0.4.1 bump was driven by needing `"jwt-credentials"`); the bsky-saves team is not blocked on it for the MVP work in this spec.
+- **Current value: `MIN_HELPER_VERSION = '0.4.1'`.** PyPI's current `bsky-saves` is `0.5.1` (cleanup release on top of `0.5.0`, which was the first wheel to ship the `--gui` flag + bundled GUI serving — i.e. the milestone release where the bsky-saves side implements §3 and §4 of this spec). Comfortably above the GUI floor; `OutdatedHelperBanner` does not render. Bumping `MIN_HELPER_VERSION` is a forward-looking GUI-side change tied to specific feature requirements (e.g. the v0.4.1 bump was driven by needing `"jwt-credentials"`); the bsky-saves team is not blocked on it for any work in this spec.
 - New endpoints land as additions to `features`. The GUI feature-detects per-capability rather than version-gating wholesale, so an old GUI talking to a new daemon works for the subset it knows about.
 - Removing or renaming endpoints is a breaking change and must bump the `bsky-saves` major version.
 
