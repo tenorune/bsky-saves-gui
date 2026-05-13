@@ -9,6 +9,7 @@
 
 import { get } from 'svelte/store';
 import { loadInventory, saveInventory } from './inventory-store';
+import { loadFromDb } from './inventory-loader';
 import { threadHydrator } from './thread-hydrator';
 import { startImageBackup } from './start-image-backup';
 import { startArticleBackup } from './start-article-backup';
@@ -44,6 +45,12 @@ export async function triggerThreadHydration(): Promise<void> {
     preauthSession,
   });
   await saveInventory(out);
+  // Refresh the in-memory `inventoryState` store from the just-written
+  // IDB. Without this, the Library and Post views read stale saves —
+  // thread_replies are present in IDB but the in-memory store still
+  // reflects the pre-hydration snapshot, so PostFocus renders no
+  // thread until the tab is hard-refreshed (issue #15).
+  await loadFromDb();
 }
 
 export async function triggerImageHydration(): Promise<void> {
