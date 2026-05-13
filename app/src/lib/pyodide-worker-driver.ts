@@ -147,6 +147,12 @@ export class PyodideWorkerDriver {
   }
 }
 
+// USER-SPECIFIC. Module-level singleton — the worker's emulated FS
+// retains the active user's saves at /home/pyodide/saves_inventory.json
+// for the worker's lifetime. Reset on every identity-change boundary
+// via terminateSharedDriver() (Settings.clearAll + Settings.signOut +
+// SignIn.submit; see that function's docstring for the full rationale).
+// See issue #19 for the singleton-audit catalogue.
 let _shared: PyodideWorkerDriver | null = null;
 
 export function getSharedDriver(): PyodideWorkerDriver {

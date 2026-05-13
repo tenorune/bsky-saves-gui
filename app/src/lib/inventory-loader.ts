@@ -8,6 +8,20 @@ export type InventoryState =
   | { status: 'ready'; inventory: Inventory }
   | { status: 'error'; message: string };
 
+// USER-SPECIFIC. In-memory cache of the parsed inventory for the active
+// account — every save's URI, post text, author, embeds, hydrated
+// thread_replies / article_text / local_images. Library and Post views
+// subscribe reactively. Reset on every identity-change boundary via
+// loadFromDb (which reads from cleared storage and resyncs the store):
+//   - Settings → Clear data calls clearInventory() then loadFromDb().
+//   - SignIn.submit (session-only branch) calls clearInventory; the
+//     subsequent library-refresh writes the new account's data and
+//     calls loadFromDb at every persist site (see PR #20 / PR #21 for
+//     the staleness-fix invariant — every saveInventory() in a
+//     user-data write path MUST be paired with loadFromDb).
+//   - Sign-out alone deliberately leaves this populated; same user
+//     signs back in (see Settings.svelte::signOut).
+// See issue #19 for the singleton-audit catalogue.
 const store = writable<InventoryState>({ status: 'loading' });
 export const inventoryState: Readable<InventoryState> = { subscribe: store.subscribe };
 
