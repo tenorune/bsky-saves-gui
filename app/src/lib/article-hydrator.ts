@@ -28,6 +28,7 @@ import { extractArticleUrls } from './extract-article-urls';
 import { extractArticleViaHelper, type ExtractedArticle } from './helper-client';
 import { config } from './config';
 import { saveInventory } from './inventory-store';
+import { loadFromDb } from './inventory-loader';
 import { articleHydration, type HydrationFailure } from './hydration-state';
 import { extractArticleViaWorker } from './user-worker-client';
 import { saveFailures, loadFailures } from './failure-store';
@@ -168,11 +169,14 @@ export async function hydrateArticles(
   for (const url of urlsToFetch) {
     if (signal?.aborted) {
       articleHydration.update((s) => ({ ...s, status: 'cancelled' }));
-      // Persist whatever we did so far.
+      // Persist whatever we did so far AND refresh inventoryState so
+      // Library/Post views reflect the partial progress without needing
+      // a hard refresh (sibling of issue #15 / PR #20 for threads).
       try {
         await saveInventory(inventory);
+        await loadFromDb();
       } catch {
-        // best-effort persist
+        // best-effort persist + refresh
       }
       void saveFailures('articles', failures);
       return { fetched, skipped, failed, cancelled: true };
@@ -234,19 +238,25 @@ export async function hydrateArticles(
     articleHydration.update((s) => ({ ...s, status: 'cancelled' }));
     try {
       await saveInventory(inventory);
+      await loadFromDb();
     } catch {
-      // best-effort persist
+      // best-effort persist + refresh
     }
     void saveFailures('articles', failures);
     return { fetched, skipped, failed, cancelled: true };
   }
 
-  // Persist the mutated inventory once at the end of the run.
+  // Persist the mutated inventory once at the end of the run AND refresh
+  // inventoryState so Library/Post views see the new article_text without
+  // a hard refresh (sibling of issue #15 / PR #20 for threads).
   try {
     await saveInventory(inventory);
+    await loadFromDb();
   } catch {
-    // If persistence fails, the in-memory mutation still benefits the current
-    // session; a future run can re-fetch what didn't land.
+    // If persistence (or the follow-up reload) fails, the in-memory
+    // mutation still benefits the current session for as long as the
+    // hydrator's local `inventory` ref is reachable; a future run can
+    // re-fetch what didn't land.
   }
 
   articleHydration.update((s) => ({ ...s, status: 'done' }));

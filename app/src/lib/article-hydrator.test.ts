@@ -310,3 +310,82 @@ describe('hydrateArticles snapshot routing: none', () => {
     expect(get(articleHydration).failures[0].url).toBe('https://a.example/article');
   });
 });
+
+// Regression coverage for the article-side analog of issue #15
+// (sibling of PR #20's threads fix). Until the fix, hydrateArticles
+// wrote the mutated inventory to IDB but never refreshed
+// inventoryState — Library/Post views showed stale article-less
+// saves until the user hard-refreshed the tab.
+describe('hydrateArticles refreshes inventoryState after persisting', () => {
+  it('inventoryState reflects the new article_text after a successful end-of-run persist', async () => {
+    const fetcher = vi.fn(async (url: string) => ({
+      url,
+      title: `Title for ${url}`,
+      text: `Body for ${url}`,
+      fetched_at: '2026-05-04T12:00:00Z',
+    }));
+    const inv = makeInventory();
+    const { saveInventory } = await import('./inventory-store');
+    // Seed IDB + inventoryState with the pre-hydration inventory so the
+    // test starts from a "Library is rendered, threads-toggle just got
+    // flipped" steady state.
+    await saveInventory(inv);
+    const { loadFromDb, inventoryState } = await import('./inventory-loader');
+    await loadFromDb();
+    const before = get(inventoryState);
+    expect(before.status).toBe('ready');
+    if (before.status === 'ready') {
+      const a = before.inventory.saves.find((s) => s.uri === 'a');
+      expect(a?.article).toBeUndefined();
+    }
+
+    const { hydrateArticles } = await import('./article-hydrator');
+    await hydrateArticles(inv, { fetcher });
+
+    // Without the fix this assertion fails — inventoryState still
+    // reflects the pre-hydration snapshot until the user refreshes.
+    const after = get(inventoryState);
+    expect(after.status).toBe('ready');
+    if (after.status === 'ready') {
+      const a = after.inventory.saves.find((s) => s.uri === 'a');
+      expect(a?.article).toBeDefined();
+      expect(a?.article?.text).toBe('Body for https://example.com/a');
+    }
+  });
+
+  it('inventoryState reflects partial progress after a cancel', async () => {
+    const controller = new AbortController();
+    let calls = 0;
+    const fetcher = vi.fn(async (url: string) => {
+      calls++;
+      // Cancel after the first successful fetch but before the second.
+      if (calls === 1) {
+        queueMicrotask(() => controller.abort());
+      }
+      return {
+        url,
+        title: `Title for ${url}`,
+        text: `Body for ${url}`,
+        fetched_at: '2026-05-04T12:00:00Z',
+      };
+    });
+    const inv = makeInventory();
+    const { saveInventory } = await import('./inventory-store');
+    await saveInventory(inv);
+    const { loadFromDb, inventoryState } = await import('./inventory-loader');
+    await loadFromDb();
+
+    const { hydrateArticles } = await import('./article-hydrator');
+    const result = await hydrateArticles(inv, { fetcher, signal: controller.signal });
+    expect(result.cancelled).toBe(true);
+
+    // The first fetch's result IS persisted on the cancel branch and
+    // inventoryState should reflect it.
+    const after = get(inventoryState);
+    expect(after.status).toBe('ready');
+    if (after.status === 'ready') {
+      const a = after.inventory.saves.find((s) => s.uri === 'a');
+      expect(a?.article?.text).toBe('Body for https://example.com/a');
+    }
+  });
+});
