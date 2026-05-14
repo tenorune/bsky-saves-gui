@@ -64,6 +64,22 @@ export async function startLibraryRefresh(
     }, {
       onAfterEnrich: async (partialInv) => {
         if (_cancelled) return;
+        // COMPLETE-FETCH INVARIANT (preserve across refactors).
+        // `partialInv` here is "post-enrich, pre-threads" — NOT a partial
+        // page set. By the time `orchestrate` invokes this callback, the
+        // fetch hydrator has already paginated the entire cursor chain to
+        // completion (helper path) or returned the full inventory (Pyodide
+        // path); an interrupted/failed fetch throws before `orchestrate`
+        // ever reaches enrich. So `mergeHydratedFields` — and the v0.6.0
+        // retain-flag reconcile that will extend it (see
+        // docs/v0.6.0-retain-flag-gui-implementation-plan.md) — only ever
+        // sees a complete fetch. This matters because absence-detection
+        // (a URI present in prior but missing from the fetch ⇒ un-saved)
+        // is only sound on a complete page set: running it on a partial
+        // fetch would false-flag live bookmarks as removed and, under the
+        // future `sync` / `keep-lost` modes, delete them. If a future
+        // refactor moves the reconcile earlier or streams pages into it,
+        // it MUST re-establish a "completed pagination" gate first.
         mergeHydratedFields(partialInv, priorInventory);
         await saveInventory(partialInv);
         await loadFromDb();

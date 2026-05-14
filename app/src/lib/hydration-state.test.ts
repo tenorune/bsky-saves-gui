@@ -120,3 +120,36 @@ describe('threadProgress', () => {
     expect(get(threadProgress).status).toBe('idle');
   });
 });
+
+describe('resetAllHydrationProgress', () => {
+  it('resets all five progress stores to idle in one call (issue #24)', async () => {
+    const mod = await import('./hydration-state');
+    const stores = [
+      mod.imageHydration,
+      mod.articleHydration,
+      mod.fetchProgress,
+      mod.enrichProgress,
+      mod.threadProgress,
+    ];
+    // Dirty every store with a distinct non-idle state.
+    for (const store of stores) {
+      store.set({ status: 'running', total: 9, fetched: 4, skipped: 1, failed: 2, failures: [{ url: 'https://x', reason: 'boom' }] });
+    }
+    for (const store of stores) {
+      expect(get(store).status).toBe('running');
+    }
+
+    mod.resetAllHydrationProgress();
+
+    for (const store of stores) {
+      expect(get(store)).toEqual({
+        status: 'idle',
+        total: 0,
+        fetched: 0,
+        skipped: 0,
+        failed: 0,
+        failures: [],
+      });
+    }
+  });
+});

@@ -125,10 +125,12 @@ These apply to `bsky-saves serve --gui`. The `--gui` flag is required to enable 
 
 - Mount `_gui/` at `/`.
 - Apply SPA fallback: any path that does not resolve to a real file in `_gui/` and is not a documented API path (see §5) returns `index.html` (the GUI handles routing client-side via the URL hash).
+- **Reject dotfile-component paths**: any request path whose components begin with `.` (e.g. `/.gui-version`, `/.env`, `/foo/.bar`) returns `404`, not `index.html` and not the file. Bypasses the SPA fallback. Defends against DevTools-driven inspection of daemon-internal markers (`.gui-version` lives at the root of `_gui/`) and any inadvertent shipping of dotfile artifacts in `_gui/`.
 - Asset files under `/assets/*` are Vite-hashed (immutable). Send `Cache-Control: public, max-age=31536000, immutable`.
-- `index.html` is **not** hashed and must be revalidated. Send `Cache-Control: no-store`.
+- `index.html` and the SPA fallback are **not** hashed and must be revalidated. Send `Cache-Control: no-store`.
+- Everything else under `_gui/` (icons, manifest, favicon, sw.js) gets `Cache-Control: no-cache` — revalidate on each load but cache OK after a 304.
 - The API endpoint paths in §5 are reserved — they must take precedence over the SPA fallback.
-- **If `--gui` is passed but `_gui/` is missing or doesn't contain `index.html`, refuse to start.** Print to stderr: `Error: GUI bundle not found at <path>; install from a wheel or run scripts/fetch_gui.py.` Exit 1. Silent degradation under explicit user intent is surprising and hides problems.
+- **If `--gui` is passed but `_gui/` is missing or doesn't contain `index.html`, refuse to start.** Print to stderr: `Error: GUI bundle not found at <path>; install from a wheel or run scripts/fetch_gui.py.` Exit `2` (distinct from `1` so wrappers can distinguish "GUI missing" from "generic startup error"). Silent degradation under explicit user intent is surprising and hides problems.
 
 ### 4.2 Bind localhost-only by default
 
@@ -165,12 +167,13 @@ This is intentional. Rationale, from the `serve` requirements doc: *"The origin 
 
 > **Reconciliation note.** The workstream doc (`bsky-saves-gui-dist-workstream.md` §4 item 11) proposed a session token embedded in `index.html` via `<meta name="bsky-saves-token">` and required on every request. The `serve` requirements doc rejects this design as user-hostile and unnecessary given the localhost-only bind. This spec follows the `serve` requirements. If the destructive-endpoint roadmap (§4.7) is brought forward, the auth question may need to be reopened — at that point, daemon-issued out-of-band confirmation (terminal prompt, system tray) is the favoured pattern over an in-browser token.
 
-### 4.6 Security headers on the served GUI
+### 4.6 Security headers
 
-When `--gui` is mounting the bundled GUI, send the following headers on every static-file response (HTML, JS, CSS, manifest, icons):
+Send the following headers on **every** response — both static-file responses (HTML, JS, CSS, manifest, icons under `--gui`) and JSON API responses (§5). Uniform application is the chosen behaviour as of `bsky-saves` 0.5.0; the headers are cheap on JSON responses and harmless duplication is preferable to a path-based selection that could miss a route.
 
 ```
 X-Frame-Options: DENY
+X-Content-Type-Options: nosniff
 Referrer-Policy: no-referrer
 Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self'; connect-src 'self' https: http://127.0.0.1:* http://localhost:*; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
 Cross-Origin-Opener-Policy: same-origin
@@ -181,8 +184,7 @@ Notes:
 - The CSP largely matches what the GUI sets via `<meta>` already (in `index.html`), with `frame-ancestors 'none'` added. That directive can only be set via header, not meta, and is one of the wins of the daemon-served path over the GitHub-Pages-hosted path.
 - `'wasm-unsafe-eval'` is required because Pyodide compiles WebAssembly. Don't tighten this — it'll break image backup when the GUI falls back to Pyodide.
 - `connect-src https:` is required so the GUI can reach arbitrary Bluesky PDS hosts (Bluesky is federated). `connect-src 'self'` is too tight.
-
-The API endpoints (§5) do not need these headers — they return JSON, not HTML — but applying the same set uniformly is acceptable.
+- `X-Content-Type-Options: nosniff` on JSON responses prevents MIME-sniffing fallbacks; particularly important if any consumer ever feeds an API response into a context that respects the sniffed type.
 
 ### 4.7 Security rationale
 
@@ -211,7 +213,7 @@ Health check, version reporting, and capability advertisement, combined. The GUI
 ```json
 {
   "name": "bsky-saves",
-  "version": "0.4.4",
+  "version": "0.5.1",
   "features": ["fetch-image", "extract-article", "fetch", "enrich", "hydrate-threads", "jwt-credentials"]
 }
 ```
@@ -503,7 +505,7 @@ Requests from non-allowlisted origins — including preflight `OPTIONS` — retu
 ### 5.9 Capability versioning
 
 - The `/ping` `version` field is the public compatibility marker; the GUI's `MIN_HELPER_VERSION` constant (in `app/src/lib/min-helper-version.ts`) is the floor below which the GUI shows `OutdatedHelperBanner` and refuses to enter local mode.
-- **Current value: `MIN_HELPER_VERSION = '0.4.1'`.** PyPI's current `bsky-saves` is `0.4.4` (security + write-hygiene release, including the `/extract-article` SSRF guard documented in §5.3), comfortably above the floor. The GUI does not display `OutdatedHelperBanner` against the current wheel. Bumping `MIN_HELPER_VERSION` is a forward-looking GUI-side change tied to specific feature requirements (e.g. the v0.4.1 bump was driven by needing `"jwt-credentials"`); the bsky-saves team is not blocked on it for the MVP work in this spec.
+- **Current value: `MIN_HELPER_VERSION = '0.4.1'`.** PyPI's current `bsky-saves` is `0.5.1` (cleanup release on top of `0.5.0`, which was the first wheel to ship the `--gui` flag + bundled GUI serving — i.e. the milestone release where the bsky-saves side implements §3 and §4 of this spec). Comfortably above the GUI floor; `OutdatedHelperBanner` does not render. Bumping `MIN_HELPER_VERSION` is a forward-looking GUI-side change tied to specific feature requirements (e.g. the v0.4.1 bump was driven by needing `"jwt-credentials"`); the bsky-saves team is not blocked on it for any work in this spec.
 - New endpoints land as additions to `features`. The GUI feature-detects per-capability rather than version-gating wholesale, so an old GUI talking to a new daemon works for the subset it knows about.
 - Removing or renaming endpoints is a breaking change and must bump the `bsky-saves` major version.
 
