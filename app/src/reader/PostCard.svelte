@@ -1,19 +1,24 @@
 <script lang="ts">
   import type { Save } from './inventory-shape';
   import { formatAuthor, formatDateTime, formatHandle } from './format';
+  import { lifecycleBadges } from './save-lifecycle';
   import PostBody from './PostBody.svelte';
+  import LifecycleBadges from './LifecycleBadges.svelte';
 
   export let save: Save;
   export let onSelect: (save: Save) => void;
+
+  $: flagged = lifecycleBadges(save).length > 0;
 </script>
 
-<article class="post-card">
+<article class="post-card" class:post-card--flagged={flagged}>
   <button
     type="button"
     class="post-card__button"
     on:click={() => onSelect(save)}
     aria-label="Open post"
   >
+    <LifecycleBadges {save} />
     <header class="post-card__header">
       <span class="post-card__author">{formatAuthor(save.author)}</span>
       <span class="post-card__handle">{formatHandle(save.author.handle)}</span>
@@ -32,6 +37,14 @@
     margin-bottom: 0.75rem;
     overflow: hidden;
   }
+  /*
+   * v0.6.0 retain-flag: a save with a lifecycle marker (deleted / blocked /
+   * un-saved) gets a faint warm tint, distinct from the cool grey tint used
+   * for quoted posts, so it reads as "not a normal save" at a glance.
+   */
+  .post-card--flagged {
+    background: color-mix(in oklab, #b8860b 7%, Canvas);
+  }
   .post-card__button {
     background: none;
     border: 0;
@@ -44,6 +57,10 @@
   }
   .post-card__button:hover {
     background: color-mix(in oklab, CanvasText 4%, Canvas);
+  }
+  /* Keep the flagged tint visible on hover (let the article bg show through). */
+  .post-card--flagged .post-card__button:hover {
+    background: color-mix(in oklab, CanvasText 4%, transparent);
   }
   .post-card__header {
     display: flex;
