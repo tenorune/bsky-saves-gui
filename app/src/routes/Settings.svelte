@@ -633,7 +633,7 @@
   }
   .settings-section select.retain-mode {
     display: block;
-    margin: 0 0 0.75rem;
+    margin: 0 0 1.5rem;
     padding: 0.35rem 0.5rem;
     font: inherit;
     max-width: 100%;
