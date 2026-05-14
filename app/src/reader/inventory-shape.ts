@@ -39,6 +39,12 @@ export interface LocalImage {
   readonly url?: string;
 }
 
+// v0.6.0 retain-flag: a non-live subject post is one the *poster* or a
+// system removed — distinct from a bookmark the user deliberately
+// un-saved (that's `removed_detected_at`). `unknown` means the entry was
+// only ever seen via the content-blind `listRecords` fallback.
+export type SubjectStatus = 'not_found' | 'blocked' | 'unknown';
+
 export interface Save {
   readonly uri: string;
   readonly cid?: string;
@@ -50,6 +56,15 @@ export interface Save {
   readonly article?: ArticleHydration;
   readonly thread?: readonly ThreadEntry[];
   readonly local_images?: readonly LocalImage[];
+  // v0.6.0 retain-flag lifecycle fields. Snake_case to match the
+  // bsky-saves wire shape and the reconcile's golden fixtures exactly —
+  // the reconcile (library-refresh) operates on raw records; parseSave
+  // only surfaces these already-reconciled flags into the typed Save the
+  // UI renders. See docs/v0.6.0-retain-flag-gui-implementation-plan.md.
+  readonly last_seen_at?: string;
+  readonly removed_detected_at?: string;
+  readonly subject_status?: SubjectStatus;
+  readonly subject_status_detected_at?: string;
   readonly [extra: string]: unknown;
 }
 
@@ -80,6 +95,10 @@ function requireString(obj: Record<string, unknown>, key: string, ctx: string): 
 function optionalString(obj: Record<string, unknown>, key: string): string | undefined {
   const v = obj[key];
   return typeof v === 'string' ? v : undefined;
+}
+
+function parseSubjectStatus(v: unknown): SubjectStatus | undefined {
+  return v === 'not_found' || v === 'blocked' || v === 'unknown' ? v : undefined;
 }
 
 function parseAuthor(v: unknown): Author {
@@ -229,6 +248,14 @@ function parseSave(v: unknown): Save {
     ...(article ? { article } : {}),
     ...(thread ? { thread } : {}),
     ...(localImages.length > 0 ? { local_images: localImages } : {}),
+    // v0.6.0 retain-flag lifecycle fields — validated pass-through.
+    // Always-set (overwriting the raw `...v` value) so a malformed wire
+    // value can't masquerade as a typed field; `subject_status` is
+    // narrowed to the three literals or dropped to undefined.
+    last_seen_at: optionalString(v, 'last_seen_at'),
+    removed_detected_at: optionalString(v, 'removed_detected_at'),
+    subject_status: parseSubjectStatus(v.subject_status),
+    subject_status_detected_at: optionalString(v, 'subject_status_detected_at'),
   };
 }
 
