@@ -56,24 +56,29 @@ describe('image-store', () => {
     const { saveImageBlob, deleteImageBlob, clearImageBlobs, savedImageBlobCount } =
       await import('./image-store');
 
-    // Note: refresh after a mutation is fire-and-forget (void). Yield
-    // microtasks before each assertion so the IDB read resolves.
-    const tick = () => new Promise<void>((r) => setTimeout(r, 0));
+    // The count refresh after a mutation is fire-and-forget (void) and reads
+    // IndexedDB asynchronously, so poll the store until it settles rather than
+    // racing it with a single fixed timeout (which flaked under CI scheduling).
+    const waitForCount = async (expected: number): Promise<number> => {
+      for (let i = 0; i < 200; i++) {
+        if (get(savedImageBlobCount) === expected) return expected;
+        await new Promise<void>((r) => setTimeout(r, 5));
+      }
+      return get(savedImageBlobCount);
+    };
 
     expect(get(savedImageBlobCount)).toBe(0);
 
     await saveImageBlob('https://x/1', new Blob([''], { type: 'image/png' }));
-    await tick();
-    expect(get(savedImageBlobCount)).toBe(1);
+    expect(await waitForCount(1)).toBe(1);
 
     await saveImageBlob('https://x/2', new Blob([''], { type: 'image/png' }));
-    await tick();
-    expect(get(savedImageBlobCount)).toBe(2);
+    expect(await waitForCount(2)).toBe(2);
 
     await deleteImageBlob('https://x/1');
-    await tick();
-    expect(get(savedImageBlobCount)).toBe(1);
+    expect(await waitForCount(1)).toBe(1);
 
+    // clearImageBlobs sets the count store synchronously — no poll needed.
     await clearImageBlobs();
     expect(get(savedImageBlobCount)).toBe(0);
   });
