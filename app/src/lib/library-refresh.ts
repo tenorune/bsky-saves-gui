@@ -9,6 +9,7 @@ import { startImageBackup as defaultStartImageBackup } from './start-image-backu
 import { startArticleBackup as defaultStartArticleBackup } from './start-article-backup';
 import type { FetchSavesCredentials } from './helper-client';
 import type { PreauthSession } from './preauth-session';
+import type { RetainMode } from './retain-mode';
 
 export type { PreauthSession };
 
@@ -160,30 +161,182 @@ function mergeHydratedFields(newInv: unknown, priorInv: unknown): void {
     if (!save || typeof save !== 'object') continue;
     const s = save as Record<string, unknown>;
     if (typeof s.uri !== 'string') continue;
-    const prev = priorByUri.get(s.uri);
-    if (!prev) continue;
-    if (typeof prev.article_text === 'string' && typeof s.article_text !== 'string') {
-      s.article_text = prev.article_text;
+    fillHydratedFields(s, priorByUri.get(s.uri));
+  }
+}
+
+/**
+ * Fill local-only hydration annotations onto `s` from `prev` — only where `s`
+ * doesn't already carry them. The per-save half of `mergeHydratedFields`;
+ * also used as step 3 of the v0.6.0 reconcile. Never overwrites fresh data.
+ */
+function fillHydratedFields(
+  s: Record<string, unknown>,
+  prev: Record<string, unknown> | undefined,
+): void {
+  if (!prev) return;
+  if (typeof prev.article_text === 'string' && typeof s.article_text !== 'string') {
+    s.article_text = prev.article_text;
+  }
+  if (typeof prev.article_title === 'string' && typeof s.article_title !== 'string') {
+    s.article_title = prev.article_title;
+  }
+  if (prev.article && typeof prev.article === 'object' && !s.article) {
+    s.article = prev.article;
+  }
+  if (Array.isArray(prev.local_images) && !Array.isArray(s.local_images)) {
+    s.local_images = prev.local_images;
+  }
+  if (Array.isArray(prev.thread_replies) && !Array.isArray(s.thread_replies)) {
+    s.thread_replies = prev.thread_replies;
+    if (prev.thread_schema_version !== undefined) {
+      s.thread_schema_version = prev.thread_schema_version;
     }
-    if (typeof prev.article_title === 'string' && typeof s.article_title !== 'string') {
-      s.article_title = prev.article_title;
+    if (prev.thread_fetched_at !== undefined) {
+      s.thread_fetched_at = prev.thread_fetched_at;
     }
-    if (prev.article && typeof prev.article === 'object' && !s.article) {
-      s.article = prev.article;
+  }
+}
+
+// ── v0.6.0 retain-flag reconcile ──────────────────────────────────────────
+//
+// `reconcileInventory` is the GUI's port of the CLI's §4 reconcile, verified
+// against the shared golden fixtures (see reconcile-fixtures.test.ts). Unlike
+// `mergeHydratedFields` — which only field-fills hydration annotations and
+// NEVER changes the save *set* — the reconcile also:
+//   - stamps `last_seen_at`, clears `removed_detected_at` on reappearance,
+//     and runs the three-case `subject_status` reconciliation,
+//   - drops absent-URI entries (`keep-lost` / `sync`) or retains + flags them
+//     `removed_detected_at` (`keep-all`),
+//   - prunes dead-subject entries (`sync` only).
+// It returns a NEW inventory; `now` is injected so the fixtures stay
+// deterministic. Inventory-level `fetched_at` is carried through from the
+// prior inventory unchanged.
+
+type RawRecord = Record<string, unknown>;
+type SubjectStatusLiteral = 'not_found' | 'blocked' | 'unknown';
+
+export interface RawInventory {
+  readonly fetched_at: string;
+  readonly saves: RawRecord[];
+}
+
+function asSubjectStatus(v: unknown): SubjectStatusLiteral | undefined {
+  return v === 'not_found' || v === 'blocked' || v === 'unknown' ? v : undefined;
+}
+
+function indexByUri(records: readonly unknown[]): Map<string, RawRecord> {
+  const map = new Map<string, RawRecord>();
+  for (const r of records) {
+    if (r && typeof r === 'object' && typeof (r as RawRecord).uri === 'string') {
+      map.set((r as RawRecord).uri as string, r as RawRecord);
     }
-    if (Array.isArray(prev.local_images) && !Array.isArray(s.local_images)) {
-      s.local_images = prev.local_images;
-    }
-    if (Array.isArray(prev.thread_replies) && !Array.isArray(s.thread_replies)) {
-      s.thread_replies = prev.thread_replies;
-      if (prev.thread_schema_version !== undefined) {
-        s.thread_schema_version = prev.thread_schema_version;
+  }
+  return map;
+}
+
+// A URI present in the complete fetch. The fresh record is the base when the
+// subject is live (its content is trustworthy); for a not_found/blocked/unknown
+// fetch the body comes back empty, so we keep the prior entry's content and
+// only update the lifecycle fields.
+function reconcilePresent(
+  fresh: RawRecord,
+  prior: RawRecord | undefined,
+  now: string,
+): RawRecord {
+  const freshStatus = asSubjectStatus(fresh.subject_status);
+  let base: RawRecord;
+
+  if (freshStatus === undefined) {
+    // Live subject — fresh content wins, prior fills hydration gaps.
+    base = { ...fresh };
+    fillHydratedFields(base, prior);
+    delete base.subject_status;
+    delete base.subject_status_detected_at;
+  } else {
+    // Dead-subject or content-blind fetch — keep prior content if we have it.
+    base = prior ? { ...prior } : { ...fresh };
+    if (freshStatus === 'unknown') {
+      // `unknown` is a no-op on any existing entry: never overwrites, weakens,
+      // or clears a known status. Stored only for a brand-new URI, and even
+      // then without a detection timestamp.
+      if (!prior) {
+        base.subject_status = 'unknown';
+        delete base.subject_status_detected_at;
       }
-      if (prev.thread_fetched_at !== undefined) {
-        s.thread_fetched_at = prev.thread_fetched_at;
+    } else {
+      const priorStatus = prior ? asSubjectStatus(prior.subject_status) : undefined;
+      base.subject_status = freshStatus;
+      if (priorStatus === freshStatus && typeof prior?.subject_status_detected_at === 'string') {
+        base.subject_status_detected_at = prior.subject_status_detected_at;
+      } else {
+        // Transition (incl. brand-new URI and unknown → known) — stamp now.
+        base.subject_status_detected_at = now;
       }
     }
   }
+
+  base.last_seen_at = now;
+  // Present in a complete fetch ⇒ still saved.
+  delete base.removed_detected_at;
+  return base;
+}
+
+// A URI in the prior inventory but absent from the complete fetch — the user
+// un-saved it. Only reached under `keep-all`; the caller drops it otherwise.
+function reconcileAbsentKeepAll(prior: RawRecord, now: string): RawRecord {
+  const base = { ...prior };
+  // last_seen_at is NOT refreshed — we didn't see it this fetch. Keep an
+  // existing removal timestamp; only stamp the first detection.
+  if (typeof base.removed_detected_at !== 'string') {
+    base.removed_detected_at = now;
+  }
+  return base;
+}
+
+export function reconcileInventory(
+  fetchRecords: readonly unknown[],
+  priorInventory: { readonly fetched_at?: unknown; readonly saves?: unknown } | null | undefined,
+  mode: RetainMode,
+  now: string,
+): RawInventory {
+  const fetchByUri = indexByUri(fetchRecords);
+  const priorSaves = Array.isArray(priorInventory?.saves)
+    ? (priorInventory.saves as unknown[])
+    : [];
+  const priorByUri = indexByUri(priorSaves);
+
+  let saves: RawRecord[] = [];
+
+  for (const [uri, fresh] of fetchByUri) {
+    saves.push(reconcilePresent(fresh, priorByUri.get(uri), now));
+  }
+  for (const [uri, prior] of priorByUri) {
+    if (fetchByUri.has(uri)) continue;
+    if (mode === 'keep-all') {
+      saves.push(reconcileAbsentKeepAll(prior, now));
+    }
+    // keep-lost / sync: an un-saved entry is dropped.
+  }
+
+  if (mode === 'sync') {
+    // sync keeps only what's live on Bluesky — prune dead-subject entries.
+    saves = saves.filter((s) => {
+      const st = s.subject_status;
+      return st !== 'not_found' && st !== 'blocked';
+    });
+  }
+
+  saves.sort((a, b) => {
+    const av = typeof a.saved_at === 'string' ? a.saved_at : '';
+    const bv = typeof b.saved_at === 'string' ? b.saved_at : '';
+    return av < bv ? 1 : av > bv ? -1 : 0;
+  });
+
+  return {
+    fetched_at: typeof priorInventory?.fetched_at === 'string' ? priorInventory.fetched_at : now,
+    saves,
+  };
 }
 
 export function stopLibraryRefresh(): void {
