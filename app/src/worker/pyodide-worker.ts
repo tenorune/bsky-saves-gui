@@ -12,16 +12,6 @@ interface PreauthSession {
   readonly handle: string;
 }
 
-interface FetchInput {
-  readonly handle: string;
-  readonly appPassword: string;
-  readonly pds: string;
-  readonly fetch: boolean;
-  readonly threads: boolean;
-  readonly existingInventory?: unknown;
-  readonly preauthSession?: PreauthSession;
-}
-
 interface FetchOnlyInput {
   readonly handle: string;
   readonly appPassword: string;
@@ -45,13 +35,8 @@ interface InitMessage {
   readonly type: 'init';
   readonly pyodideVersion: string;
 }
-interface FetchMessage {
-  readonly type: 'fetch';
-  readonly input: FetchInput;
-}
 type Inbound =
   | InitMessage
-  | FetchMessage
   | { type: 'fetchOnly'; input: FetchOnlyInput }
   | { type: 'enrichOnly'; input: EnrichOnlyInput }
   | { type: 'threadsOnly'; input: ThreadsOnlyInput }
@@ -63,10 +48,6 @@ interface InitReadyMessage {
 interface LogMessage {
   readonly type: 'log';
   readonly line: string;
-}
-interface FetchResultMessage {
-  readonly type: 'fetch-result';
-  readonly inventory: unknown;
 }
 interface ResultMessage {
   readonly type: 'result';
@@ -83,7 +64,7 @@ interface ErrorMessage {
   readonly message: string;
   readonly name: string;
 }
-type Outbound = InitReadyMessage | LogMessage | FetchResultMessage | ResultMessage | ProgressMessage | ErrorMessage;
+type Outbound = InitReadyMessage | LogMessage | ResultMessage | ProgressMessage | ErrorMessage;
 
 interface PyodideLike {
   runPythonAsync(code: string): Promise<unknown>;
@@ -263,86 +244,6 @@ os.chdir('/home/pyodide')
 `);
 }
 
-async function runFetch(input: FetchInput): Promise<unknown> {
-  if (!pyodide) throw new Error('Worker not initialised');
-
-  // If the main thread already authenticated, monkey-patch
-  // bsky_saves.auth.create_session to return that session and skip the second
-  // POST. Some PDSs (eurosky.social) hang the worker's sync XHR createSession
-  // even though browser fetch to the same endpoint succeeds; reusing the
-  // pre-fetched JWT avoids that hang entirely.
-  if (input.preauthSession) {
-    const sessionJson = JSON.stringify(input.preauthSession);
-    await pyodide.runPythonAsync(`
-import bsky_saves.auth as _bsky_auth
-import bsky_saves.fetch as _bsky_fetch
-import json as _json
-_preauth = _json.loads(${JSON.stringify(sessionJson)})
-def _patched_create_session(pds_base, handle, app_password):
-    return _preauth
-# Patch both the source module and the local binding in fetch.py (which did
-# \`from .auth import create_session\`, capturing the original by reference).
-_bsky_auth.create_session = _patched_create_session
-_bsky_fetch.create_session = _patched_create_session
-print('reusing pre-authenticated session from main thread')
-`);
-  }
-
-  await pyodide.runPythonAsync(`
-import os
-os.environ['BSKY_HANDLE'] = ${JSON.stringify(input.handle)}
-os.environ['BSKY_APP_PASSWORD'] = ${JSON.stringify(input.appPassword)}
-os.environ['BSKY_PDS'] = ${JSON.stringify(input.pds)}
-`);
-
-  if (input.fetch) {
-    log('Fetching saves…');
-    await pyodide.runPythonAsync(`
-from pathlib import Path
-import bsky_saves.fetch as _bsky_fetch
-import os
-_bsky_fetch.fetch_to_inventory(
-    Path('${INVENTORY_PATH}'),
-    handle=os.environ['BSKY_HANDLE'],
-    app_password=os.environ['BSKY_APP_PASSWORD'],
-    pds_base=os.environ['BSKY_PDS'],
-)
-`);
-  } else {
-    if (!input.existingInventory) {
-      throw new Error('No existing inventory to update.');
-    }
-    log('Loading existing library…');
-    const invJson = JSON.stringify(input.existingInventory);
-    await pyodide.runPythonAsync(`
-with open('${INVENTORY_PATH}', 'w') as _f:
-    _f.write(${JSON.stringify(invJson)})
-`);
-  }
-
-  log('Enriching…');
-  await pyodide.runPythonAsync(`
-from pathlib import Path
-import bsky_saves.enrich as _bsky_enrich
-_bsky_enrich.enrich_inventory(Path('${INVENTORY_PATH}'))
-`);
-
-  if (input.threads) {
-    log('Hydrating threads…');
-    await pyodide.runPythonAsync(`
-from pathlib import Path
-import bsky_saves.threads as _bsky_threads
-hydrated, skipped = _bsky_threads.hydrate_threads(Path('${INVENTORY_PATH}'))
-print(f'bsky-saves: thread hydration done — {hydrated} hydrated, {skipped} skipped')
-`);
-  }
-
-  log('Reading inventory…');
-  const raw = pyodide.FS.readFile(INVENTORY_PATH, { encoding: 'utf8' });
-  log('Done.');
-  return JSON.parse(raw);
-}
-
 async function applyPreauthSessionPatch(preauthSession: PreauthSession | undefined): Promise<void> {
   if (!preauthSession) return;
   if (!pyodide) throw new Error('Worker not initialised');
@@ -494,9 +395,6 @@ ctx.addEventListener('message', async (event: MessageEvent<Inbound>) => {
     if (msg.type === 'init') {
       await initialise(msg.pyodideVersion);
       post({ type: 'init-ready' });
-    } else if (msg.type === 'fetch') {
-      const inventory = await runFetch(msg.input);
-      post({ type: 'fetch-result', inventory });
     } else if (msg.type === 'fetchOnly') {
       const payload = await runFetchOnly(msg.input);
       post({ type: 'result', payload });
