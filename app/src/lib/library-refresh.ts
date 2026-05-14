@@ -324,6 +324,38 @@ export function reconcileInventory(
   };
 }
 
+// The immediate-apply path for a narrowing retain-mode change (Task D): when
+// the user picks a narrower mode in Settings we apply that mode's retention
+// rules to the inventory on disk right then, so the confirm dialog's
+// present-tense copy ("This will remove …") is accurate. This is just §4
+// reconcile steps 4–5 — no fetch, no absence-detection — so it can run on the
+// stored inventory alone.
+function isRetainedUnder(save: RawRecord, mode: RetainMode): boolean {
+  if (mode === 'keep-all') return true;
+  // keep-lost and sync both drop entries the user un-saved.
+  if (save.removed_detected_at) return false;
+  if (mode === 'sync') {
+    // sync additionally prunes dead-subject entries.
+    const st = save.subject_status;
+    if (st === 'not_found' || st === 'blocked') return false;
+  }
+  return true;
+}
+
+export function applyRetainMode(
+  inventory: { readonly fetched_at?: unknown; readonly saves?: unknown } | null | undefined,
+  mode: RetainMode,
+): RawInventory {
+  const priorSaves = Array.isArray(inventory?.saves) ? (inventory.saves as unknown[]) : [];
+  const saves = priorSaves.filter(
+    (s): s is RawRecord => !!s && typeof s === 'object' && isRetainedUnder(s as RawRecord, mode),
+  );
+  return {
+    fetched_at: typeof inventory?.fetched_at === 'string' ? inventory.fetched_at : '',
+    saves,
+  };
+}
+
 export function stopLibraryRefresh(): void {
   _cancelled = true;
   store.set({ status: 'idle' });

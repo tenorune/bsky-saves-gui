@@ -2,7 +2,8 @@
   import { onMount } from 'svelte';
   import { get } from 'svelte/store';
   import { inventoryState, loadFromDb } from '$lib/inventory-loader';
-  import { clearInventory, saveInventory } from '$lib/inventory-store';
+  import { clearInventory, loadInventory, saveInventory } from '$lib/inventory-store';
+  import { applyRetainMode } from '$lib/library-refresh';
   import { triggerThreadHydration, triggerImageHydration, triggerArticleHydration } from '$lib/asset-trigger';
   import { clearCredentials, hasCredentials, saveCredentials as persistCredentials } from '$lib/credentials-store';
   import { clearAccount } from '$lib/account-store';
@@ -210,11 +211,18 @@
       selectedRetainMode = current; // revert — Svelte syncs the <select> back
       return;
     }
+    const narrowing = isRetainNarrowing(current, next);
     await setRetainMode(next);
-    // TODO(Task B): a narrowing change should reconcile the inventory in
-    // place immediately here so the confirm copy's present tense is
-    // accurate. Until Task B lands, the mode is persisted but inert — the
-    // deletion takes effect on the next library refresh.
+    // A narrowing change reconciles the inventory in place immediately, so the
+    // confirm dialog's present-tense copy ("This will remove …") is accurate.
+    // Widening changes only affect what future refreshes retain.
+    if (narrowing) {
+      const stored = await loadInventory();
+      if (stored) {
+        await saveInventory(applyRetainMode(stored, next));
+        await loadFromDb();
+      }
+    }
   }
 
   // Trigger functions live in $lib/asset-trigger so the Library hub's
