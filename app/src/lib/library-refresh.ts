@@ -9,7 +9,7 @@ import { startImageBackup as defaultStartImageBackup } from './start-image-backu
 import { startArticleBackup as defaultStartArticleBackup } from './start-article-backup';
 import type { FetchSavesCredentials } from './helper-client';
 import type { PreauthSession } from './preauth-session';
-import type { RetainMode } from './retain-mode';
+import { retainMode, loadRetainMode, type RetainMode } from './retain-mode';
 
 export type { PreauthSession };
 
@@ -48,6 +48,9 @@ export async function startLibraryRefresh(
   const loadInventory = deps.loadInventory ?? defaultLoadInventory;
   _cancelled = false;
   store.set({ status: 'running' });
+  // The reconcile (below) needs the user's retain mode; make sure it's been
+  // hydrated from IndexedDB even if Settings was never opened this session.
+  await loadRetainMode();
   // Snapshot the previously-saved inventory before fetch wipes hydrated
   // fields. Each fresh /fetch returns saves without article_text, local_images,
   // thread_replies, etc. — those are local-only annotations from prior
@@ -71,19 +74,26 @@ export async function startLibraryRefresh(
         // fetch hydrator has already paginated the entire cursor chain to
         // completion (helper path) or returned the full inventory (Pyodide
         // path); an interrupted/failed fetch throws before `orchestrate`
-        // ever reaches enrich. So `mergeHydratedFields` — and the v0.6.0
-        // retain-flag reconcile that will extend it (see
-        // docs/v0.6.0-retain-flag-gui-implementation-plan.md) — only ever
-        // sees a complete fetch. This matters because absence-detection
-        // (a URI present in prior but missing from the fetch ⇒ un-saved)
-        // is only sound on a complete page set: running it on a partial
-        // fetch would false-flag live bookmarks as removed and, under the
-        // future `sync` / `keep-lost` modes, delete them. If a future
-        // refactor moves the reconcile earlier or streams pages into it,
-        // it MUST re-establish a "completed pagination" gate first.
-        mergeHydratedFields(partialInv, priorInventory);
-        await saveInventory(partialInv);
+        // ever reaches enrich. So `reconcileInventory` only ever sees a
+        // complete fetch. This matters because absence-detection (a URI
+        // present in prior but missing from the fetch ⇒ un-saved) is only
+        // sound on a complete page set: running it on a partial fetch would
+        // false-flag live bookmarks as removed and, under `sync` /
+        // `keep-lost`, delete them. If a future refactor moves the reconcile
+        // earlier or streams pages into it, it MUST re-establish a
+        // "completed pagination" gate first.
+        const freshSaves = (partialInv as { saves?: unknown }).saves;
+        const reconciled = reconcileInventory(
+          Array.isArray(freshSaves) ? freshSaves : [],
+          priorInventory as { fetched_at?: unknown; saves?: unknown } | null,
+          get(retainMode),
+          new Date().toISOString(),
+        );
+        await saveInventory(reconciled);
         await loadFromDb();
+        // Hand the reconciled (possibly smaller) set back to orchestrate so
+        // the threads hydrator and final save continue from it.
+        return reconciled;
       },
     });
     // Persist the orchestrator's result *even when cancelled* so partial
@@ -121,16 +131,16 @@ export async function startLibraryRefresh(
 }
 
 /**
- * Merge hydrated fields from priorInv onto saves in newInv (in place).
- * This is the SINGLE SOURCE OF TRUTH for which save-level fields are
- * "local-only annotations" — values produced by hydrators on this device
- * that a fresh /fetch wipes off the wire.
+ * Fill local-only hydration annotations onto `s` from `prev` — only where `s`
+ * doesn't already carry them. This is the SINGLE SOURCE OF TRUTH for which
+ * save-level fields are "local-only annotations": values produced by hydrators
+ * on this device that a fresh /fetch wipes off the wire. Used as step 3 of the
+ * v0.6.0 reconcile (see `reconcilePresent`).
  *
- * Hydration invariant: never re-fetch what we already have. Each fresh
- * /fetch returns only the upstream save shape (uri, post_text, embed,
- * etc.); local annotations live ONLY on disk. Without this merge, every
- * Refresh would clobber accumulated state and the hydrators would treat
- * everything as needing work.
+ * Hydration invariant: never re-fetch what we already have. Each fresh /fetch
+ * returns only the upstream save shape (uri, post_text, embed, etc.); local
+ * annotations live ONLY on disk. Without this fill, every Refresh would clobber
+ * accumulated state and the hydrators would treat everything as needing work.
  *
  * Currently carried forward (key: rationale):
  *   - article_text     — body text written by hydrate-articles
@@ -144,31 +154,6 @@ export async function startLibraryRefresh(
  * Adding a new local-only annotation? Add it here too — same shape:
  * type-check the prior value and only fill the field on the new save when
  * it isn't already set. Never overwrite fresh data from the new fetch.
- */
-function mergeHydratedFields(newInv: unknown, priorInv: unknown): void {
-  if (!newInv || typeof newInv !== 'object') return;
-  if (!priorInv || typeof priorInv !== 'object') return;
-  const newSaves = (newInv as { saves?: unknown }).saves;
-  const priorSaves = (priorInv as { saves?: unknown }).saves;
-  if (!Array.isArray(newSaves) || !Array.isArray(priorSaves)) return;
-  const priorByUri = new Map<string, Record<string, unknown>>();
-  for (const s of priorSaves) {
-    if (s && typeof s === 'object' && typeof (s as { uri?: unknown }).uri === 'string') {
-      priorByUri.set((s as { uri: string }).uri, s as Record<string, unknown>);
-    }
-  }
-  for (const save of newSaves) {
-    if (!save || typeof save !== 'object') continue;
-    const s = save as Record<string, unknown>;
-    if (typeof s.uri !== 'string') continue;
-    fillHydratedFields(s, priorByUri.get(s.uri));
-  }
-}
-
-/**
- * Fill local-only hydration annotations onto `s` from `prev` — only where `s`
- * doesn't already carry them. The per-save half of `mergeHydratedFields`;
- * also used as step 3 of the v0.6.0 reconcile. Never overwrites fresh data.
  */
 function fillHydratedFields(
   s: Record<string, unknown>,
