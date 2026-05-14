@@ -55,6 +55,18 @@ async function runHelperPath(
       }
     : input.credentials;
 
+  // ALL-OR-NOTHING PAGINATION (preserve across refactors).
+  // This loop accumulates pages until the cursor is null and only then
+  // returns. Any failure mid-pagination throws — the partially-accumulated
+  // `saves` array is discarded with the stack frame, never returned. That
+  // is load-bearing: the library-refresh reconcile (and the v0.6.0
+  // retain-flag reconcile that extends it — see
+  // docs/v0.6.0-retain-flag-gui-implementation-plan.md) treats its input
+  // as a COMPLETE fetch and does absence-detection against it. A
+  // partial-page set leaking out of here would let live bookmarks be
+  // flagged un-saved. If this ever grows incremental/streaming behaviour,
+  // it must signal "completed" vs "partial" so the reconcile can refuse
+  // to run on a partial set.
   const saves: unknown[] = [];
   let cursor: string | null = null;
   while (true) {
