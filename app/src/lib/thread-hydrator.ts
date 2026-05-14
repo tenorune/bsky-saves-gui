@@ -30,22 +30,9 @@ export type ThreadBackend = { kind: 'helper' } | { kind: 'pyodide' };
 export interface ThreadHydratorInput {
   readonly backend: ThreadBackend;
   readonly origin: string;
-  readonly inventory: {
-    readonly saves: readonly {
-      readonly uri: string;
-      readonly thread_replies?: unknown;
-      readonly subject_status?: unknown;
-    }[];
-  };
+  readonly inventory: { readonly saves: readonly { readonly uri: string; readonly thread_replies?: unknown }[] };
   readonly credentials: FetchSavesCredentials;
   readonly preauthSession?: PreauthSession;
-}
-
-// A deleted or blocked subject post has no thread to fetch — asking the
-// helper for one just yields an http_400. Treat these like already-hydrated
-// saves: skip them rather than letting them fail.
-function isDeadSubject(s: { readonly subject_status?: unknown }): boolean {
-  return s.subject_status === 'not_found' || s.subject_status === 'blocked';
 }
 
 export interface ThreadHydratorDeps {
@@ -92,13 +79,10 @@ export const threadHydrator = {
       if (input.backend.kind === 'helper') {
         const ht = deps.hydrateThreads ?? defaultHydrateThreads;
         // Skip saves that already have thread_replies populated (matches
-        // bsky-saves CLI's hydrate-threads behavior), plus dead-subject saves
-        // that have no thread to fetch. Failed and new saves are retried on
-        // each Refresh.
+        // bsky-saves CLI's hydrate-threads behavior). Failed and new saves
+        // are retried on each Refresh.
         const allSaves = input.inventory.saves;
-        const needsHydration = allSaves.filter(
-          (s) => s.thread_replies === undefined && !isDeadSubject(s),
-        );
+        const needsHydration = allSaves.filter((s) => s.thread_replies === undefined);
         const uris = needsHydration.map((s) => s.uri);
         const skipped = allSaves.length - needsHydration.length;
         // Carry forward persisted failures whose URI is still in scope

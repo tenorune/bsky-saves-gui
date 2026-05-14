@@ -25,6 +25,7 @@
 
 import { get } from 'svelte/store';
 import { extractArticleUrls } from './extract-article-urls';
+import { excludeDeadSubjectSaves } from '../reader/save-lifecycle';
 import { extractArticleViaHelper, type ExtractedArticle } from './helper-client';
 import { config } from './config';
 import { saveInventory } from './inventory-store';
@@ -123,9 +124,15 @@ export async function hydrateArticles(
     fetcher = fetcherFromSnapshot(snapshot, signal);
   }
 
+  // Don't fetch articles for deleted/blocked posts. Derive the work set from
+  // a dead-subject-free view, but keep `inventory` itself for the in-place
+  // mutation + persistence below — filtering that would drop the entries the
+  // retain mode chose to keep.
+  const liveInventory = excludeDeadSubjectSaves(inventory);
+
   const allUrls: string[] = [];
-  if (inventory && typeof inventory === 'object') {
-    const inv = inventory as { saves?: unknown };
+  if (liveInventory && typeof liveInventory === 'object') {
+    const inv = liveInventory as { saves?: unknown };
     if (Array.isArray(inv.saves)) {
       // Count saves with article_text === string AS skipped, but count saves
       // whose embed.url is missing as neither skipped nor fetched.
@@ -140,7 +147,7 @@ export async function hydrateArticles(
       }
     }
   }
-  const urlsToFetch = extractArticleUrls(inventory);
+  const urlsToFetch = extractArticleUrls(liveInventory);
   const skipped = allUrls.length - urlsToFetch.length;
 
   // Carry forward any persisted failures whose URL is still relevant

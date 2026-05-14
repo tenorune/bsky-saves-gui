@@ -56,6 +56,36 @@ describe('hydrateArticles happy path', () => {
     expect((inv.saves[2] as Record<string, unknown>).article_text).toBe('already there'); // untouched
   });
 
+  it('skips dead-subject saves but keeps them in the persisted inventory', async () => {
+    const fetcher = vi.fn(async (url: string) => ({
+      url,
+      title: 't',
+      text: 't',
+      fetched_at: '2026-05-04T12:00:00Z',
+    }));
+    const inv = {
+      saves: [
+        { uri: 'a', embed: { url: 'https://example.com/a' } },
+        {
+          uri: 'dead',
+          subject_status: 'not_found',
+          embed: { url: 'https://example.com/dead' },
+        },
+      ],
+    };
+    const { hydrateArticles } = await import('./article-hydrator');
+    const result = await hydrateArticles(inv, { fetcher });
+    // Only the live save's article URL is fetched.
+    expect(result).toEqual({ fetched: 1, skipped: 0, failed: 0, cancelled: false });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher).toHaveBeenCalledWith('https://example.com/a');
+    // The dead-subject save is left alone, NOT dropped from the inventory.
+    expect((inv.saves[1] as Record<string, unknown>).article_text).toBeUndefined();
+    const { loadInventory } = await import('./inventory-store');
+    const fromDb = (await loadInventory()) as { saves: Array<Record<string, unknown>> };
+    expect(fromDb.saves.map((s) => s.uri)).toEqual(['a', 'dead']);
+  });
+
   it('persists the mutated inventory to IDB at the end', async () => {
     const fetcher = vi.fn(async (url: string) => ({
       url,
