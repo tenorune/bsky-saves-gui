@@ -100,11 +100,10 @@ describe('stopLibraryRefresh', () => {
       },
     );
     expect(get(libraryRefreshState).status).toBe('running');
-    // library-refresh now does an `await loadInventory()` before orchestrate
-    // (to snapshot prior hydrated fields). Yield a microtask so orchestrate's
-    // mock has been invoked and resolveOrchestrate is set.
-    await Promise.resolve();
-    await Promise.resolve();
+    // library-refresh does async IndexedDB work before orchestrate (load the
+    // retain mode, then snapshot prior hydrated fields). Flush the task queue
+    // so orchestrate's mock has been invoked and resolveOrchestrate is set.
+    await new Promise((r) => setTimeout(r, 0));
     stopLibraryRefresh();
     expect(get(libraryRefreshState).status).toBe('idle');
     resolveOrchestrate!(partial);

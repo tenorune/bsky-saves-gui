@@ -1,7 +1,9 @@
 <script lang="ts">
   import type { Save } from './inventory-shape';
   import { formatAuthor, formatDateTime, formatHandle } from './format';
+  import { lifecycleBadges } from './save-lifecycle';
   import PostBody from './PostBody.svelte';
+  import LifecycleBadges from './LifecycleBadges.svelte';
   import HydratedImage from '../components/HydratedImage.svelte';
   import { bskyPostUrl } from '$lib/bsky-permalink';
 
@@ -9,9 +11,11 @@
 
   $: thread = save.thread ?? [];
   $: bskyUrl = bskyPostUrl(save);
+  $: flagged = lifecycleBadges(save).length > 0;
 </script>
 
-<article class="post-focus">
+<article class="post-focus" class:post-focus--flagged={flagged}>
+  <LifecycleBadges {save} />
   <header class="post-focus__header">
     <span class="post-focus__author">{formatAuthor(save.author)}</span>
     <span class="post-focus__handle">{formatHandle(save.author.handle)}</span>
@@ -68,6 +72,10 @@
     padding: 1rem;
     max-width: 44rem;
     margin: 0 auto;
+  }
+  /* v0.6.0 retain-flag: warm tint matching the flagged card in the feed. */
+  .post-focus--flagged {
+    background: color-mix(in oklab, #b8860b 7%, Canvas);
   }
   .post-focus__header {
     display: flex;

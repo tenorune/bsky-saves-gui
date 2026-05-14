@@ -87,6 +87,29 @@ describe('markdownExporter', () => {
     expect(md).toContain('Body of the linked article.');
   });
 
+  it('marks deleted/blocked/unsaved posts with a lifecycle status line', async () => {
+    const { exportMarkdown } = await import('./markdown-exporter');
+    const inv: Inventory = {
+      saves: [
+        {
+          uri: 'at://x/y/3l',
+          cid: 'c',
+          author: { did: 'd', handle: 'a.example' },
+          record: { text: 'gone now', createdAt: '2026-04-01T00:00:00Z' },
+          indexedAt: '2026-04-01T00:00:00Z',
+          subject_status: 'not_found',
+          removed_detected_at: '2026-05-10T00:00:00Z',
+        },
+      ],
+    };
+    const result = await exportMarkdown(inv, {
+      account: 'me',
+      hydratedFlags: { enrich: false, threads: false, articles: false, images: false },
+    });
+    const md = await result.blob.text();
+    expect(md).toContain('**Deleted · Unsaved**');
+  });
+
   it('keeps multi-paragraph thread replies inside one blockquote', async () => {
     const { exportMarkdown } = await import('./markdown-exporter');
     const inv: Inventory = {

@@ -17,7 +17,10 @@ export interface OrchestrateRefreshDeps {
   readonly fetchHydrator?:  { start: typeof defaultFetchHydrator.start };
   readonly enrichHydrator?: { start: typeof defaultEnrichHydrator.start };
   readonly threadHydrator?: { start: typeof defaultThreadHydrator.start };
-  readonly onAfterEnrich?: (inv: unknown) => Promise<void> | void;
+  // May return a replacement inventory (the v0.6.0 retain-flag reconcile
+  // returns a new, possibly smaller save set); when it does, the rest of the
+  // pipeline (threads, final save) continues from the replacement.
+  readonly onAfterEnrich?: (inv: unknown) => Promise<unknown> | unknown;
 }
 
 export async function orchestrateRefresh(
@@ -42,7 +45,10 @@ export async function orchestrateRefresh(
   }) as typeof inv;
 
   if (deps.onAfterEnrich) {
-    await deps.onAfterEnrich(inv);
+    const replaced = await deps.onAfterEnrich(inv);
+    if (replaced && typeof replaced === 'object') {
+      inv = replaced as typeof inv;
+    }
   }
 
   if (input.includeThreads) {

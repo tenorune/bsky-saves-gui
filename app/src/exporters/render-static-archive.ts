@@ -14,6 +14,7 @@ import type { GatheredImageFile } from '../lib/gather-image-files';
 import { formatAuthor, formatDateTime, formatHandle } from '../reader/format';
 import { bskyPostUrl } from '../lib/bsky-permalink';
 import { rkeyOf } from '../reader/inventory-shape';
+import { lifecycleBadges, lifecycleBadgeLabel } from '../reader/save-lifecycle';
 
 export interface StaticArchiveSingleHtml {
   readonly kind: 'html';
@@ -199,6 +200,23 @@ ${imagesHtml}
 </blockquote>`;
 }
 
+/**
+ * v0.6.0 retain-flag: a row of Deleted/Blocked/Unsaved badges for a post whose
+ * lifecycle changed (poster deleted/blocked it, or the user unsaved it).
+ * Returns '' for a normal, still-saved post.
+ */
+export function renderLifecycleBadges(save: Save): string {
+  const badges = lifecycleBadges(save);
+  if (badges.length === 0) return '';
+  const spans = badges
+    .map(
+      (b) =>
+        `<span class="lifecycle-badge lifecycle-badge--${b}">${escapeHtml(lifecycleBadgeLabel(b))}</span>`,
+    )
+    .join('\n');
+  return `<div class="lifecycle-badges">\n${spans}\n</div>`;
+}
+
 export function renderArticleDetails(save: Save): string {
   if (!save.article?.text) return '';
   const paras = splitParagraphs(save.article.text)
@@ -329,8 +347,11 @@ export function renderPostFocusContent(
   const bskyUrl = bskyPostUrl(save);
   const bodyHtml = renderPostBody(save, pathMap, prefix);
   const threadHtml = renderThread(save.thread, pathMap, prefix);
+  const badgesHtml = renderLifecycleBadges(save);
+  const flaggedClass = badgesHtml ? ' post-focus--flagged' : '';
 
-  return `<article class="post-focus">
+  return `<article class="post-focus${flaggedClass}">
+${badgesHtml}
 <header class="post-focus__header">
 <span class="post-focus__author">${author}</span>
 <span class="post-focus__handle">${handle}</span>
@@ -374,7 +395,11 @@ export function renderPostCardSummary(
       ? `<a class="post-card__view-link" href="${escapeAttr(href)}">View post →</a>`
       : '';
 
-  return `<article class="post-card" id="post-${escapeAttr(rkey)}" data-searchable="${searchable}">
+  const badgesHtml = renderLifecycleBadges(save);
+  const flaggedClass = badgesHtml ? ' post-card--flagged' : '';
+
+  return `<article class="post-card${flaggedClass}" id="post-${escapeAttr(rkey)}" data-searchable="${searchable}">
+${badgesHtml}
 <header class="post-card__header">
 <span class="post-card__author">${authorHtml}</span>
 <span class="post-card__handle">${handleHtml}</span>
@@ -472,6 +497,38 @@ img { display: block; max-width: 100%; }
   opacity: 0.75;
 }
 .post-card__view-link:hover { opacity: 1; text-decoration: underline; }
+
+/* === Lifecycle badges (v0.6.0 retain-flag) === */
+/* A flagged post gets a faint warm tint, distinct from the cool grey tint
+   used for quoted posts, plus Deleted/Blocked/Unsaved badges at the top. */
+.post-card--flagged,
+.post-focus--flagged {
+  background: color-mix(in oklab, #b8860b 7%, Canvas);
+}
+.lifecycle-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+}
+.lifecycle-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  border: 1px solid currentColor;
+}
+.lifecycle-badge--deleted,
+.lifecycle-badge--blocked {
+  color: color-mix(in oklab, #c0392b 80%, CanvasText);
+  background: color-mix(in oklab, #c0392b 12%, Canvas);
+}
+.lifecycle-badge--unsaved {
+  color: color-mix(in oklab, #b8860b 80%, CanvasText);
+  background: color-mix(in oklab, #b8860b 12%, Canvas);
+}
 
 /* === Post focus (detail page) === */
 .post-focus {

@@ -4,6 +4,7 @@ import {
   renderStaticArchive,
   renderQuotedPost,
   renderArticleDetails,
+  renderLifecycleBadges,
   renderThread,
   splitParagraphs,
   STYLES,
@@ -456,6 +457,58 @@ describe('integration: posts with thread', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Lifecycle badges (v0.6.0 retain-flag)
+// ---------------------------------------------------------------------------
+
+describe('renderLifecycleBadges', () => {
+  it('returns an empty string for a live, still-saved post', () => {
+    expect(renderLifecycleBadges(makeSave())).toBe('');
+  });
+
+  it('renders a Deleted badge for a not_found subject', () => {
+    const html = renderLifecycleBadges(makeSave({ subject_status: 'not_found' }));
+    expect(html).toContain('lifecycle-badge--deleted');
+    expect(html).toContain('>Deleted<');
+  });
+
+  it('renders a Blocked badge for a blocked subject', () => {
+    const html = renderLifecycleBadges(makeSave({ subject_status: 'blocked' }));
+    expect(html).toContain('lifecycle-badge--blocked');
+    expect(html).toContain('>Blocked<');
+  });
+
+  it('renders an Unsaved badge when removed_detected_at is set', () => {
+    const html = renderLifecycleBadges(
+      makeSave({ removed_detected_at: '2026-05-10T00:00:00Z' }),
+    );
+    expect(html).toContain('lifecycle-badge--unsaved');
+    expect(html).toContain('>Unsaved<');
+  });
+
+  it('renders both badges when a post was deleted and unsaved', () => {
+    const html = renderLifecycleBadges(
+      makeSave({ subject_status: 'not_found', removed_detected_at: '2026-05-10T00:00:00Z' }),
+    );
+    expect(html).toContain('>Deleted<');
+    expect(html).toContain('>Unsaved<');
+  });
+});
+
+describe('flagged posts in the archive', () => {
+  it('marks a flagged post card and post-focus with the --flagged class and badges', () => {
+    const inv: Inventory = {
+      saves: [makeSave({ subject_status: 'not_found' })],
+    };
+    const single = renderStaticArchive({ inventory: inv, imageFiles: [] });
+    expect(single.kind).toBe('html');
+    if (single.kind === 'html') {
+      expect(single.html).toContain('post-focus--flagged');
+      expect(single.html).toContain('lifecycle-badge--deleted');
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // STYLES constant
 // ---------------------------------------------------------------------------
 
@@ -466,5 +519,6 @@ describe('STYLES', () => {
     expect(STYLES).toContain('.post-body__text');
     expect(STYLES).toContain('.quoted-post');
     expect(STYLES).toContain('.search-input');
+    expect(STYLES).toContain('.lifecycle-badge');
   });
 });
