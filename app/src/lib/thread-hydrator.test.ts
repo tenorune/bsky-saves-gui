@@ -24,6 +24,28 @@ describe('threadHydrator (helper path)', () => {
     expect(saves[1].thread_replies).toBeUndefined();
     expect(get(threadProgress).status).toBe('done');
   });
+
+  it('skips dead-subject saves (not_found / blocked) — they have no thread to fetch', async () => {
+    const fakeHT = vi.fn().mockResolvedValue({ threaded: [], errors: [] });
+    await threadHydrator.start({
+      backend: { kind: 'helper' },
+      origin: 'http://x',
+      inventory: {
+        saves: [
+          { uri: 'at://live' },
+          { uri: 'at://deleted', subject_status: 'not_found' },
+          { uri: 'at://blocked', subject_status: 'blocked' },
+        ],
+      },
+      credentials: { accessJwt: 'A', refreshJwt: 'R', did: 'did:plc:1' },
+    }, { hydrateThreads: fakeHT });
+
+    // Only the live save's URI is sent to the helper.
+    expect(fakeHT).toHaveBeenCalledWith('http://x', expect.objectContaining({ uris: ['at://live'] }));
+    // The two dead-subject saves count as skipped, not failed.
+    expect(get(threadProgress).skipped).toBe(2);
+    expect(get(threadProgress).failed).toBe(0);
+  });
 });
 
 describe('threadHydrator (pyodide path)', () => {
