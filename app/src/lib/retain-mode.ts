@@ -22,6 +22,21 @@ function isRetainMode(v: unknown): v is RetainMode {
   return v === 'sync' || v === 'keep-lost' || v === 'keep-all';
 }
 
+// Retention breadth: keep-all (widest) > keep-lost > sync (narrowest).
+const RETAIN_RANK: Record<RetainMode, number> = { 'keep-all': 2, 'keep-lost': 1, sync: 0 };
+
+/**
+ * True when changing from `from` to `to` moves toward a *narrower*
+ * retention mode — i.e. the change will delete inventory entries the
+ * current mode keeps. Same-mode and widening changes return false.
+ *
+ * Shared behavioural logic: the mode selector (Settings) confirms
+ * narrowing changes, and Task B's reconcile-in-place acts on them.
+ */
+export function isRetainNarrowing(from: RetainMode, to: RetainMode): boolean {
+  return RETAIN_RANK[to] < RETAIN_RANK[from];
+}
+
 export async function loadRetainMode(): Promise<void> {
   const raw = await idbGet(KEY);
   store.set(isRetainMode(raw) ? raw : DEFAULT);

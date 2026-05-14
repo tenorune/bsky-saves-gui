@@ -34,6 +34,14 @@
   import CustomProxySetupModal from '../components/CustomProxySetupModal.svelte';
   import { assetToggles, setAssetToggle, loadAssetToggles, clearAssetToggles } from '$lib/asset-toggles';
   import { installHintDismissed, loadInstallHintPref, clearInstallHintPref } from '$lib/install-hint-pref';
+  import {
+    retainMode,
+    loadRetainMode,
+    setRetainMode,
+    clearRetainMode,
+    isRetainNarrowing,
+    type RetainMode,
+  } from '$lib/retain-mode';
   import InstallHelperHint from '../components/library-status/InstallHelperHint.svelte';
   import DefinitionTerm from '../components/DefinitionTerm.svelte';
   import { capabilitySnapshot, initCapabilitySnapshot } from '$lib/capability-snapshot';
@@ -115,6 +123,7 @@
     void probeOperatorProxy();
     await loadAssetToggles();
     await loadInstallHintPref();
+    await loadRetainMode();
   });
 
   import {
@@ -172,6 +181,40 @@
     const checked = (event.currentTarget as HTMLInputElement).checked;
     if (!checked) cancelThreadHydration();
     void setAssetToggle('threads', checked, { onThreadsToggleOn: triggerThreadHydration });
+  }
+
+  // The retain-mode <select> mirrors the `retainMode` store via this local,
+  // but routes user changes through handleRetainModeChange so a *narrowing*
+  // change (one that will delete inventory entries) is confirmed first. On a
+  // declined confirm we revert this local, which Svelte syncs back to the
+  // <select>.
+  let selectedRetainMode: RetainMode = get(retainMode);
+  $: selectedRetainMode = $retainMode;
+
+  // The narrowing predicate (which transitions delete entries) is shared
+  // logic in retain-mode.ts; only the user-facing copy lives here.
+  function retainNarrowingWarning(from: RetainMode, to: RetainMode): string {
+    const removesUnsaved = from === 'keep-all'; // keep-all is the only mode that retains un-saved entries
+    const removesDeadSubject = to === 'sync'; // only sync prunes deleted/blocked entries
+    const parts: string[] = [];
+    if (removesUnsaved) parts.push('posts you un-saved');
+    if (removesDeadSubject) parts.push('posts deleted or blocked by their poster');
+    return `This will remove ${parts.join(' and ')} from your Library. Continue?`;
+  }
+
+  async function handleRetainModeChange(event: Event): Promise<void> {
+    const next = (event.currentTarget as HTMLSelectElement).value as RetainMode;
+    const current = get(retainMode);
+    if (next === current) return;
+    if (isRetainNarrowing(current, next) && !confirm(retainNarrowingWarning(current, next))) {
+      selectedRetainMode = current; // revert — Svelte syncs the <select> back
+      return;
+    }
+    await setRetainMode(next);
+    // TODO(Task B): a narrowing change should reconcile the inventory in
+    // place immediately here so the confirm copy's present tense is
+    // accurate. Until Task B lands, the mode is persisted but inert — the
+    // deletion takes effect on the next library refresh.
   }
 
   // Trigger functions live in $lib/asset-trigger so the Library hub's
@@ -266,6 +309,7 @@
       clearOperatorProxyOptOut(),
       clearInstallHintPref(),
       clearProxyConfig(),
+      clearRetainMode(),
     ]);
     resetLibraryFilters();
     operatorProxyOptOut = false;
@@ -410,6 +454,17 @@
 
   <section class="settings-section">
     <h3>Backups</h3>
+    <p class="help">Choose what you want to keep in your Library.</p>
+    <select
+      class="retain-mode"
+      aria-label="What to keep in your Library"
+      bind:value={selectedRetainMode}
+      on:change={handleRetainModeChange}
+    >
+      <option value="keep-all">Keep everything, including posts I unsave</option>
+      <option value="keep-lost">Keep deleted or blocked posts</option>
+      <option value="sync">Keep only what's on Bluesky</option>
+    </select>
     <p class="help">Choose which kinds of backups Library should keep up to date.</p>
     <label class="checkbox">
       <input
@@ -567,6 +622,13 @@
     margin: 0 0 0.75rem;
     font-size: 0.875rem;
     opacity: 0.8;
+  }
+  .settings-section select.retain-mode {
+    display: block;
+    margin: 0 0 0.75rem;
+    padding: 0.35rem 0.5rem;
+    font: inherit;
+    max-width: 100%;
   }
   /* When a help paragraph sits immediately after a button row, give
      it breathing room above so the explanation reads as belonging to

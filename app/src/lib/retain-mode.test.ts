@@ -6,6 +6,7 @@ import {
   loadRetainMode,
   setRetainMode,
   clearRetainMode,
+  isRetainNarrowing,
   _resetRetainModeForTests,
 } from './retain-mode';
 import { clear, get as idbGet, set as idbSet } from 'idb-keyval';
@@ -57,5 +58,25 @@ describe('retainMode', () => {
 
     expect(get(retainMode)).toBe('keep-lost');
     expect(await idbGet('retain-mode:v1')).toBeUndefined();
+  });
+});
+
+describe('isRetainNarrowing', () => {
+  it('returns true for every narrowing transition (deletes entries)', () => {
+    expect(isRetainNarrowing('keep-all', 'keep-lost')).toBe(true);
+    expect(isRetainNarrowing('keep-all', 'sync')).toBe(true);
+    expect(isRetainNarrowing('keep-lost', 'sync')).toBe(true);
+  });
+
+  it('returns false for widening transitions', () => {
+    expect(isRetainNarrowing('sync', 'keep-lost')).toBe(false);
+    expect(isRetainNarrowing('sync', 'keep-all')).toBe(false);
+    expect(isRetainNarrowing('keep-lost', 'keep-all')).toBe(false);
+  });
+
+  it('returns false for same-mode transitions', () => {
+    for (const m of ['sync', 'keep-lost', 'keep-all'] as const) {
+      expect(isRetainNarrowing(m, m)).toBe(false);
+    }
   });
 });
