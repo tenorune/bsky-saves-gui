@@ -1,5 +1,6 @@
 import type { Inventory, Save } from '../reader/inventory-shape';
 import { sortByCreatedDesc } from '../reader/feed-filter';
+import { lifecycleBadges, lifecycleBadgeLabel } from '../reader/save-lifecycle';
 
 export interface HydratedFlags {
   readonly enrich: boolean;
@@ -35,6 +36,12 @@ function imageUrls(save: Save): string[] {
 function renderSave(save: Save): string {
   const date = save.record.createdAt.slice(0, 10);
   const lines: string[] = [`## ${date} · @${save.author.handle}`, ''];
+  // v0.6.0 retain-flag: mark deleted/blocked/unsaved posts with a bold
+  // status line — Markdown has no styling, so this is the "badge".
+  const badges = lifecycleBadges(save);
+  if (badges.length > 0) {
+    lines.push(`**${badges.map(lifecycleBadgeLabel).join(' · ')}**`, '');
+  }
   if (save.author.displayName) lines.push(`*${save.author.displayName}*`, '');
   lines.push(save.record.text, '');
   lines.push(`[Original post](${bskyUrl(save)})`, '');

@@ -195,14 +195,12 @@
   // The narrowing predicate (which transitions delete entries) is shared
   // logic in retain-mode.ts; only the user-facing copy lives here.
   function retainNarrowingWarning(from: RetainMode, to: RetainMode): string {
-    const removesUnsaved = from === 'keep-all'; // keep-all is the only mode that retains un-saved entries
+    const removesUnsaved = from === 'keep-all'; // keep-all is the only mode that retains unsaved entries
     const removesDeadSubject = to === 'sync'; // only sync prunes deleted/blocked entries
     const parts: string[] = [];
-    if (removesUnsaved) parts.push('posts you un-saved');
-    if (removesDeadSubject) parts.push('posts others deleted or blocked');
-    // Two parts read as one clause set off by commas; a single part reads inline.
-    const clause = parts.length > 1 ? `${parts.join(', or ')},` : parts[0];
-    return `This will remove ${clause} from your Library. Continue?`;
+    if (removesUnsaved) parts.push('posts you unsaved');
+    if (removesDeadSubject) parts.push('deleted or blocked posts');
+    return `This will remove ${parts.join(' as well as ')} from your Library. Continue?`;
   }
 
   async function handleRetainModeChange(event: Event): Promise<void> {
@@ -473,7 +471,7 @@
     >
       <option value="keep-all">Keep everything, including posts I unsave</option>
       <option value="keep-lost">Keep deleted or blocked posts</option>
-      <option value="sync">Keep only what's on Bluesky</option>
+      <option value="sync">Keep only what's shown now on Bluesky</option>
     </select>
     <p class="help">Choose which kinds of backups Library should keep up to date.</p>
     <label class="checkbox">
