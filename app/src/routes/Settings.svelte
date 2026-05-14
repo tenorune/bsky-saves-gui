@@ -199,8 +199,10 @@
     const removesDeadSubject = to === 'sync'; // only sync prunes deleted/blocked entries
     const parts: string[] = [];
     if (removesUnsaved) parts.push('posts you un-saved');
-    if (removesDeadSubject) parts.push('posts deleted or blocked by their poster');
-    return `This will remove ${parts.join(' and ')} from your Library. Continue?`;
+    if (removesDeadSubject) parts.push('posts others deleted or blocked');
+    // Two parts read as one clause set off by commas; a single part reads inline.
+    const clause = parts.length > 1 ? `${parts.join(', or ')},` : parts[0];
+    return `This will remove ${clause} from your Library. Continue?`;
   }
 
   async function handleRetainModeChange(event: Event): Promise<void> {
