@@ -15,6 +15,7 @@
   import { clearInventory } from '$lib/inventory-store';
   import { clearImageBlobs } from '$lib/image-store';
   import { terminateSharedDriver } from '$lib/pyodide-worker-driver';
+  import { resetAllHydrationProgress } from '$lib/hydration-state';
   import DefinitionTerm from '../components/DefinitionTerm.svelte';
   import { clearFailures } from '$lib/failure-store';
   import { slideRoute } from '$lib/slide-transition';
@@ -101,6 +102,12 @@
     // guarantee account isolation. See
     // pyodide-worker-driver.ts::terminateSharedDriver for full notes.
     terminateSharedDriver();
+
+    // Clear the previous account's hydration-progress counters so this
+    // sign-in doesn't briefly render someone else's "412/1000 hydrated"
+    // before the new account's library-refresh repopulates them. See
+    // hydration-state.ts::resetAllHydrationProgress (issue #24).
+    resetAllHydrationProgress();
 
     let session;
     try {

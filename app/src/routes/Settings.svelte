@@ -25,7 +25,7 @@
   import { clearImageBlobs } from '$lib/image-store';
   import { terminateSharedDriver } from '$lib/pyodide-worker-driver';
   import { clearFailures } from '$lib/failure-store';
-  import { resetImageHydration, resetArticleHydration } from '$lib/hydration-state';
+  import { resetAllHydrationProgress } from '$lib/hydration-state';
   import { resetLibraryFilters } from '$lib/library-filters';
   import { exportJson } from '../exporters/json-exporter';
   import { downloadFile } from '../exporters/file-download';
@@ -246,8 +246,10 @@
     ]);
     clearLastSession();
     clearSessionHeartbeat();
-    resetImageHydration();
-    resetArticleHydration();
+    // Resets all five hydration-progress stores — not just image/article.
+    // The fetch/enrich/thread progress counters were previously left
+    // stale after Clear data (issue #24).
+    resetAllHydrationProgress();
     savedCredentialsPresent = false;
     operatorProxyReachable = 'unknown';
     void probeOperatorProxy();

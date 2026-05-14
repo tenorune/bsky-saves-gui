@@ -61,3 +61,25 @@ export const threadProgress: Writable<HydrationProgress> = writable(INITIAL);
 export function resetThreadProgress(): void {
   threadProgress.set(INITIAL);
 }
+
+/**
+ * Reset every hydration-progress store to its idle initial state.
+ *
+ * Call this at user-identity-change boundaries — sign-in (SignIn.submit)
+ * and Clear data (Settings.clearAll) — so a fresh account never briefly
+ * shows the previous account's residual progress counters. The five
+ * stores are module-level singletons (see issue #19's audit); without an
+ * explicit reset they retain whatever the last run left behind until the
+ * new account's library-refresh overwrites them a frame or two later.
+ *
+ * Not a privacy concern (the stores hold only counters + failed-URL
+ * strings, no handles/DIDs/inventory), but an account-context one — a
+ * new user shouldn't see "412/1000 hydrated" inherited from someone else.
+ */
+export function resetAllHydrationProgress(): void {
+  resetImageHydration();
+  resetArticleHydration();
+  resetFetchProgress();
+  resetEnrichProgress();
+  resetThreadProgress();
+}
