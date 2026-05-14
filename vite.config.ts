@@ -7,10 +7,27 @@ import { execSync } from 'node:child_process';
 import { cnamePlugin } from './tools/vite-plugin-cname';
 
 function detectBuildBranch(): string {
-  // GitHub Actions sets GITHUB_REF_NAME to the branch/tag name on push and
-  // workflow_dispatch runs. Prefer it because actions/checkout often leaves
-  // the worktree on a detached HEAD where `git rev-parse --abbrev-ref HEAD`
-  // just returns "HEAD".
+  // Consumed only by the footer build-info badge (App.svelte), which shows
+  // for any BUILD_BRANCH !== 'main' — i.e. "this is a non-production test
+  // build." So this needs to report 'main' for every PRODUCTION build, not
+  // just literal pushes to the main branch.
+  //
+  // A release build runs on a v* tag push (.github/workflows/release.yml);
+  // there GITHUB_REF_NAME is the tag ("v0.5.3"), not "main". The dist.tar.gz
+  // that run produces is vendored into the bsky-saves wheel and served by
+  // `bsky-saves serve --gui` — without this normalisation, every wheel-served
+  // GUI would wear the dev-test footer. A tagged release IS a production
+  // build of main, so report it as 'main'.
+  if (
+    process.env.GITHUB_REF_TYPE === 'tag' ||
+    (process.env.GITHUB_REF ?? '').startsWith('refs/tags/')
+  ) {
+    return 'main';
+  }
+  // GitHub Actions sets GITHUB_REF_NAME to the branch name on branch pushes
+  // and workflow_dispatch runs. Prefer it because actions/checkout often
+  // leaves the worktree on a detached HEAD where `git rev-parse
+  // --abbrev-ref HEAD` just returns "HEAD".
   const ci = process.env.GITHUB_REF_NAME;
   if (ci) return ci;
   try {
