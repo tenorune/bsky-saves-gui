@@ -90,32 +90,6 @@ describe('hydrateImages records failures without aborting the run', () => {
   });
 });
 
-describe('hydrateImages skips dead-subject saves', () => {
-  it('does not fetch images belonging to a not_found or blocked post', async () => {
-    const deadInv = {
-      saves: [
-        { uri: 'a', images: [{ url: 'https://x/live.jpg' }] },
-        {
-          uri: 'b',
-          subject_status: 'not_found',
-          images: [{ url: 'https://x/deleted.jpg' }],
-        },
-        {
-          uri: 'c',
-          subject_status: 'blocked',
-          images: [{ url: 'https://x/blocked.jpg' }],
-        },
-      ],
-    };
-    const fetcher = vi.fn(async () => okBlob(1));
-    const { hydrateImages } = await import('./image-hydrator');
-    const result = await hydrateImages(deadInv, { fetcher });
-    expect(result).toEqual({ fetched: 1, skipped: 0, failed: 0, cancelled: false });
-    expect(fetcher).toHaveBeenCalledTimes(1);
-    expect(fetcher).toHaveBeenCalledWith('https://x/live.jpg');
-  });
-});
-
 describe('hydrateImages handles an empty URL list', () => {
   it('returns done immediately with zero counters', async () => {
     const fetcher = vi.fn(async () => okBlob(1));

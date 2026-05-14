@@ -21,7 +21,6 @@
 
 import { get } from 'svelte/store';
 import { extractImageUrls } from './extract-image-urls';
-import { excludeDeadSubjectSaves } from '../reader/save-lifecycle';
 import { hasImageBlob, saveImageBlob } from './image-store';
 import { imageHydration, type HydrationFailure } from './hydration-state';
 import { saveFailures, loadFailures } from './failure-store';
@@ -108,10 +107,7 @@ export async function hydrateImages(
   }
   const signal = options.signal;
 
-  // Don't fetch images for deleted/blocked posts — there's no live post, and
-  // unlike threads these requests may go straight from the GUI (user- or
-  // operator-worker) with no bsky-saves layer to skip them.
-  const urls = extractImageUrls(excludeDeadSubjectSaves(inventory));
+  const urls = extractImageUrls(inventory);
 
   // Pre-compute already-hydrated count + persisted failures so the row
   // displays the correct cumulative coverage from the very first frame —
