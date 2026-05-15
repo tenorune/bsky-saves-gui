@@ -69,7 +69,19 @@ The wheel build script in `bsky-saves` downloads the tarball from the release UR
 ### Pin-bump flow
 
 - **Manual at first.** A maintainer in `bsky-saves` opens a PR that bumps `GUI_VERSION` in `pyproject.toml` and refreshes `dist.tar.gz.sha256`. CI fetches the new tarball, runs the wheel tests, and the maintainer merges when satisfied.
-- **Automated PR later.** A GitHub Action in `bsky-saves-gui` opens a "bump GUI to vX.Y.Z" PR in `bsky-saves` on each tag. Same review gate, less typing.
+- **Automated PR later.** On every `vX.Y.Z` tag push, `bsky-saves-gui`'s `release.yml` fires a `repository_dispatch` into `tenorune/bsky-saves` after the release artifacts attach. The receiving workflow on the bsky-saves side opens the bump PR — that side knows its own file layout, so the cross-repo contract is just the dispatch payload. Dispatch shape:
+  ```json
+  {
+    "event_type": "gui-version-bump",
+    "client_payload": {
+      "version":     "0.7.0",
+      "sha256":      "abc123…",
+      "tarball_url": "https://github.com/tenorune/bsky-saves-gui/releases/download/v0.7.0/dist.tar.gz",
+      "ref_name":    "v0.7.0"
+    }
+  }
+  ```
+  Requires a fine-grained PAT scoped to `tenorune/bsky-saves` with Contents: read-and-write, stored as the `BSKY_SAVES_DISPATCH_TOKEN` secret on this repo. When unset, the dispatch step skips with a warning so the bsky-saves side can be wired in independently.
 - **Never auto-merge.** The pin bump is a code change with security implications; it must pass human review.
 
 ### API-version contract
