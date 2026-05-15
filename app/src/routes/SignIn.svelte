@@ -397,6 +397,9 @@
   .advanced-toggle {
     margin: 0.25rem 0;
   }
+  .advanced-toggle > summary {
+    margin: 0.5rem 0;
+  }
   form {
     display: flex;
     flex-direction: column;
@@ -417,10 +420,6 @@
   .error {
     color: color-mix(in oklab, red 70%, CanvasText);
     font-weight: 500;
-  }
-  details summary {
-    cursor: pointer;
-    margin: 0.5rem 0;
   }
   button[type='submit'] {
     align-self: flex-start;
