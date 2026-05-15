@@ -7,15 +7,24 @@ name: release
 #   - workflow_dispatch: dry-run; same gate, artifacts uploaded to the workflow
 #     run (Actions → run → Artifacts) but no GitHub release is created.
 #
-# Phase 1 scope:
-#   S1 build cleanliness · S2 bundle integrity · S3 bundle hygiene
-#   S4 PWA / service-worker sanity · S6 secret scan + dependency audit
-#   S9 artifact production (dist.tar.gz + .sha256, plus dist-with-maps.tar.gz)
-# Phase 2 additions:
+# Gate split (docs/bsky-saves-gui-dist-workstream.md §5):
+#
+# ci.yml (every PR + push to main) runs S1, S2, S3, S4 and the cheap S6
+# scans (credential gate, keyword informational, prod dep audit). It
+# guards what reaches the Pages deploy at saves.lightseed.net.
+#
+# This workflow (tag push only) re-runs S1 then runs the tag-only gates:
 #   S5 (static) Playwright runtime smoke against a statically-served dist/.
 #   S6 SBOM — CycloneDX bill of materials attached to the release.
+#   S8 MIN_HELPER_VERSION — assert GUI's required helper floor does not
+#      exceed the latest published bsky-saves on PyPI.
+#   S9 artifact production — dist.tar.gz + .sha256 + dist-with-maps.tar.gz.
+#   Cross-repo bump — repository_dispatch to tenorune/bsky-saves with the
+#      new version + tarball sha256, so its receiving workflow can open a
+#      "Bump GUI to vX.Y.Z" PR.
+#
 # Deferred to later phases: S5 (helper-served) Playwright vs real wheel,
-# S7 cross-context boot, S8 MIN_HELPER_VERSION coordination.
+# S7 cross-context boot.
 
 on:
   push:
@@ -33,8 +42,45 @@ permissions:
 jobs:
   build-and-gate:
     runs-on: ubuntu-latest
+    # Job-level env so the cross-repo-bump steps can gate on
+    # env.BSKY_SAVES_DISPATCH_TOKEN inside their `if:` conditions —
+    # the `secrets` context isn't accessible in step-level `if:`,
+    # only `env` is.
+    env:
+      BSKY_SAVES_DISPATCH_TOKEN: ${{ secrets.BSKY_SAVES_DISPATCH_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history so the "tag is on main" check below can resolve
+          # ancestry past the default shallow boundary. Slows tag-time
+          # checkout by ~5-10s; the cost is paid once per release.
+          fetch-depth: 0
+
+      # ── Tag gate — refuse to release tags cut from non-main branches ────
+      #
+      # Even with the `release-tags` ruleset restricting who can create
+      # `v*` tags, the bypass list can still tag a commit that isn't on
+      # main (intentionally or by mistake). This step fails the workflow
+      # before S1 if the tagged commit isn't reachable from origin/main,
+      # so no artifacts are produced and no GitHub release is attached.
+      #
+      # Skipped on workflow_dispatch (dry-run mode) because the
+      # workflow_dispatch ref is a branch, not a tag.
+      - name: Verify tag is on main
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        run: |
+          set -euo pipefail
+          git fetch origin main --no-tags --quiet
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "FAIL: tag $GITHUB_REF_NAME points to a commit not reachable"
+            echo "from origin/main. Refusing to release a tag cut from a"
+            echo "non-main branch."
+            echo ""
+            echo "Tag from main instead — the Pages deploy already fires"
+            echo "off main, so there's no value in tagging non-main commits."
+            exit 1
+          fi
+          echo "OK: $GITHUB_REF_NAME is reachable from origin/main."
 
       - uses: pnpm/action-setup@v4
 
@@ -80,77 +126,10 @@ jobs:
       - name: Confirm CNAME is in dist
         run: test -f dist/CNAME
 
-      # ── S2 — Bundle integrity ────────────────────────────────────────────
-      - name: S2 — index.html refs resolve
-        run: node tools/verify-bundle-refs.mjs
-
-      # ── S3 — Bundle hygiene ──────────────────────────────────────────────
-      #
-      # Run against a "release-staging" copy of dist/ with .map files
-      # stripped — those ship separately as the dist-with-maps debug artifact.
-      - name: Stage release dist (strip sourcemaps)
-        run: |
-          set -euo pipefail
-          rm -rf release-staging
-          cp -r dist release-staging
-          find release-staging -name '*.map' -delete
-
-      - name: S3 — No sourcemaps in release tarball
-        run: |
-          set -euo pipefail
-          if find release-staging -name '*.map' | grep -q .; then
-            echo "FAIL: .map files present in release tarball"
-            find release-staging -name '*.map'
-            exit 1
-          fi
-
-      - name: S3 — No test / config files
-        run: |
-          set -euo pipefail
-          for pattern in '*.test.*' '*.spec.*' '.env*' 'tsconfig*'; do
-            if find release-staging -name "$pattern" 2>/dev/null | grep -q .; then
-              echo "FAIL: $pattern files in release tarball"
-              find release-staging -name "$pattern"
-              exit 1
-            fi
-          done
-
-      - name: S3 — No build-host paths leaked
-        # Excludes /home/pyodide/ — Pyodide's emulated-filesystem prefix
-        # for the in-worker Python runtime, not a real host path.
-        run: |
-          set -euo pipefail
-          hits=$(grep -rIoE '/home/[a-z]+/|/Users/[a-z]+/|C:\\Users\\' release-staging/ \
-                  | grep -v '/home/pyodide/' || true)
-          if [ -n "$hits" ]; then
-            echo "FAIL: build-host filesystem paths present in release tarball"
-            echo "$hits" | head -10
-            exit 1
-          fi
-
-      - name: S3 — Bundle size budget
-        run: |
-          set -euo pipefail
-          size=$(du -sb release-staging | awk '{print $1}')
-          budget=$((1500 * 1024))
-          echo "Release tarball size: $size bytes (budget: $budget bytes)"
-          if [ "$size" -gt "$budget" ]; then
-            echo "FAIL: release tarball exceeds 1.5 MB budget"
-            exit 1
-          fi
-          # Per-chunk budget: 400 KB. CustomProxySetupModal is deliberately
-          # large (the inlined cf-worker template + helpers); see vite chunk
-          # split notes.
-          violators=$(find release-staging -name '*.js' -size +400k ! -name 'CustomProxySetupModal*' || true)
-          if [ -n "$violators" ]; then
-            echo "FAIL: chunks over 400 KB (excluding CustomProxySetupModal):"
-            echo "$violators"
-            exit 1
-          fi
-
-      # ── S4 — PWA / service-worker sanity ─────────────────────────────────
-      - name: S4 — Precache manifest references resolve
-        run: node tools/verify-precache.mjs
+      # S2–S4 and the cheap S6 scans (credential, keyword, dep audit)
+      # run in ci.yml on every PR and push to main. They are not
+      # repeated here — if a tag is being cut from a branch that never
+      # passed ci.yml, fix the branch protection, not this workflow.
 
       # ── S5 (static) — Playwright runtime smoke against served dist/ ─────
       #
@@ -180,49 +159,13 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-      # ── S6 — Security scans ──────────────────────────────────────────────
-      - name: S6 — Credential-shape scan (gate)
-        # Narrow patterns that catch actual leaked secrets without false-
-        # positiving on UI copy. Each pattern targets a known credential
-        # format — if any match, fail loudly.
-        run: |
-          set -euo pipefail
-          # Bluesky app passwords have shape xxxx-xxxx-xxxx-xxxx, but the
-          # pattern is too generic (matches UUIDs, hashes, UI placeholders
-          # like xxxx-xxxx-xxxx-xxxx in SignIn) — relying on it would force
-          # an allowlist for every build. Apps passwords are user input,
-          # not code constants, so the realistic risk of one being baked
-          # into the bundle is near-zero. Pattern omitted intentionally.
-          patterns=(
-            'eyJ[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]+'   # JWT
-            'gh[pousr]_[A-Za-z0-9]{36,}'                                  # GitHub PAT
-            'AKIA[0-9A-Z]{16}'                                            # AWS access key
-            'xox[baprs]-[A-Za-z0-9-]{10,}'                                # Slack token
-          )
-          failed=0
-          for pat in "${patterns[@]}"; do
-            if grep -rIE "$pat" release-staging/ ; then
-              echo "FAIL: credential pattern matched: $pat"
-              failed=1
-            fi
-          done
-          [ "$failed" -eq 0 ]
-
-      - name: S6 — Broad keyword scan (informational)
-        # Documented in the workstream doc; minified bundles produce noisy
-        # matches (e.g. SHARED_SECRET in cf-worker template UI copy), so this
-        # step does NOT gate the build. Operators should still skim the
-        # output before tagging.
-        run: |
-          set +e
-          echo "::group::Broad keyword matches (informational)"
-          grep -roIE 'BLUESKY_[A-Z_]+|CLOUDFLARE_[A-Z_]+|API_KEY|SECRET|TOKEN' release-staging/ \
-            | sort | uniq -c | sort -rn | head -20
-          echo "::endgroup::"
-
-      - name: S6 — Dependency audit (production, high+)
-        run: pnpm audit --prod --audit-level=high
-
+      # ── S6 — Security: SBOM ─────────────────────────────────────────────
+      #
+      # The S6 hygiene scans (credential-shape gate, broad keyword
+      # informational, production dep audit) live in ci.yml — every PR
+      # and push to main runs them, so they're already green by the time
+      # this workflow fires on a tag. Only the SBOM ships from here
+      # because it's a release-attached artifact.
       - name: S6 — CycloneDX SBOM
         # Scans the production dependency tree (per --required-only) and emits
         # a CycloneDX 1.x JSON SBOM. Pinned to a specific cdxgen version so
@@ -245,7 +188,30 @@ jobs:
             console.log(`OK: CycloneDX ${sbom.specVersion}, ${n} components`);
           '
 
+      # ── S8 — MIN_HELPER_VERSION coordination ────────────────────────────
+      #
+      # Assert that the GUI's MIN_HELPER_VERSION (lib/min-helper-version.ts)
+      # is <= the latest bsky-saves release on PyPI. Prevents shipping a GUI
+      # whose required helper floor isn't actually available yet — which
+      # would orphan every wheel user the moment bsky-saves bumps
+      # GUI_VERSION to bundle this tag.
+      - name: S8 — MIN_HELPER_VERSION vs PyPI
+        run: node tools/verify-min-helper-version.mjs
+
       # ── S9 — Artifact production ─────────────────────────────────────────
+      #
+      # Stage a release-staging copy of dist/ with sourcemaps stripped —
+      # that's what gets packed into dist.tar.gz. dist/ itself (with
+      # maps) rides out separately as dist-with-maps.tar.gz for
+      # debugging. The hygiene checks that used to operate on
+      # release-staging here have moved to ci.yml.
+      - name: Stage release dist (strip sourcemaps)
+        run: |
+          set -euo pipefail
+          rm -rf release-staging
+          cp -r dist release-staging
+          find release-staging -name '*.map' -delete
+
       - name: Determine version label
         id: version
         run: |
@@ -293,3 +259,49 @@ jobs:
             SBOM.cdx.json
           fail_on_unmatched_files: true
           generate_release_notes: true
+
+      # ── Cross-repo bump: notify bsky-saves of the new GUI tag ───────────
+      #
+      # After the release artifacts are live on the GitHub release page,
+      # fire a repository_dispatch into tenorune/bsky-saves carrying
+      # `version`, the tarball `sha256`, and the tarball download URL.
+      # A receiving workflow on the bsky-saves side is expected to open
+      # the "Bump GUI to vX.Y.Z" PR — that repo knows its own file
+      # layout (pyproject.toml vs gui-version.txt vs sibling .sha256),
+      # so the cross-repo contract stays at the payload shape only.
+      #
+      # Requires a fine-grained PAT scoped to tenorune/bsky-saves with
+      # Contents: read-and-write (sufficient for repository_dispatch),
+      # stored as the repo secret BSKY_SAVES_DISPATCH_TOKEN. When the
+      # secret isn't set, the step skips with a warning annotation
+      # rather than failing the release — the bsky-saves side can be
+      # wired in independently from this side.
+      - name: Dispatch gui-version-bump to bsky-saves
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && env.BSKY_SAVES_DISPATCH_TOKEN != ''
+        env:
+          GH_TOKEN: ${{ env.BSKY_SAVES_DISPATCH_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          SHA=$(awk '{print $1}' dist.tar.gz.sha256)
+          TARBALL_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/dist.tar.gz"
+          echo "Dispatching gui-version-bump to tenorune/bsky-saves"
+          echo "  version:     $VERSION"
+          echo "  sha256:      $SHA"
+          echo "  tarball_url: $TARBALL_URL"
+          jq -nc \
+            --arg version "$VERSION" \
+            --arg sha256 "$SHA" \
+            --arg tarball_url "$TARBALL_URL" \
+            --arg ref_name "$GITHUB_REF_NAME" \
+            '{event_type: "gui-version-bump", client_payload: {version: $version, sha256: $sha256, tarball_url: $tarball_url, ref_name: $ref_name}}' \
+            | gh api repos/tenorune/bsky-saves/dispatches --input -
+          echo "Dispatch sent."
+
+      - name: Cross-repo bump skipped (no token)
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && env.BSKY_SAVES_DISPATCH_TOKEN == ''
+        run: |
+          echo "::warning::Cross-repo bump skipped: BSKY_SAVES_DISPATCH_TOKEN secret not set."
+          echo "To enable, create a fine-grained PAT with Contents: read-and-write"
+          echo "on tenorune/bsky-saves and store it as the repo secret"
+          echo "BSKY_SAVES_DISPATCH_TOKEN under Settings → Secrets and variables → Actions."

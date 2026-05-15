@@ -37,3 +37,125 @@ jobs:
         run: |
           test -f dist/CNAME
           cat dist/CNAME
+
+      # ── Bundle hygiene gates (docs/bsky-saves-gui-dist-workstream.md §5) ──
+      #
+      # S2–S4 and the cheap S6 scans run on every PR and push to main so
+      # a hygiene regression can't ride a green test suite into the Pages
+      # deploy. The tag-only gates (S5 Playwright, S6 SBOM, S8
+      # MIN_HELPER_VERSION, S9 artifact production) live in release.yml.
+
+      # ── S2 — Bundle integrity ───────────────────────────────────────────
+      - name: S2 — index.html refs resolve
+        run: node tools/verify-bundle-refs.mjs
+
+      # ── S3 — Bundle hygiene ─────────────────────────────────────────────
+      #
+      # Run against a "release-staging" copy of dist/ with .map files
+      # stripped — those ship separately as the dist-with-maps debug artifact.
+      - name: Stage release dist (strip sourcemaps)
+        run: |
+          set -euo pipefail
+          rm -rf release-staging
+          cp -r dist release-staging
+          find release-staging -name '*.map' -delete
+
+      - name: S3 — No sourcemaps in release tarball
+        run: |
+          set -euo pipefail
+          if find release-staging -name '*.map' | grep -q .; then
+            echo "FAIL: .map files present in release tarball"
+            find release-staging -name '*.map'
+            exit 1
+          fi
+
+      - name: S3 — No test / config files
+        run: |
+          set -euo pipefail
+          for pattern in '*.test.*' '*.spec.*' '.env*' 'tsconfig*'; do
+            if find release-staging -name "$pattern" 2>/dev/null | grep -q .; then
+              echo "FAIL: $pattern files in release tarball"
+              find release-staging -name "$pattern"
+              exit 1
+            fi
+          done
+
+      - name: S3 — No build-host paths leaked
+        # Excludes /home/pyodide/ — Pyodide's emulated-filesystem prefix
+        # for the in-worker Python runtime, not a real host path.
+        run: |
+          set -euo pipefail
+          hits=$(grep -rIoE '/home/[a-z]+/|/Users/[a-z]+/|C:\\Users\\' release-staging/ \
+                  | grep -v '/home/pyodide/' || true)
+          if [ -n "$hits" ]; then
+            echo "FAIL: build-host filesystem paths present in release tarball"
+            echo "$hits" | head -10
+            exit 1
+          fi
+
+      - name: S3 — Bundle size budget
+        run: |
+          set -euo pipefail
+          size=$(du -sb release-staging | awk '{print $1}')
+          budget=$((1500 * 1024))
+          echo "Release tarball size: $size bytes (budget: $budget bytes)"
+          if [ "$size" -gt "$budget" ]; then
+            echo "FAIL: release tarball exceeds 1.5 MB budget"
+            exit 1
+          fi
+          # Per-chunk budget: 400 KB. CustomProxySetupModal is deliberately
+          # large (the inlined cf-worker template + helpers); see vite chunk
+          # split notes.
+          violators=$(find release-staging -name '*.js' -size +400k ! -name 'CustomProxySetupModal*' || true)
+          if [ -n "$violators" ]; then
+            echo "FAIL: chunks over 400 KB (excluding CustomProxySetupModal):"
+            echo "$violators"
+            exit 1
+          fi
+
+      # ── S4 — PWA / service-worker sanity ────────────────────────────────
+      - name: S4 — Precache manifest references resolve
+        run: node tools/verify-precache.mjs
+
+      # ── S6 — Security scans (gating + informational) ────────────────────
+      - name: S6 — Credential-shape scan (gate)
+        # Narrow patterns that catch actual leaked secrets without false-
+        # positiving on UI copy. Each pattern targets a known credential
+        # format — if any match, fail loudly.
+        run: |
+          set -euo pipefail
+          # Bluesky app passwords have shape xxxx-xxxx-xxxx-xxxx, but the
+          # pattern is too generic (matches UUIDs, hashes, UI placeholders
+          # like xxxx-xxxx-xxxx-xxxx in SignIn) — relying on it would force
+          # an allowlist for every build. App passwords are user input,
+          # not code constants, so the realistic risk of one being baked
+          # into the bundle is near-zero. Pattern omitted intentionally.
+          patterns=(
+            'eyJ[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]+'   # JWT
+            'gh[pousr]_[A-Za-z0-9]{36,}'                                  # GitHub PAT
+            'AKIA[0-9A-Z]{16}'                                            # AWS access key
+            'xox[baprs]-[A-Za-z0-9-]{10,}'                                # Slack token
+          )
+          failed=0
+          for pat in "${patterns[@]}"; do
+            if grep -rIE "$pat" release-staging/ ; then
+              echo "FAIL: credential pattern matched: $pat"
+              failed=1
+            fi
+          done
+          [ "$failed" -eq 0 ]
+
+      - name: S6 — Broad keyword scan (informational)
+        # Documented in the workstream doc; minified bundles produce noisy
+        # matches (e.g. SHARED_SECRET in cf-worker template UI copy), so
+        # this step does NOT gate the build. Operators should still skim
+        # the output before tagging.
+        run: |
+          set +e
+          echo "::group::Broad keyword matches (informational)"
+          grep -roIE 'BLUESKY_[A-Z_]+|CLOUDFLARE_[A-Z_]+|API_KEY|SECRET|TOKEN' release-staging/ \
+            | sort | uniq -c | sort -rn | head -20
+          echo "::endgroup::"
+
+      - name: S6 — Dependency audit (production, high+)
+        run: pnpm audit --prod --audit-level=high

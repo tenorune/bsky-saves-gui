@@ -12,10 +12,12 @@ Let `bsky-saves-gui` iterate continuously while keeping `bsky-saves` (the Python
 
 | Segment | Artifact | Source repo | Refresh model |
 |---|---|---|---|
-| Mobile / desktop visitor, no install | Hosted PWA at `saves.lightseed.net` | `bsky-saves-gui` | Per-tag, deployed on push |
+| Mobile / desktop visitor, no install | Hosted PWA at `saves.lightseed.net` | `bsky-saves-gui` | Per merge to main (Pages), tag drives wheel/installer artifacts |
 | CLI user with Python | `pipx install bsky-saves` | `bsky-saves` | Per wheel release (PyPI) |
 | CLI user without Python | Standalone single binary | `bsky-saves-installers` | Per installer release (GH releases) |
 | Non-technical desktop user | OS-native installer (`.dmg` / `.msi` / `.AppImage`) | `bsky-saves-installers` | Per installer release |
+
+Two distinct pipelines run from this repo, gated separately. `ci.yml` runs on every PR and push to `main` and is what guards the Pages deploy at `saves.lightseed.net` (pages.yml fires off the same push); it runs S1–S4 and the cheap S6 scans (credential-shape gate, keyword informational, prod dep audit). `release.yml` runs only on `vX.Y.Z` tag pushes and applies the tag-only gates: S5 (static) Playwright, S6 SBOM, S8 (MIN_HELPER_VERSION vs PyPI), S9 artifact production, plus the cross-repo bump dispatch to `bsky-saves`. Its output (`dist.tar.gz` + `.sha256` + `SBOM.cdx.json`) is what wheel and installer pipelines consume. Hosted-PWA users therefore get every green main; wheel/installer users receive what their maintainers pinned from a tagged release.
 
 ### Three artifact tiers from a single upstream
 
@@ -67,7 +69,19 @@ The wheel build script in `bsky-saves` downloads the tarball from the release UR
 ### Pin-bump flow
 
 - **Manual at first.** A maintainer in `bsky-saves` opens a PR that bumps `GUI_VERSION` in `pyproject.toml` and refreshes `dist.tar.gz.sha256`. CI fetches the new tarball, runs the wheel tests, and the maintainer merges when satisfied.
-- **Automated PR later.** A GitHub Action in `bsky-saves-gui` opens a "bump GUI to vX.Y.Z" PR in `bsky-saves` on each tag. Same review gate, less typing.
+- **Automated PR later.** On every `vX.Y.Z` tag push, `bsky-saves-gui`'s `release.yml` fires a `repository_dispatch` into `tenorune/bsky-saves` after the release artifacts attach. The receiving workflow on the bsky-saves side opens the bump PR — that side knows its own file layout, so the cross-repo contract is just the dispatch payload. Dispatch shape:
+  ```json
+  {
+    "event_type": "gui-version-bump",
+    "client_payload": {
+      "version":     "0.7.0",
+      "sha256":      "abc123…",
+      "tarball_url": "https://github.com/tenorune/bsky-saves-gui/releases/download/v0.7.0/dist.tar.gz",
+      "ref_name":    "v0.7.0"
+    }
+  }
+  ```
+  Requires a fine-grained PAT scoped to `tenorune/bsky-saves` with Contents: read-and-write, stored as the `BSKY_SAVES_DISPATCH_TOKEN` secret on this repo. When unset, the dispatch step skips with a warning so the bsky-saves side can be wired in independently.
 - **Never auto-merge.** The pin bump is a code change with security implications; it must pass human review.
 
 ### API-version contract
