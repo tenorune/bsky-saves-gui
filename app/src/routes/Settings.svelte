@@ -35,6 +35,7 @@
   import CustomProxySetupModal from '../components/CustomProxySetupModal.svelte';
   import { assetToggles, setAssetToggle, loadAssetToggles, clearAssetToggles } from '$lib/asset-toggles';
   import { installHintDismissed, loadInstallHintPref, clearInstallHintPref } from '$lib/install-hint-pref';
+  import { clearPanelCollapse } from '$lib/panel-collapse-pref';
   import {
     retainMode,
     loadRetainMode,
@@ -318,6 +319,7 @@
       clearInstallHintPref(),
       clearProxyConfig(),
       clearRetainMode(),
+      clearPanelCollapse(),
     ]);
     resetLibraryFilters();
     operatorProxyOptOut = false;

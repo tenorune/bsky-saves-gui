@@ -13,6 +13,8 @@
     type ShowFilter,
   } from '../lib/library-filters';
   import { retainMode } from '../lib/retain-mode';
+  import { panelCollapse, setFiltersCollapsed } from '../lib/panel-collapse-pref';
+  import CollapsibleBlock from '../components/CollapsibleBlock.svelte';
 
   export let inventory: Inventory;
   export let onSelectPost: (save: Save) => void;
@@ -47,20 +49,32 @@
 </script>
 
 <section class="library-view">
-  <header class="library-view__filters">
-    <SearchBar bind:value={$filterQuery} />
-    {#if showOptions.length > 1}
-      <label>
-        <span>Show</span>
-        <select bind:value={$filterShow}>
-          {#each showOptions as opt (opt)}
-            <option value={opt}>{showFilterLabel(opt)}</option>
-          {/each}
-        </select>
-      </label>
-    {/if}
-    <DateRangeFilter bind:from={$filterFrom} bind:to={$filterTo} />
-  </header>
+  <!-- Filters block: collapsible, default collapsed on first use,
+       preference persisted via panelCollapse. The .library-view__filters
+       wrapper still owns the inner flex-row layout AND the :global
+       descendant styling (see the <style> block), so the input/select/
+       date controls keep their unified appearance whether the block is
+       collapsed or expanded. -->
+  <CollapsibleBlock
+    label="Filters"
+    expanded={!$panelCollapse.filters}
+    onToggle={(next) => void setFiltersCollapsed(!next)}
+  >
+    <div class="library-view__filters">
+      <SearchBar bind:value={$filterQuery} />
+      {#if showOptions.length > 1}
+        <label>
+          <span>Show</span>
+          <select bind:value={$filterShow}>
+            {#each showOptions as opt (opt)}
+              <option value={opt}>{showFilterLabel(opt)}</option>
+            {/each}
+          </select>
+        </label>
+      {/if}
+      <DateRangeFilter bind:from={$filterFrom} bind:to={$filterTo} />
+    </div>
+  </CollapsibleBlock>
 
   {#if visible.length === 0}
     <p class="library-view__empty">No saved posts match your filters.</p>

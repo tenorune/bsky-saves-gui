@@ -16,8 +16,10 @@
   import { imageHydration, articleHydration, threadProgress, fetchProgress } from '$lib/hydration-state';
   import LibraryView from '../reader/LibraryView.svelte';
   import LibraryStatusPanel from '../components/LibraryStatusPanel.svelte';
+  import CollapsibleBlock from '../components/CollapsibleBlock.svelte';
   import CustomProxySetupModal from '../components/CustomProxySetupModal.svelte';
   import BackupFailuresModal from '../components/BackupFailuresModal.svelte';
+  import { panelCollapse, setBackupsCollapsed } from '$lib/panel-collapse-pref';
   import { rkeyOf } from '../reader/inventory-shape';
   import type { Save } from '../reader/inventory-shape';
   import { restoreHydrationFromInventory } from '$lib/restore-hydration';
@@ -185,13 +187,26 @@
       ><span></span></div>
     </header>
 
-    <LibraryStatusPanel
-      onSetupImages={() => (setupOpen = true)}
-      onSetupArticles={() => (setupOpen = true)}
-      onViewImageFailures={() => (failuresOpen = 'images')}
-      onViewArticleFailures={() => (failuresOpen = 'articles')}
-      onViewThreadFailures={() => (failuresOpen = 'threads')}
-    />
+    <!-- Backups panel: hidden during the first-ever fetch (status ===
+         'empty') so the user isn't asked to think about backups before
+         they have any posts to back up. Once inventory is loaded
+         (status === 'ready'), the panel becomes a collapsible block —
+         default collapsed on first use, preference persisted. -->
+    {#if $inventoryState.status === 'ready'}
+      <CollapsibleBlock
+        label="Backups"
+        expanded={!$panelCollapse.backups}
+        onToggle={(next) => void setBackupsCollapsed(!next)}
+      >
+        <LibraryStatusPanel
+          onSetupImages={() => (setupOpen = true)}
+          onSetupArticles={() => (setupOpen = true)}
+          onViewImageFailures={() => (failuresOpen = 'images')}
+          onViewArticleFailures={() => (failuresOpen = 'articles')}
+          onViewThreadFailures={() => (failuresOpen = 'threads')}
+        />
+      </CollapsibleBlock>
+    {/if}
   </div>
 
   {#if $inventoryState.status === 'loading'}
