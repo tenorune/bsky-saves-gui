@@ -113,7 +113,7 @@
     flex-direction: column;
     gap: 0.25rem;
   }
-  :global(.library-view__filters label > span) {
+  :global(.library-view__filters label > span:first-child) {
     font-size: 0.75rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
