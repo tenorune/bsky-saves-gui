@@ -15,6 +15,9 @@ name: release
 #
 # This workflow (tag push only) re-runs S1 then runs the tag-only gates:
 #   S5 (static) Playwright runtime smoke against a statically-served dist/.
+#   S5 (helper-served) Playwright against a real `bsky-saves serve --gui`
+#      installed from PyPI — verifies the wheel's bundled GUI mounts and
+#      the helper API contract holds.
 #   S6 SBOM — CycloneDX bill of materials attached to the release.
 #   S8 MIN_HELPER_VERSION — assert GUI's required helper floor does not
 #      exceed the latest published bsky-saves on PyPI.
@@ -23,8 +26,7 @@ name: release
 #      new version + tarball sha256, so its receiving workflow can open a
 #      "Bump GUI to vX.Y.Z" PR.
 #
-# Deferred to later phases: S5 (helper-served) Playwright vs real wheel,
-# S7 cross-context boot.
+# Deferred to later phases: S7 cross-context boot matrix.
 
 on:
   push:
@@ -139,9 +141,8 @@ jobs:
       # regressions that unit tests can't see: page mount failures, CSP
       # violations, broken route guards, malformed manifest, missing icons.
       #
-      # The "helper-served" S5 variant (against a real `bsky-saves serve
-      # --gui` wheel) is deferred until the wheel ships with the GUI
-      # vendored — tracked in docs/bsky-saves-mvp-spec.md.
+      # helper.spec.ts is in the test directory but auto-skips when no
+      # bsky-saves is reachable, so this run won't try to hit a helper.
       - name: S5 (static) — Install Playwright Chromium
         run: pnpm exec playwright install --with-deps chromium
 
@@ -158,6 +159,62 @@ jobs:
             test-results/
           retention-days: 7
           if-no-files-found: ignore
+
+      # ── S5 (helper-served) — Playwright against a real bsky-saves wheel ─
+      #
+      # Installs the latest published bsky-saves from PyPI, boots
+      # `bsky-saves serve --gui` on the default port (47826), and runs
+      # the helper.spec.ts suite against it. Verifies the wheel-internal
+      # consistency the workstream doc §5 S5 describes: the wheel's
+      # bundled GUI mounts cleanly against the wheel's helper, and the
+      # /api/health + /api/version endpoints match the documented shape
+      # (workstream doc §4 items 13-14).
+      - name: S5 (helper-served) — Install bsky-saves
+        run: pipx install bsky-saves
+
+      - name: S5 (helper-served) — Start helper
+        run: |
+          set -euo pipefail
+          bsky-saves serve --gui --port 47826 > /tmp/helper.log 2>&1 &
+          echo $! > /tmp/helper.pid
+          # Poll the helper origin until it's serving HTML at /. Max 30s.
+          # /api/health would be a tighter probe but isn't guaranteed to
+          # be implemented in every wheel version — / always is.
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:47826/ > /dev/null; then
+              echo "Helper up after ${i}s."
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Helper did not come up in 30s. Log follows:"
+          cat /tmp/helper.log
+          exit 1
+
+      - name: S5 (helper-served) — Playwright
+        env:
+          # Suppresses playwright.config.ts's python -m http.server
+          # webServer block; the helper is the origin under test, not a
+          # static-served dist/.
+          PLAYWRIGHT_SKIP_WEBSERVER: '1'
+          BSKY_SAVES_HELPER_ORIGIN: http://127.0.0.1:47826
+        run: pnpm exec playwright test e2e/helper.spec.ts
+
+      - name: S5 (helper-served) — Helper log on failure
+        if: failure()
+        run: |
+          if [ -f /tmp/helper.log ]; then
+            echo "::group::bsky-saves helper log"
+            cat /tmp/helper.log
+            echo "::endgroup::"
+          fi
+
+      - name: S5 (helper-served) — Stop helper
+        if: always()
+        run: |
+          if [ -f /tmp/helper.pid ]; then
+            kill "$(cat /tmp/helper.pid)" 2>/dev/null || true
+          fi
 
       # ── S6 — Security: SBOM ─────────────────────────────────────────────
       #
