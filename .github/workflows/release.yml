@@ -42,6 +42,12 @@ permissions:
 jobs:
   build-and-gate:
     runs-on: ubuntu-latest
+    # Job-level env so the cross-repo-bump steps can gate on
+    # env.BSKY_SAVES_DISPATCH_TOKEN inside their `if:` conditions —
+    # the `secrets` context isn't accessible in step-level `if:`,
+    # only `env` is.
+    env:
+      BSKY_SAVES_DISPATCH_TOKEN: ${{ secrets.BSKY_SAVES_DISPATCH_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -240,9 +246,9 @@ jobs:
       # rather than failing the release — the bsky-saves side can be
       # wired in independently from this side.
       - name: Dispatch gui-version-bump to bsky-saves
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && secrets.BSKY_SAVES_DISPATCH_TOKEN != ''
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && env.BSKY_SAVES_DISPATCH_TOKEN != ''
         env:
-          GH_TOKEN: ${{ secrets.BSKY_SAVES_DISPATCH_TOKEN }}
+          GH_TOKEN: ${{ env.BSKY_SAVES_DISPATCH_TOKEN }}
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME#v}"
@@ -262,7 +268,7 @@ jobs:
           echo "Dispatch sent."
 
       - name: Cross-repo bump skipped (no token)
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && secrets.BSKY_SAVES_DISPATCH_TOKEN == ''
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && env.BSKY_SAVES_DISPATCH_TOKEN == ''
         run: |
           echo "::warning::Cross-repo bump skipped: BSKY_SAVES_DISPATCH_TOKEN secret not set."
           echo "To enable, create a fine-grained PAT with Contents: read-and-write"
