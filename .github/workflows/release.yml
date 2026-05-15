@@ -50,6 +50,37 @@ jobs:
       BSKY_SAVES_DISPATCH_TOKEN: ${{ secrets.BSKY_SAVES_DISPATCH_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history so the "tag is on main" check below can resolve
+          # ancestry past the default shallow boundary. Slows tag-time
+          # checkout by ~5-10s; the cost is paid once per release.
+          fetch-depth: 0
+
+      # ── Tag gate — refuse to release tags cut from non-main branches ────
+      #
+      # Even with the `release-tags` ruleset restricting who can create
+      # `v*` tags, the bypass list can still tag a commit that isn't on
+      # main (intentionally or by mistake). This step fails the workflow
+      # before S1 if the tagged commit isn't reachable from origin/main,
+      # so no artifacts are produced and no GitHub release is attached.
+      #
+      # Skipped on workflow_dispatch (dry-run mode) because the
+      # workflow_dispatch ref is a branch, not a tag.
+      - name: Verify tag is on main
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        run: |
+          set -euo pipefail
+          git fetch origin main --no-tags --quiet
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "FAIL: tag $GITHUB_REF_NAME points to a commit not reachable"
+            echo "from origin/main. Refusing to release a tag cut from a"
+            echo "non-main branch."
+            echo ""
+            echo "Tag from main instead — the Pages deploy already fires"
+            echo "off main, so there's no value in tagging non-main commits."
+            exit 1
+          fi
+          echo "OK: $GITHUB_REF_NAME is reachable from origin/main."
 
       - uses: pnpm/action-setup@v4
 
