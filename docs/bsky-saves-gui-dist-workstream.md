@@ -12,10 +12,12 @@ Let `bsky-saves-gui` iterate continuously while keeping `bsky-saves` (the Python
 
 | Segment | Artifact | Source repo | Refresh model |
 |---|---|---|---|
-| Mobile / desktop visitor, no install | Hosted PWA at `saves.lightseed.net` | `bsky-saves-gui` | Per-tag, deployed on push |
+| Mobile / desktop visitor, no install | Hosted PWA at `saves.lightseed.net` | `bsky-saves-gui` | Per merge to main (Pages), tag drives wheel/installer artifacts |
 | CLI user with Python | `pipx install bsky-saves` | `bsky-saves` | Per wheel release (PyPI) |
 | CLI user without Python | Standalone single binary | `bsky-saves-installers` | Per installer release (GH releases) |
 | Non-technical desktop user | OS-native installer (`.dmg` / `.msi` / `.AppImage`) | `bsky-saves-installers` | Per installer release |
+
+Two distinct pipelines run from this repo, gated separately: `ci.yml` runs on every PR and on push to `main`, and the same push triggers `pages.yml` which deploys `dist/` to `saves.lightseed.net` — so `ci.yml` is what gates what reaches the hosted PWA. `release.yml` runs only on `vX.Y.Z` tag pushes and applies the S1–S9 gates documented in § 5; its output (`dist.tar.gz` + `.sha256` + `SBOM.cdx.json`) is what wheel and installer pipelines consume. Hosted-PWA users therefore get every green main, while wheel/installer users receive what the downstream maintainers pinned from the tagged release.
 
 ### Three artifact tiers from a single upstream
 

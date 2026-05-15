@@ -14,8 +14,10 @@ name: release
 # Phase 2 additions:
 #   S5 (static) Playwright runtime smoke against a statically-served dist/.
 #   S6 SBOM — CycloneDX bill of materials attached to the release.
+#   S8 MIN_HELPER_VERSION coordination — assert GUI's required helper
+#      floor does not exceed the latest published bsky-saves on PyPI.
 # Deferred to later phases: S5 (helper-served) Playwright vs real wheel,
-# S7 cross-context boot, S8 MIN_HELPER_VERSION coordination.
+# S7 cross-context boot.
 
 on:
   push:
@@ -244,6 +246,16 @@ jobs:
             if (n < 10) { console.error(`SBOM component count suspiciously low: ${n}`); process.exit(1); }
             console.log(`OK: CycloneDX ${sbom.specVersion}, ${n} components`);
           '
+
+      # ── S8 — MIN_HELPER_VERSION coordination ────────────────────────────
+      #
+      # Assert that the GUI's MIN_HELPER_VERSION (lib/min-helper-version.ts)
+      # is <= the latest bsky-saves release on PyPI. Prevents shipping a GUI
+      # whose required helper floor isn't actually available yet — which
+      # would orphan every wheel user the moment bsky-saves bumps
+      # GUI_VERSION to bundle this tag.
+      - name: S8 — MIN_HELPER_VERSION vs PyPI
+        run: node tools/verify-min-helper-version.mjs
 
       # ── S9 — Artifact production ─────────────────────────────────────────
       - name: Determine version label
