@@ -264,6 +264,36 @@
   :global(input, textarea, select) {
     font-size: 1rem;
   }
+  /* Replace the native triangle on <details class="advanced-toggle">
+     summaries (SignIn "Advanced", Settings "Advanced backup options")
+     with the same CSS caret used by CollapsibleBlock — points right
+     when closed, rotates down when open. Keeps the disclosure's
+     surrounding layout intact (no header background, no body padding
+     of its own); only the marker glyph changes. */
+  :global(details.advanced-toggle > summary) {
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  :global(details.advanced-toggle > summary::-webkit-details-marker) {
+    display: none;
+  }
+  :global(details.advanced-toggle > summary::before) {
+    content: '';
+    width: 0.5rem;
+    height: 0.5rem;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: rotate(-45deg);
+    transition: transform 150ms ease;
+    opacity: 0.7;
+    flex: 0 0 auto;
+  }
+  :global(details.advanced-toggle[open] > summary::before) {
+    transform: rotate(45deg);
+  }
   .app {
     display: flex;
     flex-direction: column;

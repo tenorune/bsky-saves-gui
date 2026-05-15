@@ -152,13 +152,19 @@
     outline: 2px solid color-mix(in oklab, royalblue 60%, CanvasText);
     outline-offset: 1px;
   }
+  /* Breathing room between the Filters block (collapsed or expanded)
+     and the first post. Title→Backups and Backups→Filters sit at the
+     CollapsibleBlock's 0.4rem margin-bottom; this gap is intentionally
+     larger so the post list reads as a distinct content region rather
+     than the next pill in a stack of controls. */
   .library-view__feed {
     list-style: none;
     padding: 0;
-    margin: 0;
+    margin: 1rem 0 0;
   }
   .library-view__empty {
     opacity: 0.7;
     font-style: italic;
+    margin: 1rem 0 0;
   }
 </style>
