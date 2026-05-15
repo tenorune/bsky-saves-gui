@@ -242,7 +242,6 @@
     width: 100%;
     max-width: 44rem;
     margin: 0 auto;
-    padding-bottom: 1.5rem;
   }
   .route__header {
     display: flex;

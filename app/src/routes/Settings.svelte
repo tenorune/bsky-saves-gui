@@ -46,6 +46,7 @@
   } from '$lib/retain-mode';
   import InstallHelperHint from '../components/library-status/InstallHelperHint.svelte';
   import DefinitionTerm from '../components/DefinitionTerm.svelte';
+  import CollapsibleBlock from '../components/CollapsibleBlock.svelte';
   import { capabilitySnapshot, initCapabilitySnapshot } from '$lib/capability-snapshot';
   import { prospectiveBackendName } from '$lib/dominant-backend';
 
@@ -512,12 +513,13 @@
       {/if}
     </label>
 
-    <details
-      class="advanced-toggle"
-      bind:open={backupAdvancedOpen}
+    <div class="advanced-toggle">
+    <CollapsibleBlock
+      label="Advanced backup options"
+      expanded={backupAdvancedOpen}
+      onToggle={(next) => (backupAdvancedOpen = next)}
+      bleed={false}
     >
-      <summary>Advanced backup options</summary>
-
       <div class="card advanced">
         <p class="advanced-heading">
           <strong>
@@ -567,7 +569,8 @@
           </label>
         {/if}
       </div>
-    </details>
+    </CollapsibleBlock>
+    </div>
   </section>
 
   {#if !$capabilitySnapshot.helper.detected && $installHintDismissed}
@@ -749,9 +752,6 @@
     padding: 0.4rem 0.5rem;
     border: 1px solid color-mix(in oklab, CanvasText 25%, transparent);
     border-radius: 4px;
-  }
-  .advanced-toggle > summary {
-    margin-bottom: 0.75rem;
   }
   .card.advanced {
     border: 1px solid color-mix(in oklab, CanvasText 15%, transparent);

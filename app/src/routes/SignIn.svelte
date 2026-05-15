@@ -17,6 +17,7 @@
   import { terminateSharedDriver } from '$lib/pyodide-worker-driver';
   import { resetAllHydrationProgress } from '$lib/hydration-state';
   import DefinitionTerm from '../components/DefinitionTerm.svelte';
+  import CollapsibleBlock from '../components/CollapsibleBlock.svelte';
   import { clearFailures } from '$lib/failure-store';
   import { slideRoute } from '$lib/slide-transition';
 
@@ -24,6 +25,7 @@
   let useDifferentAccount = false;
   let unlockPassphrase = '';
   let unlockError = '';
+  let advancedOpen = false;
 
   $: showForm = !savedPresent || useDifferentAccount;
 
@@ -274,9 +276,12 @@
       />
     </label>
 
-    <details class="advanced-toggle">
-      <summary>Advanced</summary>
-
+    <CollapsibleBlock
+      label="Advanced"
+      expanded={advancedOpen}
+      onToggle={(next) => (advancedOpen = next)}
+      bleed={false}
+    >
       <div class="card advanced">
         <label class="card__field">
           <DefinitionTerm>
@@ -317,7 +322,7 @@
           </label>
         {/if}
       </div>
-    </details>
+    </CollapsibleBlock>
 
     {#if error}
       <p class="error" role="alert">{error}</p>
@@ -394,9 +399,6 @@
   .card__link:hover {
     opacity: 1;
   }
-  .advanced-toggle {
-    margin: 0.25rem 0;
-  }
   form {
     display: flex;
     flex-direction: column;
@@ -417,10 +419,6 @@
   .error {
     color: color-mix(in oklab, red 70%, CanvasText);
     font-weight: 500;
-  }
-  details summary {
-    cursor: pointer;
-    margin: 0.5rem 0;
   }
   button[type='submit'] {
     align-self: flex-start;

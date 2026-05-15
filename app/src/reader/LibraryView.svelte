@@ -100,7 +100,6 @@
     flex-wrap: wrap;
     gap: 1rem;
     align-items: end;
-    margin-bottom: 1.5rem;
   }
   /* Unified styling for every control in the filter row — Search input,
      Show select, From/To date inputs. Defined once via :global so child
