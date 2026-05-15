@@ -17,7 +17,7 @@ Let `bsky-saves-gui` iterate continuously while keeping `bsky-saves` (the Python
 | CLI user without Python | Standalone single binary | `bsky-saves-installers` | Per installer release (GH releases) |
 | Non-technical desktop user | OS-native installer (`.dmg` / `.msi` / `.AppImage`) | `bsky-saves-installers` | Per installer release |
 
-Two distinct pipelines run from this repo, gated separately: `ci.yml` runs on every PR and on push to `main`, and the same push triggers `pages.yml` which deploys `dist/` to `saves.lightseed.net` — so `ci.yml` is what gates what reaches the hosted PWA. `release.yml` runs only on `vX.Y.Z` tag pushes and applies the S1–S9 gates documented in § 5; its output (`dist.tar.gz` + `.sha256` + `SBOM.cdx.json`) is what wheel and installer pipelines consume. Hosted-PWA users therefore get every green main, while wheel/installer users receive what the downstream maintainers pinned from the tagged release.
+Two distinct pipelines run from this repo, gated separately. `ci.yml` runs on every PR and push to `main` and is what guards the Pages deploy at `saves.lightseed.net` (pages.yml fires off the same push); it runs S1–S4 and the cheap S6 scans (credential-shape gate, keyword informational, prod dep audit). `release.yml` runs only on `vX.Y.Z` tag pushes and applies the tag-only gates: S5 (static) Playwright, S6 SBOM, S8 (MIN_HELPER_VERSION vs PyPI), S9 artifact production, plus the cross-repo bump dispatch to `bsky-saves`. Its output (`dist.tar.gz` + `.sha256` + `SBOM.cdx.json`) is what wheel and installer pipelines consume. Hosted-PWA users therefore get every green main; wheel/installer users receive what their maintainers pinned from a tagged release.
 
 ### Three artifact tiers from a single upstream
 
