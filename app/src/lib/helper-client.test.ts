@@ -606,12 +606,36 @@ describe('helper-client Authorization header (pairing)', () => {
 describe('helper-client 401 handling (pairing-cause detection)', () => {
   const VALID_TOKEN = 'tok_' + 'a'.repeat(20);
 
-  it('marks pairing stale when 401 carries WWW-Authenticate: Bearer (sent auth)', async () => {
+  it('marks pairing stale on 401 with WWW-Authenticate: Bearer realm="bsky-saves" (missing-header sub-case)', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => new Response(JSON.stringify({ error: 'unauthorized' }), {
+      vi.fn(async () => new Response(JSON.stringify({ error: 'authentication required' }), {
         status: 401,
         headers: { 'WWW-Authenticate': 'Bearer realm="bsky-saves"' },
+      })),
+    );
+    const { setPairingToken, pairingToken } = await import('./pairing-token');
+    const { get } = await import('svelte/store');
+    setPairingToken(VALID_TOKEN);
+    const { enrichUris } = await import('./helper-client');
+    await expect(
+      enrichUris('http://127.0.0.1:47826', { uris: ['at://a'] }),
+    ).rejects.toThrow();
+    expect(get(pairingToken).state).toBe('stale');
+  });
+
+  it('marks pairing stale on 401 with WWW-Authenticate carrying error="invalid_token" (wrong-token sub-case)', async () => {
+    // Recovery is identical for missing-header vs wrong-token per the
+    // bsky-saves v0.6.2 spec §5; this test pins that we route the
+    // RFC-6750-preferred `error="invalid_token"` variant through the
+    // same path.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ error: 'authentication required' }), {
+        status: 401,
+        headers: {
+          'WWW-Authenticate': 'Bearer realm="bsky-saves", error="invalid_token"',
+        },
       })),
     );
     const { setPairingToken, pairingToken } = await import('./pairing-token');

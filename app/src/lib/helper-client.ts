@@ -75,31 +75,52 @@ function consumeReloadBudget(): boolean {
  * React to a 401 from an authed helper endpoint.
  *
  * Distinguishes pairing-cause 401 from upstream-cause 401 via the
- * `WWW-Authenticate: Bearer` header — standard HTTP convention for
- * "this endpoint needs auth, your credentials were rejected." When the
- * header is absent we assume an upstream-cause 401 (helper proxied a
- * PDS auth failure) and don't touch the pairing state. This is
- * conservative: a helper that 401s for pairing reasons WITHOUT emitting
- * the header won't trigger automatic recovery, but it won't spuriously
- * flip pairingStale on upstream failures either. Swap the signal here
- * once bsky-saves PR #9 finalizes whatever convention they use.
+ * `WWW-Authenticate: Bearer ...` header. Contract locked in
+ * `tenorune/bsky-saves#10` and the v0.6.2 spec at
+ * `bsky-saves/docs/superpowers/specs/2026-05-16-bsky-saves-v0.6.2-session-token.md §5`:
+ *
+ *   Pairing-401 (missing auth header):
+ *     `WWW-Authenticate: Bearer realm="bsky-saves"`
+ *   Pairing-401 (wrong token value):
+ *     `WWW-Authenticate: Bearer realm="bsky-saves", error="invalid_token"`
+ *   Upstream-cause 401 (PDS createSession / refresh propagated through
+ *   /fetch or /hydrate-threads):
+ *     header absent
+ *
+ * Recovery is identical for both pairing sub-cases — the
+ * missing-vs-wrong distinction is informational only. The header alone
+ * is the discriminator; absence means existing upstream-cause handling
+ * runs (re-prompt app password, refresh, etc.) and pairing state is
+ * untouched.
+ *
+ * The bsky-saves response also includes
+ * `Access-Control-Expose-Headers: WWW-Authenticate` so cross-origin
+ * fetches from `saves.lightseed.net` can actually read the header;
+ * without that the browser filters it out and our detection silently
+ * fails for hosted-PWA users. Verified on their side in PR #10.
  *
  * On a pairing-cause 401:
  *   - Bundled GUI (helper origin == window origin): reload the page;
- *     the helper will substitute a fresh token into `index.html`'s
- *     meta tag. Capped at one reload per 10s to avoid infinite loops
- *     if reload doesn't recover.
+ *     the helper substitutes the fresh persistent token into
+ *     `index.html`'s sentinel on every page load. Capped at one reload
+ *     per 10s to avoid infinite loops if reload doesn't recover (helper
+ *     crashed, upstream auth permanently broken, etc.).
  *   - Hosted GUI: flip pairingStale; the PairingRequiredBanner takes
  *     over and prompts the user to re-paste from `bsky-saves token`.
  *
  * No-op when the request didn't carry an Authorization header (the GUI
- * was unpaired; no pairing state to mark stale).
+ * was unpaired; no pairing state to mark stale, the banner is already
+ * doing its job from the empty-token side).
  */
 function handleAuthed401(res: Response, sentAuth: boolean): void {
   if (res.status !== 401 || !sentAuth) return;
+  // RFC 7235 §2.1: auth scheme name is case-insensitive. Header name is
+  // case-insensitive too per the Fetch API's normalization, but we
+  // lowercase the value for the prefix check to handle a future helper
+  // that emits "bearer" / "BEARER" without breaking detection.
   const challenge = res.headers.get('WWW-Authenticate');
   const isPairingChallenge =
-    challenge !== null && challenge.toLowerCase().includes('bearer');
+    challenge !== null && challenge.toLowerCase().startsWith('bearer');
   if (!isPairingChallenge) return;
   if (isBundledGuiOrigin() && consumeReloadBudget()) {
     // Defer the reload so the current request's caller gets to reject
