@@ -256,17 +256,25 @@ jobs:
 
       # ── S9 — Artifact production ─────────────────────────────────────────
       #
-      # Stage a release-staging copy of dist/ with sourcemaps stripped —
-      # that's what gets packed into dist.tar.gz. dist/ itself (with
-      # maps) rides out separately as dist-with-maps.tar.gz for
-      # debugging. The hygiene checks that used to operate on
-      # release-staging here have moved to ci.yml.
+      # Stage a release-staging copy of dist/ with sourcemaps stripped
+      # AND the `sourceMappingURL` comments removed from JS / CSS files
+      # — that's what gets packed into dist.tar.gz. Without the comment
+      # removal, browsers loading the helper-served bundle would fetch
+      # missing .map files and get the helper's SPA-fallback index.html
+      # in response, flooding devtools with JSON parse warnings. dist/
+      # itself (with maps and comments intact) rides out separately as
+      # dist-with-maps.tar.gz for debugging. The hygiene checks that
+      # used to operate on release-staging here have moved to ci.yml.
       - name: Stage release dist (strip sourcemaps)
         run: |
           set -euo pipefail
           rm -rf release-staging
           cp -r dist release-staging
           find release-staging -name '*.map' -delete
+          # JS uses `//# sourceMappingURL=...` (line comment); CSS uses
+          # `/*# sourceMappingURL=...*/` (block comment). Strip both.
+          find release-staging \( -name '*.js' -o -name '*.mjs' -o -name '*.css' \) \
+            -exec sed -i -E '/^\/\/# sourceMappingURL=/d; /^\/\*# sourceMappingURL=.*\*\/$/d' {} +
 
       - name: Determine version label
         id: version

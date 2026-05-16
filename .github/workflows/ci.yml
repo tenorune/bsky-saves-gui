@@ -52,13 +52,23 @@ jobs:
       # ── S3 — Bundle hygiene ─────────────────────────────────────────────
       #
       # Run against a "release-staging" copy of dist/ with .map files
-      # stripped — those ship separately as the dist-with-maps debug artifact.
+      # stripped AND the `//# sourceMappingURL=...` comments removed from
+      # every .js / .mjs / .css file. Without the comment removal,
+      # browsers loading the helper-served bundle try to fetch the map
+      # files; the helper's SPA fallback returns index.html as the
+      # response; the browser then JSON-parses `<!doctype html>` and
+      # floods DevTools with warnings. Map files themselves ship
+      # separately as the dist-with-maps debug artifact.
       - name: Stage release dist (strip sourcemaps)
         run: |
           set -euo pipefail
           rm -rf release-staging
           cp -r dist release-staging
           find release-staging -name '*.map' -delete
+          # JS uses `//# sourceMappingURL=...` (line comment); CSS uses
+          # `/*# sourceMappingURL=...*/` (block comment). Strip both.
+          find release-staging \( -name '*.js' -o -name '*.mjs' -o -name '*.css' \) \
+            -exec sed -i -E '/^\/\/# sourceMappingURL=/d; /^\/\*# sourceMappingURL=.*\*\/$/d' {} +
 
       - name: S3 — No sourcemaps in release tarball
         run: |
@@ -66,6 +76,22 @@ jobs:
           if find release-staging -name '*.map' | grep -q .; then
             echo "FAIL: .map files present in release tarball"
             find release-staging -name '*.map'
+            exit 1
+          fi
+
+      - name: S3 — No sourceMappingURL references in JS / CSS
+        # Catches the regression where stripping `.map` files leaves the
+        # `sourceMappingURL` comment behind — browsers loading the
+        # helper-served bundle then fetch the missing map, the helper's
+        # SPA fallback returns index.html, JSON parsing of `<!doctype...`
+        # blows up. See the staging step's comment block for the chain.
+        run: |
+          set -euo pipefail
+          hits=$(grep -rE 'sourceMappingURL=' release-staging/ \
+                  --include='*.js' --include='*.mjs' --include='*.css' || true)
+          if [ -n "$hits" ]; then
+            echo "FAIL: sourceMappingURL references present in release tarball"
+            echo "$hits" | head -10
             exit 1
           fi
 

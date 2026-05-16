@@ -20,7 +20,13 @@
   import CustomProxySetupModal from '../components/CustomProxySetupModal.svelte';
   import PairingModal from '../components/PairingModal.svelte';
   import BackupFailuresModal from '../components/BackupFailuresModal.svelte';
+  import AuthErrorBanner from '../components/library-status/AuthErrorBanner.svelte';
+  import OutdatedHelperBanner from '../components/library-status/OutdatedHelperBanner.svelte';
+  import ProtocolMismatchBanner from '../components/library-status/ProtocolMismatchBanner.svelte';
+  import PairingRequiredBanner from '../components/library-status/PairingRequiredBanner.svelte';
   import { panelCollapse, setBackupsCollapsed } from '$lib/panel-collapse-pref';
+  import { pairingToken } from '$lib/pairing-token';
+  import { isHelperOutdated, isProtocolNewerThanKnown, MAX_KNOWN_PROTOCOL } from '$lib/min-helper-version';
   import { rkeyOf } from '../reader/inventory-shape';
   import type { Save } from '../reader/inventory-shape';
   import { restoreHydrationFromInventory } from '$lib/restore-hydration';
@@ -122,6 +128,24 @@
   $: snap = $capabilitySnapshot;
   $: dominantBackend = computeDominantBackend(snap);
   $: postCount = $inventoryState.status === 'ready' ? $inventoryState.inventory.saves.length : 0;
+
+  // Helper-relationship banners render above the Backups panel — they
+  // need to be visible in every inventoryState (loading / empty /
+  // error / ready), not just ready. Earlier these lived in
+  // LibraryStatusPanel, which is gated on `status === 'ready'`. That
+  // meant a first-time hosted-PWA user with a helper running but no
+  // inventory could never see the PairingRequiredBanner: the helper
+  // 401s their /fetch, the orchestrator surfaces an error, the user
+  // sits on "First fetch in progress…" forever with no way to pair.
+  $: helperVersion = snap.helper.detected ? snap.helper.version : '';
+  $: outdated = snap.helper.detected && isHelperOutdated(snap.helper.version);
+  $: helperProtocol = snap.helper.detected ? snap.helper.protocol : undefined;
+  $: protocolMismatch = isProtocolNewerThanKnown(helperProtocol);
+  // Both 'unpaired' (no token ever) and 'stale' (helper rejected the
+  // token) show the banner identically — the user's next action is the
+  // same in either case.
+  $: needsPairing = snap.helper.detected && $pairingToken.state !== 'paired';
+  $: refreshStateForBanner = $libraryRefreshState;
   $: refreshing =
     $libraryRefreshState.status === 'running' ||
     $threadProgress.status === 'running' ||
@@ -189,6 +213,27 @@
       ><span></span></div>
     </header>
 
+    <!-- Helper-relationship banners. Rendered here (not inside the
+         Backups CollapsibleBlock, where they used to live) so they
+         remain visible during empty/loading/error inventory states.
+         The Backups panel is gated on `status === 'ready'`, so when
+         a first-time hosted-PWA user lands with a helper running but
+         no inventory, the pairing prompt has to live somewhere
+         outside that gate or it's invisible at exactly the moment
+         the user most needs to see it. -->
+    {#if refreshStateForBanner.status === 'error'}
+      <AuthErrorBanner message={refreshStateForBanner.error} />
+    {/if}
+    {#if outdated}
+      <OutdatedHelperBanner version={helperVersion} />
+    {/if}
+    {#if protocolMismatch && helperProtocol}
+      <ProtocolMismatchBanner helperProtocol={helperProtocol} maxKnownProtocol={MAX_KNOWN_PROTOCOL} />
+    {/if}
+    {#if needsPairing}
+      <PairingRequiredBanner onPair={() => (pairingOpen = true)} />
+    {/if}
+
     <!-- Backups panel: hidden during the first-ever fetch (status ===
          'empty') so the user isn't asked to think about backups before
          they have any posts to back up. Once inventory is loaded
@@ -206,7 +251,6 @@
           onViewImageFailures={() => (failuresOpen = 'images')}
           onViewArticleFailures={() => (failuresOpen = 'articles')}
           onViewThreadFailures={() => (failuresOpen = 'threads')}
-          onPair={() => (pairingOpen = true)}
         />
       </CollapsibleBlock>
     {/if}
