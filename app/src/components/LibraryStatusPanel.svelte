@@ -6,7 +6,7 @@
   import { libraryRefreshState } from '$lib/library-refresh';
   import { imageHydration, articleHydration, threadProgress } from '$lib/hydration-state';
   import { computeDominantBackend, prospectiveBackendName } from '$lib/dominant-backend';
-  import { isHelperOutdated } from '$lib/min-helper-version';
+  import { isHelperOutdated, isProtocolNewerThanKnown, MAX_KNOWN_PROTOCOL } from '$lib/min-helper-version';
   import { triggerThreadHydration, triggerImageHydration, triggerArticleHydration } from '$lib/asset-trigger';
   import { disableOperatorProxy } from '$lib/disable-operator-proxy';
   import { cancelImageBackup } from '$lib/start-image-backup';
@@ -15,6 +15,7 @@
   import AssetRow from './library-status/AssetRow.svelte';
   import AuthErrorBanner from './library-status/AuthErrorBanner.svelte';
   import OutdatedHelperBanner from './library-status/OutdatedHelperBanner.svelte';
+  import ProtocolMismatchBanner from './library-status/ProtocolMismatchBanner.svelte';
   import PairingRequiredBanner from './library-status/PairingRequiredBanner.svelte';
   import InstallHelperHint from './library-status/InstallHelperHint.svelte';
 
@@ -72,6 +73,14 @@
 
   $: outdated = snap.helper.detected && isHelperOutdated(snap.helper.version);
   $: helperVersion = snap.helper.detected ? snap.helper.version : '';
+  // ProtocolMismatchBanner fires only when the helper reports a protocol
+  // greater than this GUI's MAX_KNOWN_PROTOCOL. The GUI being older than
+  // the helper's contract is the case we care about; the inverse (helper
+  // older than GUI knows) is covered by OutdatedHelperBanner / version
+  // check. A helper that doesn't report protocol at all (pre-v0.6.1)
+  // can't trigger this — undefined < anything is false.
+  $: helperProtocol = snap.helper.detected ? snap.helper.protocol : undefined;
+  $: protocolMismatch = isProtocolNewerThanKnown(helperProtocol);
   // PairingRequiredBanner gates on (a) helper detected via /ping, AND
   // (b) the pairing-token store is not 'paired'. Both 'unpaired' (no
   // token at all) and 'stale' (helper rejected the token we had) show
@@ -163,6 +172,9 @@
   {/if}
   {#if outdated}
     <OutdatedHelperBanner version={helperVersion} />
+  {/if}
+  {#if protocolMismatch && helperProtocol}
+    <ProtocolMismatchBanner helperProtocol={helperProtocol} maxKnownProtocol={MAX_KNOWN_PROTOCOL} />
   {/if}
   {#if needsPairing && onPair}
     <PairingRequiredBanner onPair={onPair} />
