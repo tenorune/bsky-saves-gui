@@ -34,6 +34,7 @@
 
   let setupOpen = false;
   let pairingOpen = false;
+  let pairingAutoOpened = false;
   let failuresOpen: 'images' | 'articles' | 'threads' | null = null;
   let didRestoreScroll = false;
 
@@ -146,6 +147,35 @@
   // same in either case.
   $: needsPairing = snap.helper.detected && $pairingToken.state !== 'paired';
   $: refreshStateForBanner = $libraryRefreshState;
+
+  // Auto-open the pairing modal the first time we land on Library with
+  // a detected helper, no paired token, and no inventory yet (i.e., the
+  // exact first-time-use shape where the user just signed in and the
+  // initial /fetch 401'd). The banner explains the situation too, but
+  // surfacing the modal directly saves a click and matches the user's
+  // intent — they just signed in expecting backups to work. Guarded by
+  // `pairingAutoOpened` so closing without pairing doesn't re-trigger
+  // every reactive update; the user can re-open via the banner's Pair
+  // button.
+  $: if (
+    needsPairing &&
+    !pairingOpen &&
+    !pairingAutoOpened &&
+    $inventoryState.status === 'empty'
+  ) {
+    pairingAutoOpened = true;
+    pairingOpen = true;
+  }
+
+  // When pairing succeeds (PairingModal dispatches 'change'), immediately
+  // re-trigger the refresh. Without this, the user is left on the
+  // Library with a stale error banner from the failed first /fetch and
+  // has to click Refresh manually — confusing because they just paired
+  // and would reasonably expect it to "just work" now.
+  function onPairingSuccess(): void {
+    pairingOpen = false;
+    refresh();
+  }
   $: refreshing =
     $libraryRefreshState.status === 'running' ||
     $threadProgress.status === 'running' ||
@@ -268,7 +298,14 @@
   {#if $inventoryState.status === 'loading'}
     <p class="route__msg">Loading inventory…</p>
   {:else if $inventoryState.status === 'empty'}
-    <p class="route__msg">First fetch in progress…</p>
+    <!-- "First fetch in progress…" is honest only while a refresh is
+         actually running. Once it errors (PairingRequired, AuthError, or
+         a real upstream failure), the banners above explain the actual
+         state and saying "in progress" here is a lie. Suppress in that
+         case; the banner is the messaging. -->
+    {#if refreshStateForBanner.status !== 'error' && !needsPairing}
+      <p class="route__msg">First fetch in progress…</p>
+    {/if}
   {:else if $inventoryState.status === 'error'}
     <p class="route__msg">Failed to load inventory: {$inventoryState.message}</p>
   {:else}
@@ -285,6 +322,7 @@
 <PairingModal
   open={pairingOpen}
   on:close={() => (pairingOpen = false)}
+  on:change={onPairingSuccess}
 />
 
 <BackupFailuresModal
