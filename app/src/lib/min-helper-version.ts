@@ -1,14 +1,20 @@
 /**
  * Minimum required bsky-saves CLI version. The GUI surfaces an upgrade prompt
- * when the running helper reports an older version. Bumped to 0.4.1 because
- * v0.4.1 ships the JWT-pair credentials path (`"jwt-credentials"` feature flag)
- * required to route fetch / enrich / hydrate-threads through the helper for
- * session-mode runs.
+ * (OutdatedHelperBanner) when the running helper reports an older version.
  *
- * (v0.4.0 added /fetch, /enrich, and /hydrate-threads endpoints; v0.3.1 was
- * the prior floor for the thread_schema_version 3 → 4 fix.)
+ * Bumped to 0.6.2 because that's the release that ships mandatory session-
+ * token auth (`Authorization: Bearer <token>` required on every authed
+ * endpoint, `WWW-Authenticate: Bearer` on pairing-cause 401s — see
+ * docs/bsky-saves-gui-dist-workstream.md §4 items 11–13). The GUI's pairing
+ * flow assumes those semantics; against helpers older than 0.6.2 the
+ * pairing UI shows but never actually authenticates anything.
+ *
+ * Prior floors:
+ *   0.4.1 — JWT-pair credentials path (`"jwt-credentials"` feature flag).
+ *   0.4.0 — first wheel with /fetch, /enrich, /hydrate-threads.
+ *   0.3.1 — thread_schema_version 3 → 4 fix.
  */
-export const MIN_HELPER_VERSION = '0.4.1';
+export const MIN_HELPER_VERSION = '0.6.2';
 
 /**
  * Compare two semver-ish version strings. Returns true if `actual` is older
