@@ -602,3 +602,68 @@ describe('helper-client Authorization header (pairing)', () => {
     );
   });
 });
+
+describe('helper-client 401 handling (pairing-cause detection)', () => {
+  const VALID_TOKEN = 'tok_' + 'a'.repeat(20);
+
+  it('marks pairing stale when 401 carries WWW-Authenticate: Bearer (sent auth)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ error: 'unauthorized' }), {
+        status: 401,
+        headers: { 'WWW-Authenticate': 'Bearer realm="bsky-saves"' },
+      })),
+    );
+    const { setPairingToken, pairingToken } = await import('./pairing-token');
+    const { get } = await import('svelte/store');
+    setPairingToken(VALID_TOKEN);
+    const { enrichUris } = await import('./helper-client');
+    await expect(
+      enrichUris('http://127.0.0.1:47826', { uris: ['at://a'] }),
+    ).rejects.toThrow();
+    expect(get(pairingToken).state).toBe('stale');
+  });
+
+  it('leaves pairing state alone on 401 without WWW-Authenticate (upstream-cause)', async () => {
+    // This is the existing "helper proxied an upstream PDS auth failure"
+    // shape — the helper itself authed us correctly but our credentials
+    // were rejected at the next hop. Marking pairingStale here would
+    // mislead the user.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ error: 'createSession failed' }), {
+        status: 401,
+      })),
+    );
+    const { setPairingToken, pairingToken } = await import('./pairing-token');
+    const { get } = await import('svelte/store');
+    setPairingToken(VALID_TOKEN);
+    const { enrichUris } = await import('./helper-client');
+    await expect(
+      enrichUris('http://127.0.0.1:47826', { uris: ['at://a'] }),
+    ).rejects.toThrow();
+    expect(get(pairingToken).state).toBe('paired'); // unchanged
+  });
+
+  it('does not flip state when 401 fires without a sent Authorization header', async () => {
+    // Unpaired GUI + helper requires auth. The 401 is expected and the
+    // pairing flow recovers via the banner (no token to mark "stale");
+    // there's nothing the 401 handler can do that the banner isn't
+    // already doing, so it should no-op.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('', {
+        status: 401,
+        headers: { 'WWW-Authenticate': 'Bearer' },
+      })),
+    );
+    // No setPairingToken — state starts 'unpaired'.
+    const { pairingToken } = await import('./pairing-token');
+    const { get } = await import('svelte/store');
+    const { enrichUris } = await import('./helper-client');
+    await expect(
+      enrichUris('http://127.0.0.1:47826', { uris: ['at://a'] }),
+    ).rejects.toThrow();
+    expect(get(pairingToken).state).toBe('unpaired'); // unchanged
+  });
+});

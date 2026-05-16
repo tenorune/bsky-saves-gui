@@ -18,7 +18,7 @@
 
 import { get } from 'svelte/store';
 import { config } from './config';
-import { pairingToken } from './pairing-token';
+import { pairingToken, markPairingStale } from './pairing-token';
 
 /**
  * Add `Authorization: Bearer <token>` to `headers` if the pairing store
@@ -32,6 +32,85 @@ function withAuthHeaders(headers: Record<string, string>): Record<string, string
     return { ...headers, Authorization: `Bearer ${token}` };
   }
   return headers;
+}
+
+/**
+ * True when the GUI is being served from the same origin as the helper —
+ * the wheel-served (`bsky-saves serve --gui`) path. In that mode the
+ * helper substitutes the `__BSKY_SAVES_TOKEN__` sentinel in `index.html`
+ * with the current persistent token on every page load, so reloading
+ * the page is itself the recovery from a stale-token 401.
+ */
+function isBundledGuiOrigin(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return new URL(window.location.href).origin === new URL(config.helperOrigin).origin;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Persistent budget for automatic page reloads on 401, capped at one per
+ * 10s. Without a cap, a helper that keeps 401ing after reload (e.g.,
+ * because the upstream PDS auth is broken, or the helper itself crashed)
+ * would loop the page forever.
+ */
+const RELOAD_BUDGET_KEY = 'helper-401-reload-at:v1';
+const RELOAD_COOLDOWN_MS = 10_000;
+
+function consumeReloadBudget(): boolean {
+  if (typeof localStorage === 'undefined' || typeof location === 'undefined') return false;
+  try {
+    const last = parseInt(localStorage.getItem(RELOAD_BUDGET_KEY) ?? '0', 10);
+    if (Date.now() - last < RELOAD_COOLDOWN_MS) return false;
+    localStorage.setItem(RELOAD_BUDGET_KEY, String(Date.now()));
+  } catch {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * React to a 401 from an authed helper endpoint.
+ *
+ * Distinguishes pairing-cause 401 from upstream-cause 401 via the
+ * `WWW-Authenticate: Bearer` header — standard HTTP convention for
+ * "this endpoint needs auth, your credentials were rejected." When the
+ * header is absent we assume an upstream-cause 401 (helper proxied a
+ * PDS auth failure) and don't touch the pairing state. This is
+ * conservative: a helper that 401s for pairing reasons WITHOUT emitting
+ * the header won't trigger automatic recovery, but it won't spuriously
+ * flip pairingStale on upstream failures either. Swap the signal here
+ * once bsky-saves PR #9 finalizes whatever convention they use.
+ *
+ * On a pairing-cause 401:
+ *   - Bundled GUI (helper origin == window origin): reload the page;
+ *     the helper will substitute a fresh token into `index.html`'s
+ *     meta tag. Capped at one reload per 10s to avoid infinite loops
+ *     if reload doesn't recover.
+ *   - Hosted GUI: flip pairingStale; the PairingRequiredBanner takes
+ *     over and prompts the user to re-paste from `bsky-saves token`.
+ *
+ * No-op when the request didn't carry an Authorization header (the GUI
+ * was unpaired; no pairing state to mark stale).
+ */
+function handleAuthed401(res: Response, sentAuth: boolean): void {
+  if (res.status !== 401 || !sentAuth) return;
+  const challenge = res.headers.get('WWW-Authenticate');
+  const isPairingChallenge =
+    challenge !== null && challenge.toLowerCase().includes('bearer');
+  if (!isPairingChallenge) return;
+  if (isBundledGuiOrigin() && consumeReloadBudget()) {
+    // Defer the reload so the current request's caller gets to reject
+    // with its normal error message before navigation tears the page
+    // down — keeps error logging coherent during the reload window.
+    setTimeout(() => {
+      if (typeof location !== 'undefined') location.reload();
+    }, 100);
+    return;
+  }
+  markPairingStale();
 }
 
 export type HelperStatus =
@@ -196,11 +275,14 @@ const HELPER_IMAGE_MAX_BYTES = 25 * 1024 * 1024;
 
 export async function fetchImageViaHelper(origin: string, imageUrl: string): Promise<Blob> {
   const base = origin.replace(/\/+$/, '');
+  const headers = withAuthHeaders({ 'Content-Type': 'application/json' });
+  const sentAuth = 'Authorization' in headers;
   const res = await fetch(`${base}/fetch-image`, {
     method: 'POST',
-    headers: withAuthHeaders({ 'Content-Type': 'application/json' }),
+    headers,
     body: JSON.stringify({ url: imageUrl }),
   });
+  handleAuthed401(res, sentAuth);
   if (!res.ok) {
     throw new Error(`helper /fetch-image returned ${res.status}`);
   }
@@ -253,12 +335,15 @@ export async function extractArticleViaHelper(
   options: { signal?: AbortSignal } = {},
 ): Promise<ExtractedArticle> {
   const base = origin.replace(/\/+$/, '');
+  const headers = withAuthHeaders({ 'Content-Type': 'application/json' });
+  const sentAuth = 'Authorization' in headers;
   const res = await fetch(`${base}/extract-article`, {
     method: 'POST',
-    headers: withAuthHeaders({ 'Content-Type': 'application/json' }),
+    headers,
     body: JSON.stringify({ url: articleUrl }),
     signal: options.signal,
   });
+  handleAuthed401(res, sentAuth);
   if (!res.ok) {
     throw new Error(`helper /extract-article returned ${res.status}`);
   }
@@ -321,15 +406,18 @@ export async function fetchSaves(
   req: FetchSavesRequest,
 ): Promise<FetchSavesResponse> {
   const base = origin.replace(/\/+$/, '');
+  const headers = withAuthHeaders({ 'Content-Type': 'application/json' });
+  const sentAuth = 'Authorization' in headers;
   const res = await fetch(`${base}/fetch`, {
     method: 'POST',
-    headers: withAuthHeaders({ 'Content-Type': 'application/json' }),
+    headers,
     body: JSON.stringify({
       credentials: serialiseCredentials(req.credentials),
       cursor: req.cursor,
       limit: req.limit,
     }),
   });
+  handleAuthed401(res, sentAuth);
   if (!res.ok) {
     let msg = `helper /fetch returned ${res.status}`;
     try {
@@ -362,11 +450,14 @@ export interface EnrichResponse {
 
 export async function enrichUris(origin: string, req: EnrichRequest): Promise<EnrichResponse> {
   const base = origin.replace(/\/+$/, '');
+  const headers = withAuthHeaders({ 'Content-Type': 'application/json' });
+  const sentAuth = 'Authorization' in headers;
   const res = await fetch(`${base}/enrich`, {
     method: 'POST',
-    headers: withAuthHeaders({ 'Content-Type': 'application/json' }),
+    headers,
     body: JSON.stringify({ uris: req.uris }),
   });
+  handleAuthed401(res, sentAuth);
   if (!res.ok) {
     let msg = `helper /enrich returned ${res.status}`;
     try {
@@ -405,14 +496,17 @@ export async function hydrateThreads(
   req: HydrateThreadsRequest,
 ): Promise<HydrateThreadsResponse> {
   const base = origin.replace(/\/+$/, '');
+  const headers = withAuthHeaders({ 'Content-Type': 'application/json' });
+  const sentAuth = 'Authorization' in headers;
   const res = await fetch(`${base}/hydrate-threads`, {
     method: 'POST',
-    headers: withAuthHeaders({ 'Content-Type': 'application/json' }),
+    headers,
     body: JSON.stringify({
       uris: req.uris,
       credentials: serialiseCredentials(req.credentials),
     }),
   });
+  handleAuthed401(res, sentAuth);
   if (!res.ok) {
     let msg = `helper /hydrate-threads returned ${res.status}`;
     try {
