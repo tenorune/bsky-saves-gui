@@ -76,6 +76,87 @@ describe('startLibraryRefresh', () => {
     expect(startImageBackup).toHaveBeenCalledWith(inv);
     expect(startArticleBackup).toHaveBeenCalledWith(inv);
   });
+
+  it('refuses to reconcile when fetch returns empty against a non-empty prior (bug #35)', async () => {
+    // The reconcile-against-empty-fetch path silently deletes the user's
+    // library under keep-lost / sync retain modes. The guard in
+    // onAfterEnrich throws instead, leaving the prior inventory intact
+    // and surfacing the failure via the error state.
+    const priorInv = { saves: [{ uri: 'at://1' }, { uri: 'at://2' }, { uri: 'at://3' }] };
+    const loadInventory = vi.fn().mockResolvedValue(priorInv);
+    const saveInventory = vi.fn().mockResolvedValue(undefined);
+    const loadFromDb = vi.fn().mockResolvedValue(undefined);
+
+    // Mock orchestrate to invoke onAfterEnrich with an empty fetch
+    // result — exactly what the bug-triggering path does.
+    const orchestrate = vi.fn().mockImplementation(async (_input: unknown, hooks: { onAfterEnrich: (p: unknown) => Promise<unknown> }) => {
+      // This throws (the guard fires); the catch below would otherwise
+      // propagate it back up to startLibraryRefresh.
+      await hooks.onAfterEnrich({ saves: [] });
+      // Unreachable.
+      return { saves: [] };
+    });
+
+    await startLibraryRefresh(
+      { credentials: { handle: 'a', appPassword: 'b', pds: 'c' }, includeThreads: false },
+      { orchestrate, saveInventory, loadFromDb, loadInventory },
+    );
+
+    const s = get(libraryRefreshState);
+    expect(s.status).toBe('error');
+    if (s.status === 'error') {
+      expect(s.error).toMatch(/Refresh returned zero saves/);
+      expect(s.error).toMatch(/your library had 3/);
+    }
+    // Critical: saveInventory was NOT called. The prior inventory is
+    // untouched in storage.
+    expect(saveInventory).not.toHaveBeenCalled();
+  });
+
+  it('still reconciles normally when both prior and fresh are non-empty', async () => {
+    // Sanity check: the guard is narrow. A normal refresh (non-empty
+    // fetch against non-empty prior) still flows through onAfterEnrich
+    // → reconcile → saveInventory like before.
+    const priorInv = { saves: [{ uri: 'at://1' }] };
+    const freshInv = { saves: [{ uri: 'at://1' }, { uri: 'at://2' }] };
+    const loadInventory = vi.fn().mockResolvedValue(priorInv);
+    const saveInventory = vi.fn().mockResolvedValue(undefined);
+    const loadFromDb = vi.fn().mockResolvedValue(undefined);
+
+    const orchestrate = vi.fn().mockImplementation(async (_input: unknown, hooks: { onAfterEnrich: (p: unknown) => Promise<unknown> }) => {
+      const reconciled = await hooks.onAfterEnrich(freshInv);
+      return reconciled;
+    });
+
+    await startLibraryRefresh(
+      { credentials: { handle: 'a', appPassword: 'b', pds: 'c' }, includeThreads: false },
+      { orchestrate, saveInventory, loadFromDb, loadInventory },
+    );
+
+    expect(get(libraryRefreshState).status).toBe('idle');
+    expect(saveInventory).toHaveBeenCalled();
+  });
+
+  it('still reconciles when both prior and fresh are empty (no false positive on fresh sign-in)', async () => {
+    // The guard fires only when prior > 0 AND fresh === 0. A
+    // first-ever sign-in (prior === 0, fresh === 0 because the user
+    // genuinely has no saves yet) should not error.
+    const loadInventory = vi.fn().mockResolvedValue(null); // no prior inventory
+    const saveInventory = vi.fn().mockResolvedValue(undefined);
+    const loadFromDb = vi.fn().mockResolvedValue(undefined);
+
+    const orchestrate = vi.fn().mockImplementation(async (_input: unknown, hooks: { onAfterEnrich: (p: unknown) => Promise<unknown> }) => {
+      const reconciled = await hooks.onAfterEnrich({ saves: [] });
+      return reconciled;
+    });
+
+    await startLibraryRefresh(
+      { credentials: { handle: 'a', appPassword: 'b', pds: 'c' }, includeThreads: false },
+      { orchestrate, saveInventory, loadFromDb, loadInventory },
+    );
+
+    expect(get(libraryRefreshState).status).toBe('idle');
+  });
 });
 
 describe('stopLibraryRefresh', () => {
