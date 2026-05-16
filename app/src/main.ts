@@ -4,6 +4,7 @@ import { loadInstallHintPref } from './lib/install-hint-pref';
 import { loadAssetToggles } from './lib/asset-toggles';
 import { loadRetainMode } from './lib/retain-mode';
 import { loadPanelCollapse } from './lib/panel-collapse-pref';
+import { initPairingToken } from './lib/pairing-token';
 import { registerServiceWorker } from './lib/sw-register';
 import { initStoragePersist } from './lib/storage-persist';
 
@@ -29,6 +30,12 @@ loadRetainMode().catch(() => { /* keep default */ });
 // hydrating after mount would briefly flash both panels open before
 // snapping shut to the user's persisted preference.
 loadPanelCollapse().catch(() => { /* keep defaults */ });
+// Synchronous: read the helper pairing token from the served meta tag
+// (wheel-served path) or from localStorage (hosted-PWA path) before the
+// first render. Falls through to 'unpaired' silently if neither path
+// yields a valid token; the PairingRequiredBanner takes over from there
+// when the capability snapshot reports a detected helper.
+initPairingToken();
 
 initStoragePersist();
 registerServiceWorker();

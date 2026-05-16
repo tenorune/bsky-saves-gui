@@ -103,6 +103,49 @@ export async function pingHelper(origin: string): Promise<boolean> {
 }
 
 /**
+ * Probe a candidate pairing token against the helper. Returns:
+ *   'valid'       — helper accepted the token (2xx response).
+ *   'rejected'    — helper returned 401 / 403; the token is wrong.
+ *   'unreachable' — network error, helper not running, CORS failure, etc.
+ *
+ * Implemented today as a no-op `POST /enrich` with an empty `uris[]` — the
+ * helper returns `{enriched: [], errors: []}` for that input when auth
+ * passes, 401 when the token is missing or wrong. This is a temporary
+ * stand-in for the dedicated `/auth/check` endpoint proposed in the
+ * bsky-saves session-token spec (PR #9). Swap when that lands.
+ *
+ * The token is passed explicitly rather than read from the pairing-token
+ * store so the modal can verify a user's pasted token without committing
+ * it to the store until the probe succeeds.
+ */
+export type PairingProbeResult = 'valid' | 'rejected' | 'unreachable';
+
+export async function probePairingToken(
+  origin: string,
+  token: string,
+): Promise<PairingProbeResult> {
+  const base = origin.replace(/\/+$/, '');
+  let res: Response;
+  try {
+    res = await fetch(`${base}/enrich`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ uris: [] }),
+    });
+  } catch {
+    return 'unreachable';
+  }
+  if (res.ok) return 'valid';
+  if (res.status === 401 || res.status === 403) return 'rejected';
+  // Other 4xx/5xx: treat as unreachable (helper alive but misbehaving;
+  // user can't fix this by re-pasting the token).
+  return 'unreachable';
+}
+
+/**
  * Fetch a single image via the local helper's POST /fetch-image endpoint.
  * The helper does the outbound HTTP from the user's machine and streams the
  * raw bytes back. Throws on non-2xx response or network error.
