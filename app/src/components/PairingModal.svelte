@@ -96,7 +96,7 @@
           bind:value={pastedToken}
           autocomplete="off"
           spellcheck="false"
-          placeholder="Paste from `bsky-saves serve` (first run) or `bsky-saves token`"
+          placeholder="from `bsky-saves serve` (first run) / `bsky-saves token`"
           disabled={status === 'verifying'}
         />
       </label>
