@@ -35,24 +35,61 @@ function withAuthHeaders(headers: Record<string, string>): Record<string, string
 }
 
 export type HelperStatus =
-  | { status: 'available'; version: string; features: readonly string[] }
+  | {
+      status: 'available';
+      version: string;
+      features: readonly string[];
+      /**
+       * Stable compat-band integer-as-string. Bumps when an existing
+       * endpoint changes in a non-additive way; new endpoints and new
+       * optional fields don't bump it. Optional on the type because v0.6.0
+       * helpers don't return it — only v0.6.1+ do (see
+       * docs/bsky-saves-gui-dist-workstream.md §4 item 13).
+       */
+      protocol?: string;
+      /**
+       * The GUI tag whose `dist.tar.gz` was vendored into this helper at
+       * wheel-build time. Matches `GUI_VERSION` in `bsky-saves`'s
+       * `pyproject.toml`. `null` for dev installs that skipped the
+       * GUI-fetch build hook. Optional on the type for backward compat
+       * with v0.6.0 helpers that don't return the field at all.
+       */
+      gui_bundled?: string | null;
+    }
   | { status: 'unavailable' };
 
 interface PingPayload {
   readonly name: string;
   readonly version: string;
   readonly features: readonly string[];
+  readonly protocol?: string;
+  readonly gui_bundled?: string | null;
 }
 
 function isPingPayload(v: unknown): v is PingPayload {
   if (!v || typeof v !== 'object') return false;
   const r = v as Record<string, unknown>;
-  return (
-    r.name === 'bsky-saves' &&
-    typeof r.version === 'string' &&
-    Array.isArray(r.features) &&
-    r.features.every((f) => typeof f === 'string')
-  );
+  if (
+    r.name !== 'bsky-saves' ||
+    typeof r.version !== 'string' ||
+    !Array.isArray(r.features) ||
+    !r.features.every((f) => typeof f === 'string')
+  ) {
+    return false;
+  }
+  // Soft-validate the additive v0.6.1 fields: if present, the types must
+  // match; if absent, the payload is still valid (v0.6.0 helpers in the
+  // field don't ship them). Rejects payloads where the wheel returns the
+  // field with the wrong type (e.g., a number instead of a string).
+  if (r.protocol !== undefined && typeof r.protocol !== 'string') return false;
+  if (
+    r.gui_bundled !== undefined &&
+    r.gui_bundled !== null &&
+    typeof r.gui_bundled !== 'string'
+  ) {
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -73,6 +110,8 @@ export async function probeHelper(origin: string): Promise<HelperStatus> {
       status: 'available',
       version: body.version,
       features: body.features,
+      ...(body.protocol !== undefined ? { protocol: body.protocol } : {}),
+      ...(body.gui_bundled !== undefined ? { gui_bundled: body.gui_bundled } : {}),
     };
   } catch {
     return { status: 'unavailable' };

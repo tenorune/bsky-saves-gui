@@ -69,6 +69,87 @@ describe('helper-client probeHelper', () => {
     await probeHelper('http://127.0.0.1:47826/');
     expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:47826/ping', expect.any(Object));
   });
+
+  it('surfaces protocol + gui_bundled when v0.6.1+ /ping returns them', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          name: 'bsky-saves',
+          version: '0.6.1',
+          protocol: '1',
+          gui_bundled: '0.6.0',
+          features: ['fetch', 'enrich', 'hydrate-threads', 'fetch-image', 'extract-article', 'jwt-credentials'],
+        }),
+      })),
+    );
+    const { probeHelper } = await import('./helper-client');
+    const result = await probeHelper('http://127.0.0.1:47826');
+    expect(result).toMatchObject({
+      status: 'available',
+      version: '0.6.1',
+      protocol: '1',
+      gui_bundled: '0.6.0',
+    });
+  });
+
+  it('surfaces gui_bundled: null for dev-install helpers that skipped the GUI-fetch build hook', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          name: 'bsky-saves',
+          version: '0.6.1',
+          protocol: '1',
+          gui_bundled: null,
+          features: [],
+        }),
+      })),
+    );
+    const { probeHelper } = await import('./helper-client');
+    const result = await probeHelper('http://127.0.0.1:47826');
+    expect(result).toMatchObject({ status: 'available', gui_bundled: null });
+  });
+
+  it('omits the optional fields when the helper does not return them (v0.6.0 compat)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          name: 'bsky-saves',
+          version: '0.6.0',
+          features: [],
+        }),
+      })),
+    );
+    const { probeHelper } = await import('./helper-client');
+    const result = await probeHelper('http://127.0.0.1:47826');
+    expect(result).toEqual({
+      status: 'available',
+      version: '0.6.0',
+      features: [],
+    });
+  });
+
+  it('reports unavailable when /ping returns protocol with the wrong type', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          name: 'bsky-saves',
+          version: '0.6.1',
+          protocol: 1, // number, not string — wire-format violation
+          features: [],
+        }),
+      })),
+    );
+    const { probeHelper } = await import('./helper-client');
+    expect(await probeHelper('http://127.0.0.1:47826')).toEqual({ status: 'unavailable' });
+  });
 });
 
 describe('helper-client fetchImageViaHelper', () => {
