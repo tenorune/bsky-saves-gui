@@ -2,21 +2,14 @@
   import { capabilitySnapshot } from '$lib/capability-snapshot';
   import { assetToggles, setAssetToggle } from '$lib/asset-toggles';
   import { installHintDismissed } from '$lib/install-hint-pref';
-  import { pairingToken } from '$lib/pairing-token';
-  import { libraryRefreshState } from '$lib/library-refresh';
   import { imageHydration, articleHydration, threadProgress } from '$lib/hydration-state';
   import { computeDominantBackend, prospectiveBackendName } from '$lib/dominant-backend';
-  import { isHelperOutdated, isProtocolNewerThanKnown, MAX_KNOWN_PROTOCOL } from '$lib/min-helper-version';
   import { triggerThreadHydration, triggerImageHydration, triggerArticleHydration } from '$lib/asset-trigger';
   import { disableOperatorProxy } from '$lib/disable-operator-proxy';
   import { cancelImageBackup } from '$lib/start-image-backup';
   import { cancelArticleBackup } from '$lib/start-article-backup';
   import { cancelThreadHydration } from '$lib/thread-hydrator';
   import AssetRow from './library-status/AssetRow.svelte';
-  import AuthErrorBanner from './library-status/AuthErrorBanner.svelte';
-  import OutdatedHelperBanner from './library-status/OutdatedHelperBanner.svelte';
-  import ProtocolMismatchBanner from './library-status/ProtocolMismatchBanner.svelte';
-  import PairingRequiredBanner from './library-status/PairingRequiredBanner.svelte';
   import InstallHelperHint from './library-status/InstallHelperHint.svelte';
 
   /** Optional callbacks the parent can pass; if undefined, the row hides the affordance. */
@@ -25,13 +18,6 @@
   export let onViewImageFailures: (() => void) | null = null;
   export let onViewArticleFailures: (() => void) | null = null;
   export let onViewThreadFailures: (() => void) | null = null;
-  /**
-   * Called when the user clicks "Pair" on the PairingRequiredBanner.
-   * Parent should open whatever pairing UI it owns (typically
-   * PairingModal). When null, the banner doesn't render — no point
-   * showing a "Pair" CTA the parent can't act on.
-   */
-  export let onPair: (() => void) | null = null;
 
   // Wire row badges to the same persistent state Settings's checkboxes use.
   // Off→on flip kicks off the matching hydrator over the existing inventory
@@ -71,23 +57,13 @@
     return own;
   }
 
-  $: outdated = snap.helper.detected && isHelperOutdated(snap.helper.version);
-  $: helperVersion = snap.helper.detected ? snap.helper.version : '';
-  // ProtocolMismatchBanner fires only when the helper reports a protocol
-  // greater than this GUI's MAX_KNOWN_PROTOCOL. The GUI being older than
-  // the helper's contract is the case we care about; the inverse (helper
-  // older than GUI knows) is covered by OutdatedHelperBanner / version
-  // check. A helper that doesn't report protocol at all (pre-v0.6.1)
-  // can't trigger this — undefined < anything is false.
-  $: helperProtocol = snap.helper.detected ? snap.helper.protocol : undefined;
-  $: protocolMismatch = isProtocolNewerThanKnown(helperProtocol);
-  // PairingRequiredBanner gates on (a) helper detected via /ping, AND
-  // (b) the pairing-token store is not 'paired'. Both 'unpaired' (no
-  // token at all) and 'stale' (helper rejected the token we had) show
-  // the banner identically — the user's next action is the same in
-  // either case. When `onPair` isn't wired up, suppress regardless;
-  // no CTA without a parent to handle it.
-  $: needsPairing = snap.helper.detected && $pairingToken.state !== 'paired' && onPair !== null;
+  // Helper-relationship banners (Outdated / ProtocolMismatch /
+  // PairingRequired / AuthError) used to live here, but they need to
+  // render in empty/loading/error inventory states too — otherwise a
+  // user landing for the first time can't pair because the Backups
+  // panel (which contains them) is gated on inventoryState === 'ready'.
+  // They've moved to Library.svelte. This component now only owns asset
+  // rows + the install-helper hint.
   $: pyodideOnly = !snap.helper.detected;
 
   // Threads. Same cumulative-coverage shape as images/articles —
@@ -142,8 +118,6 @@
       ? 'indeterminate' as const
       : null;
 
-  $: refreshState = $libraryRefreshState;
-
   // Tooltip text shown on the OFF badge: "would use {proxy}" for proxy
   // backends, or "no backend available" when articles routes to 'none'.
   // Null when the asset would route through helper or pyodide (those are
@@ -167,19 +141,6 @@
 </script>
 
 <section class="status-panel" aria-label="Library status">
-  {#if refreshState.status === 'error'}
-    <AuthErrorBanner message={refreshState.error} />
-  {/if}
-  {#if outdated}
-    <OutdatedHelperBanner version={helperVersion} />
-  {/if}
-  {#if protocolMismatch && helperProtocol}
-    <ProtocolMismatchBanner helperProtocol={helperProtocol} maxKnownProtocol={MAX_KNOWN_PROTOCOL} />
-  {/if}
-  {#if needsPairing && onPair}
-    <PairingRequiredBanner onPair={onPair} />
-  {/if}
-
   <!-- Don't render asset rows until the capability snapshot is real
        data, not the EMPTY_SNAPSHOT placeholder. Otherwise the rows
        briefly show "operator-worker" / "no backend available" before
