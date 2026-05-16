@@ -27,6 +27,7 @@ describe('computeCapabilitySnapshot', () => {
       helper: helperWith(['fetch', 'enrich', 'hydrate-threads', 'jwt-credentials', 'fetch-image', 'extract-article']),
       userWorker: null,
       operatorProxyOptOut: false,
+      helperOptOut: false,
       pyodideSource: 'cdn',
     });
     expect(snap.fetch.kind).toBe('helper');
@@ -41,6 +42,7 @@ describe('computeCapabilitySnapshot', () => {
       helper: helperWith(['fetch', 'enrich', 'hydrate-threads']),
       userWorker: null,
       operatorProxyOptOut: false,
+      helperOptOut: false,
       pyodideSource: 'cdn',
     });
     expect(snap.fetch.kind).toBe('pyodide');
@@ -53,6 +55,7 @@ describe('computeCapabilitySnapshot', () => {
       helper: helperWith(['fetch', 'enrich', 'jwt-credentials']),
       userWorker: null,
       operatorProxyOptOut: false,
+      helperOptOut: false,
       pyodideSource: 'cdn',
     });
     expect(snap.threads.kind).toBe('pyodide');
@@ -63,6 +66,7 @@ describe('computeCapabilitySnapshot', () => {
       helper: helperWith(['fetch']),
       userWorker: { url: 'https://my.worker.dev', sharedSecret: 'test-secret' },
       operatorProxyOptOut: false,
+      helperOptOut: false,
       pyodideSource: 'cdn',
     });
     expect(snap.images).toEqual({ kind: 'user-worker', url: 'https://my.worker.dev', sharedSecret: 'test-secret' });
@@ -73,6 +77,7 @@ describe('computeCapabilitySnapshot', () => {
       helper: helperWith([]),
       userWorker: null,
       operatorProxyOptOut: false,
+      helperOptOut: false,
       pyodideSource: 'cdn',
     });
     expect(snap.images).toEqual({ kind: 'operator-worker' });
@@ -83,6 +88,7 @@ describe('computeCapabilitySnapshot', () => {
       helper: helperWith([]),
       userWorker: null,
       operatorProxyOptOut: false,
+      helperOptOut: false,
       pyodideSource: 'cdn',
     });
     expect(snap.articles).toEqual({ kind: 'none' });
@@ -93,6 +99,7 @@ describe('computeCapabilitySnapshot', () => {
       helper: helperWith([]),
       userWorker: { url: 'https://my.worker.dev', sharedSecret: 'test-secret' },
       operatorProxyOptOut: false,
+      helperOptOut: false,
       pyodideSource: 'cdn',
     });
     expect(snap.articles).toEqual({ kind: 'user-worker', url: 'https://my.worker.dev', sharedSecret: 'test-secret' });
@@ -103,6 +110,7 @@ describe('computeCapabilitySnapshot', () => {
       helper: { status: 'unavailable' },
       userWorker: null,
       operatorProxyOptOut: false,
+      helperOptOut: false,
       pyodideSource: 'cdn',
     });
     expect(snap.helper.detected).toBe(false);
@@ -114,6 +122,7 @@ describe('computeCapabilitySnapshot', () => {
       helper: { status: 'unavailable' },
       userWorker: { url: 'https://my.worker.dev', sharedSecret: 'test-secret' },
       operatorProxyOptOut: false,
+      helperOptOut: false,
       pyodideSource: 'cdn',
     });
     expect(snap.images).toEqual({ kind: 'user-worker', url: 'https://my.worker.dev', sharedSecret: 'test-secret' });

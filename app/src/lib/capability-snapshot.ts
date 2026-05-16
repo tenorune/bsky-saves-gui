@@ -63,20 +63,33 @@ export interface CapabilitySnapshotInputs {
   readonly helper: HelperStatus;
   readonly userWorker: { readonly url: string; readonly sharedSecret: string } | null;
   readonly operatorProxyOptOut: boolean;
+  /**
+   * When true, the user has opted out of using the local helper from
+   * this browser. `helper` is treated as `unavailable` regardless of
+   * what was probed — all helper-routed features fall back to non-
+   * helper paths. See lib/helper-opt-out.ts.
+   */
+  readonly helperOptOut: boolean;
   readonly pyodideSource: PyodideSource;
 }
 
 export function computeCapabilitySnapshot(
   inputs: CapabilitySnapshotInputs,
 ): CapabilitySnapshot {
-  const { helper, userWorker, operatorProxyOptOut, pyodideSource } = inputs;
+  const { helper, userWorker, operatorProxyOptOut, helperOptOut, pyodideSource } = inputs;
+  // User said "don't use this helper from this browser" — collapse the
+  // detected-helper case into the same shape as no-helper-detected so
+  // every routing decision falls back to non-helper paths.
+  const effectiveHelper: HelperStatus = helperOptOut
+    ? { status: 'unavailable' as const }
+    : helper;
   const operatorOrNone = operatorProxyOptOut
     ? { kind: 'none' as const }
     : { kind: 'operator-worker' as const };
   const userWorkerVariant = userWorker
     ? { kind: 'user-worker' as const, url: userWorker.url, sharedSecret: userWorker.sharedSecret }
     : null;
-  if (helper.status !== 'available') {
+  if (effectiveHelper.status !== 'available') {
     return {
       ...EMPTY_SNAPSHOT,
       images:   userWorkerVariant ?? operatorOrNone,
@@ -85,14 +98,14 @@ export function computeCapabilitySnapshot(
       loaded: true,
     };
   }
-  const f = new Set(helper.features);
+  const f = new Set(effectiveHelper.features);
   const fetchOk = f.has('fetch') && f.has('enrich') && f.has('hydrate-threads') && f.has('jwt-credentials');
   return {
     helper: {
       detected: true,
-      version: helper.version,
-      features: helper.features,
-      ...(helper.protocol !== undefined ? { protocol: helper.protocol } : {}),
+      version: effectiveHelper.version,
+      features: effectiveHelper.features,
+      ...(effectiveHelper.protocol !== undefined ? { protocol: effectiveHelper.protocol } : {}),
     },
     fetch:   fetchOk ? { kind: 'helper' } : { kind: 'pyodide' },
     enrich:  fetchOk ? { kind: 'helper' } : { kind: 'pyodide' },
@@ -112,6 +125,7 @@ import { writable, type Readable } from 'svelte/store';
 import { probeConfiguredHelper } from './helper-client';
 import { loadProxyConfig } from './proxy-config';
 import { loadOperatorProxyOptOut } from './operator-proxy-opt-out';
+import { loadHelperOptOut } from './helper-opt-out';
 import { resolveDefaultPyodideSource } from './pyodide-source';
 
 const store = writable<CapabilitySnapshot>(EMPTY_SNAPSHOT);
@@ -121,6 +135,7 @@ export interface InitDeps {
   readonly probe?: () => Promise<HelperStatus>;
   readonly loadUserWorker?: () => Promise<{ readonly url: string; readonly sharedSecret: string } | null>;
   readonly loadOperatorProxyOptOut?: () => Promise<boolean>;
+  readonly loadHelperOptOut?: () => Promise<boolean>;
   readonly resolvePyodideSource?: () => Promise<PyodideSource>;
 }
 
@@ -128,12 +143,30 @@ export async function initCapabilitySnapshot(deps: InitDeps = {}): Promise<void>
   const probe = deps.probe ?? probeConfiguredHelper;
   const loadUserWorker = deps.loadUserWorker ?? loadUserWorkerFromProxyConfig;
   const loadOperatorOptOut = deps.loadOperatorProxyOptOut ?? loadOperatorProxyOptOut;
+  const loadHelperOpt = deps.loadHelperOptOut ?? loadHelperOptOut;
   const resolveSource = deps.resolvePyodideSource ?? resolveDefaultPyodideSource;
-  let helper: HelperStatus;
+
+  // Read the helper opt-out FIRST. When the user has opted out, we
+  // skip the /ping probe entirely — saves a request and (more
+  // importantly) suppresses Safari's unsilenceable mixed-content
+  // console error that fires when probing http://localhost from an
+  // https origin.
+  let helperOptOut = false;
   try {
-    helper = await probe();
+    helperOptOut = await loadHelperOpt();
   } catch {
+    helperOptOut = false;
+  }
+
+  let helper: HelperStatus;
+  if (helperOptOut) {
     helper = { status: 'unavailable' };
+  } else {
+    try {
+      helper = await probe();
+    } catch {
+      helper = { status: 'unavailable' };
+    }
   }
   let userWorker: { readonly url: string; readonly sharedSecret: string } | null;
   try {
@@ -153,7 +186,15 @@ export async function initCapabilitySnapshot(deps: InitDeps = {}): Promise<void>
   } catch {
     pyodideSource = 'cdn';
   }
-  store.set(computeCapabilitySnapshot({ helper, userWorker, operatorProxyOptOut, pyodideSource }));
+  store.set(
+    computeCapabilitySnapshot({
+      helper,
+      userWorker,
+      operatorProxyOptOut,
+      helperOptOut,
+      pyodideSource,
+    }),
+  );
 }
 
 async function loadUserWorkerFromProxyConfig(): Promise<{ readonly url: string; readonly sharedSecret: string } | null> {

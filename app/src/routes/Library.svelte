@@ -26,6 +26,7 @@
   import PairingRequiredBanner from '../components/library-status/PairingRequiredBanner.svelte';
   import { panelCollapse, setBackupsCollapsed } from '$lib/panel-collapse-pref';
   import { pairingToken } from '$lib/pairing-token';
+  import { setHelperOptOut } from '$lib/helper-opt-out';
   import { isHelperOutdated, isProtocolNewerThanKnown, MAX_KNOWN_PROTOCOL } from '$lib/min-helper-version';
   import { rkeyOf } from '../reader/inventory-shape';
   import type { Save } from '../reader/inventory-shape';
@@ -176,6 +177,24 @@
     pairingOpen = false;
     refresh();
   }
+
+  // Escape hatch for users who don't want this browser to use the
+  // local helper (Safari users for whom mixed-content blocks the
+  // helper path anyway, paranoid users keeping hosted-GUI and helper
+  // strictly isolated, etc.). Persists the preference, closes the
+  // modal, and re-inits the capability snapshot so routing
+  // immediately falls back to non-helper paths. Reversible from
+  // Settings → Backups.
+  async function onDeclinePairing(): Promise<void> {
+    pairingOpen = false;
+    pairingAutoOpened = true; // belt-and-suspenders against the next reactive cycle
+    await setHelperOptOut(true);
+    await initCapabilitySnapshot();
+    // The snapshot re-init drops helper.detected to false, which makes
+    // `needsPairing` false, which hides the banner. The next refresh
+    // (manual or auto) will use Pyodide.
+    refresh();
+  }
   $: refreshing =
     $libraryRefreshState.status === 'running' ||
     $threadProgress.status === 'running' ||
@@ -270,7 +289,10 @@
       <ProtocolMismatchBanner helperProtocol={helperProtocol} maxKnownProtocol={MAX_KNOWN_PROTOCOL} />
     {/if}
     {#if needsPairing}
-      <PairingRequiredBanner onPair={() => (pairingOpen = true)} />
+      <PairingRequiredBanner
+        onPair={() => (pairingOpen = true)}
+        onDecline={onDeclinePairing}
+      />
     {/if}
 
     <!-- Backups panel: hidden during the first-ever fetch (status ===
