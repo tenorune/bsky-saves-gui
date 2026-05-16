@@ -181,10 +181,14 @@ describe('stopLibraryRefresh', () => {
       },
     );
     expect(get(libraryRefreshState).status).toBe('running');
-    // library-refresh does async IndexedDB work before orchestrate (load the
-    // retain mode, then snapshot prior hydrated fields). Flush the task queue
-    // so orchestrate's mock has been invoked and resolveOrchestrate is set.
-    await new Promise((r) => setTimeout(r, 0));
+    // library-refresh does async IndexedDB work before orchestrate (load
+    // the retain mode, then snapshot prior hydrated fields). A single
+    // setTimeout(0) is enough to flush these microtasks locally but is
+    // timing-dependent under CI's scheduling — a stale flake surfaced
+    // intermittently. Use vi.waitFor to deterministically wait for the
+    // orchestrate mock to be invoked (and resolveOrchestrate to be set)
+    // before exercising the cancel path.
+    await vi.waitFor(() => expect(orchestrate).toHaveBeenCalled());
     stopLibraryRefresh();
     expect(get(libraryRefreshState).status).toBe('idle');
     resolveOrchestrate!(partial);

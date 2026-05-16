@@ -221,7 +221,16 @@
          no inventory, the pairing prompt has to live somewhere
          outside that gate or it's invisible at exactly the moment
          the user most needs to see it. -->
-    {#if refreshStateForBanner.status === 'error'}
+    {#if refreshStateForBanner.status === 'error' && !needsPairing}
+      <!-- AuthErrorBanner is mutually exclusive with PairingRequired.
+           A 401 from the helper when the GUI is unpaired surfaces as
+           libraryRefreshState.status = 'error', but the user's real
+           action is to Pair (not to re-sign-in — they're already
+           signed in). Showing both banners gives competing prompts;
+           PairingRequiredBanner wins because it points at the actual
+           cause. AuthErrorBanner still fires for upstream auth
+           failures (PDS createSession, JWT refresh) where pairing
+           ISN'T the issue. -->
       <AuthErrorBanner message={refreshStateForBanner.error} />
     {/if}
     {#if outdated}
