@@ -691,3 +691,66 @@ describe('helper-client 401 handling (pairing-cause detection)', () => {
     expect(get(pairingToken).state).toBe('unpaired'); // unchanged
   });
 });
+
+describe('probePairingToken (verify endpoint)', () => {
+  // Hits GET /auth/check on bsky-saves v0.6.3+. The mocked fetch
+  // shapes match what the helper actually returns: 200 empty on valid,
+  // 401 with WWW-Authenticate: Bearer on missing/wrong token, 403 for
+  // policy violations (origin allowlist), other 4xx/5xx for everything
+  // else.
+  const VALID_TOKEN = 'tok_' + 'a'.repeat(20);
+
+  it('returns "valid" on 200', async () => {
+    const fetchMock = vi.fn(async () => new Response('', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { probePairingToken } = await import('./helper-client');
+    expect(await probePairingToken('http://127.0.0.1:47826', VALID_TOKEN)).toBe('valid');
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:47826/auth/check',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({ Authorization: `Bearer ${VALID_TOKEN}` }),
+      }),
+    );
+  });
+
+  it('returns "rejected" on 401', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('', {
+      status: 401,
+      headers: { 'WWW-Authenticate': 'Bearer realm="bsky-saves"' },
+    })));
+    const { probePairingToken } = await import('./helper-client');
+    expect(await probePairingToken('http://127.0.0.1:47826', VALID_TOKEN)).toBe('rejected');
+  });
+
+  it('returns "rejected" on 403 (origin allowlist failure)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 403 })));
+    const { probePairingToken } = await import('./helper-client');
+    expect(await probePairingToken('http://127.0.0.1:47826', VALID_TOKEN)).toBe('rejected');
+  });
+
+  it('returns "unreachable" on network error', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      throw new TypeError('Failed to fetch');
+    }));
+    const { probePairingToken } = await import('./helper-client');
+    expect(await probePairingToken('http://127.0.0.1:47826', VALID_TOKEN)).toBe('unreachable');
+  });
+
+  it('returns "unreachable" on 5xx (helper alive but misbehaving)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 503 })));
+    const { probePairingToken } = await import('./helper-client');
+    expect(await probePairingToken('http://127.0.0.1:47826', VALID_TOKEN)).toBe('unreachable');
+  });
+
+  it('strips a trailing slash from the origin', async () => {
+    const fetchMock = vi.fn(async () => new Response('', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { probePairingToken } = await import('./helper-client');
+    await probePairingToken('http://127.0.0.1:47826/', VALID_TOKEN);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:47826/auth/check',
+      expect.any(Object),
+    );
+  });
+});

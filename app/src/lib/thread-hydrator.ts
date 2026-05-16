@@ -17,12 +17,14 @@
 // see library-refresh.mergeHydratedFields for the canonical list of
 // local-only annotations carried across each refresh.
 
-import { threadProgress, resetThreadProgress } from './hydration-state';
+import { get } from 'svelte/store';
+import { threadProgress, resetThreadProgress, PAIRING_REQUIRED_REASON } from './hydration-state';
 import { hydrateThreads as defaultHydrateThreads, type FetchSavesCredentials, type HydrateThreadsResponse } from './helper-client';
 import { getSharedDriver, requestCancelSharedDriver } from './pyodide-worker-driver';
 import type { PyodideWorkerDriver } from './pyodide-worker-driver';
 import { config } from './config';
 import { saveFailures, loadFailures } from './failure-store';
+import { pairingToken } from './pairing-token';
 import type { PreauthSession } from './preauth-session';
 
 export type ThreadBackend = { kind: 'helper' } | { kind: 'pyodide' };
@@ -135,15 +137,43 @@ export const threadHydrator = {
             return mergeThreaded(input.inventory, allThreaded);
           }
           const chunk = uris.slice(i, i + CHUNK_SIZE);
-          const res = await ht(input.origin, { uris: chunk, credentials });
-          allThreaded.push(...res.threaded);
-          allErrors.push(...res.errors);
-          threadProgress.update((p) => ({
-            ...p,
-            fetched: Math.min(p.total, allThreaded.length + allErrors.length),
-            failed: allErrors.length,
-            failures: allErrors.map((e) => ({ url: e.uri, reason: e.reason })),
-          }));
+          try {
+            const res = await ht(input.origin, { uris: chunk, credentials });
+            allThreaded.push(...res.threaded);
+            allErrors.push(...res.errors);
+            threadProgress.update((p) => ({
+              ...p,
+              fetched: Math.min(p.total, allThreaded.length + allErrors.length),
+              failed: allErrors.length,
+              failures: allErrors.map((e) => ({ url: e.uri, reason: e.reason })),
+            }));
+          } catch (err) {
+            // If the throw was a pairing-cause 401 (helper-client's
+            // handleAuthed401 already flipped pairing-token to 'stale'),
+            // tag the whole chunk + every URI we haven't tried yet as
+            // pairing-required and bail out cleanly. Returns the merged
+            // inventory of what we DID hydrate so the orchestrator can
+            // persist partial progress. For any other throw, let it
+            // propagate — that's the existing "show error banner"
+            // behavior owned by the outer catch.
+            if (get(pairingToken).state === 'stale') {
+              const remainingFromHere = uris.slice(i);
+              for (const uri of remainingFromHere) {
+                allErrors.push({ uri, reason: PAIRING_REQUIRED_REASON });
+              }
+              const failuresOut = allErrors.map((e) => ({ url: e.uri, reason: e.reason }));
+              await saveFailures('threads', failuresOut);
+              threadProgress.update((p) => ({
+                ...p,
+                status: 'cancelled',
+                fetched: allThreaded.length,
+                failed: allErrors.length,
+                failures: failuresOut,
+              }));
+              return mergeThreaded(input.inventory, allThreaded);
+            }
+            throw err;
+          }
         }
         const merged = mergeThreaded(input.inventory, allThreaded);
         const failuresOut = allErrors.map((e) => ({ url: e.uri, reason: e.reason }));

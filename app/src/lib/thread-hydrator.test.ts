@@ -128,3 +128,80 @@ describe('threadHydrator (pyodide path)', () => {
     expect(get(threadProgress).status).toBe('cancelled');
   });
 });
+
+describe('threadHydrator (helper path) bails out on pairing 401', () => {
+  beforeEach(async () => {
+    resetThreadProgress();
+    const { _resetPairingTokenForTests, setPairingToken } = await import('./pairing-token');
+    _resetPairingTokenForTests();
+    setPairingToken('a'.repeat(22));
+  });
+
+  it('tags the failing chunk + remaining URIs with PAIRING_REQUIRED_REASON when the helper 401s', async () => {
+    // Simulate handleAuthed401's effect: the helper-client wrapper would
+    // throw on a 401, AND markPairingStale would have already flipped the
+    // pairing-token store to 'stale' by the time the throw is caught. We
+    // model both by having the mocked hydrateThreads call markPairingStale
+    // before throwing.
+    const { markPairingStale } = await import('./pairing-token');
+    const { PAIRING_REQUIRED_REASON } = await import('./hydration-state');
+
+    let callCount = 0;
+    const fakeHT = vi.fn(async () => {
+      callCount++;
+      if (callCount === 1) {
+        // First chunk succeeds: nothing threaded, nothing erred.
+        return { threaded: [], errors: [] };
+      }
+      // Second chunk: helper returns 401, helper-client.handleAuthed401
+      // marks pairing stale, then helper-client re-throws.
+      markPairingStale();
+      throw new Error('helper /hydrate-threads returned 401');
+    });
+
+    // 50 saves → CHUNK_SIZE 25 → two chunks. Second chunk triggers the
+    // bail-out; its 25 URIs + zero remaining beyond should all carry the
+    // pairing-required reason.
+    const saves = Array.from({ length: 50 }, (_, i) => ({ uri: `at://${i}` }));
+    await threadHydrator.start({
+      backend: { kind: 'helper' },
+      origin: 'http://x',
+      inventory: { saves },
+      credentials: { accessJwt: 'A', refreshJwt: 'R', did: 'did:plc:1' },
+    }, { hydrateThreads: fakeHT });
+
+    const state = get(threadProgress);
+    expect(state.status).toBe('cancelled');
+    // 25 failures, all with the pairing-required reason, all from chunk 2.
+    expect(state.failures.length).toBe(25);
+    for (const f of state.failures) {
+      expect(f.reason).toBe(PAIRING_REQUIRED_REASON);
+    }
+    // The URIs covered are the second-chunk URIs (indices 25..49).
+    const failedUris = state.failures.map((f) => f.url).sort();
+    expect(failedUris[0]).toBe('at://25');
+    expect(failedUris[failedUris.length - 1]).toBe('at://49');
+    // Only the two chunks were attempted before bail-out.
+    expect(fakeHT).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not bail when the throw is not pairing-cause (state stays paired)', async () => {
+    // Sanity check: a non-pairing throw (e.g., 500 upstream) propagates as
+    // before, so the existing error-banner UX isn't accidentally rerouted
+    // through the pairing-required path. The bail-out only fires when
+    // pairing-token.state is 'stale'.
+    const fakeHT = vi.fn(async () => {
+      // NO markPairingStale call — this is an upstream-cause failure.
+      throw new Error('helper /hydrate-threads returned 502');
+    });
+    const saves = [{ uri: 'at://a' }];
+    await expect(
+      threadHydrator.start({
+        backend: { kind: 'helper' },
+        origin: 'http://x',
+        inventory: { saves },
+        credentials: { accessJwt: 'A', refreshJwt: 'R', did: 'did:plc:1' },
+      }, { hydrateThreads: fakeHT }),
+    ).rejects.toThrow(/502/);
+  });
+});

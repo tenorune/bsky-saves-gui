@@ -29,10 +29,11 @@ import { extractArticleViaHelper, type ExtractedArticle } from './helper-client'
 import { config } from './config';
 import { saveInventory } from './inventory-store';
 import { loadFromDb } from './inventory-loader';
-import { articleHydration, type HydrationFailure } from './hydration-state';
+import { articleHydration, type HydrationFailure, PAIRING_REQUIRED_REASON } from './hydration-state';
 import { extractArticleViaWorker } from './user-worker-client';
 import { saveFailures, loadFailures } from './failure-store';
 import { capabilitySnapshot, type CapabilitySnapshot } from './capability-snapshot';
+import { pairingToken } from './pairing-token';
 
 export interface HydrateArticleResult {
   readonly fetched: number;
@@ -166,7 +167,8 @@ export async function hydrateArticles(
 
   let fetched = 0;
 
-  for (const url of urlsToFetch) {
+  for (let idx = 0; idx < urlsToFetch.length; idx++) {
+    const url = urlsToFetch[idx];
     if (signal?.aborted) {
       articleHydration.update((s) => ({ ...s, status: 'cancelled' }));
       // Persist whatever we did so far AND refresh inventoryState so
@@ -229,6 +231,42 @@ export async function hydrateArticles(
           failures: [...others, failure],
         };
       });
+    }
+
+    // Pairing-stale bail-out (mirrors image-hydrator's check). If a 401
+    // from extractArticleViaHelper flipped the pairing store to 'stale',
+    // re-tag the just-failed item and the un-attempted items as
+    // pairing-required so the Failed-N modal surfaces them under a single
+    // clear cause, and exit cleanly. PairingRequiredBanner is already up.
+    if (get(pairingToken).state === 'stale') {
+      const lastIdx = failures.findIndex((f) => f.url === url);
+      if (lastIdx >= 0) {
+        failures[lastIdx] = { url, reason: PAIRING_REQUIRED_REASON };
+      }
+      for (let j = idx + 1; j < urlsToFetch.length; j++) {
+        const remainingUrl = urlsToFetch[j];
+        const existing = failures.findIndex((f) => f.url === remainingUrl);
+        if (existing >= 0) {
+          failures[existing] = { url: remainingUrl, reason: PAIRING_REQUIRED_REASON };
+        } else {
+          failures.push({ url: remainingUrl, reason: PAIRING_REQUIRED_REASON });
+        }
+      }
+      failed = failures.length;
+      articleHydration.update((s) => ({
+        ...s,
+        status: 'cancelled',
+        failed,
+        failures: [...failures],
+      }));
+      try {
+        await saveInventory(inventory);
+        await loadFromDb();
+      } catch {
+        // best-effort persist + refresh
+      }
+      void saveFailures('articles', failures);
+      return { fetched, skipped, failed, cancelled: true };
     }
   }
 

@@ -22,11 +22,12 @@
 import { get } from 'svelte/store';
 import { extractImageUrls } from './extract-image-urls';
 import { hasImageBlob, saveImageBlob } from './image-store';
-import { imageHydration, type HydrationFailure } from './hydration-state';
+import { imageHydration, type HydrationFailure, PAIRING_REQUIRED_REASON } from './hydration-state';
 import { saveFailures, loadFailures } from './failure-store';
 import { capabilitySnapshot, type CapabilitySnapshot } from './capability-snapshot';
 import { fetchImageViaHelper } from './helper-client';
 import { fetchImageViaUserWorker } from './user-worker-client';
+import { pairingToken } from './pairing-token';
 import { config } from './config';
 
 export interface HydrateResult {
@@ -136,7 +137,8 @@ export async function hydrateImages(
   const skipped = skippedAtStart;
   let failed = failures.length;
 
-  for (const url of urlsToFetch) {
+  for (let idx = 0; idx < urlsToFetch.length; idx++) {
+    const url = urlsToFetch[idx];
     if (signal?.aborted) {
       imageHydration.update((s) => ({ ...s, status: 'cancelled' }));
       void saveFailures('images', failures);
@@ -182,6 +184,40 @@ export async function hydrateImages(
           failures: [...others, failure],
         };
       });
+    }
+
+    // After each attempt (success or failure), check whether a pairing
+    // 401 fired via helper-client's handleAuthed401 — it flips the
+    // pairing store to 'stale'. If it did, the just-failed item's
+    // generic-error reason gets re-tagged as pairing-required, the
+    // remaining unprocessed items get tagged with the same reason
+    // up-front, and the loop bails out cleanly. PairingRequiredBanner
+    // is already visible by this point (markPairingStale fired the
+    // moment the 401 arrived); the user's recovery is to re-pair via
+    // the modal and re-trigger the backup.
+    if (get(pairingToken).state === 'stale') {
+      const lastIdx = failures.findIndex((f) => f.url === url);
+      if (lastIdx >= 0) {
+        failures[lastIdx] = { url, reason: PAIRING_REQUIRED_REASON };
+      }
+      for (let j = idx + 1; j < urlsToFetch.length; j++) {
+        const remainingUrl = urlsToFetch[j];
+        const existing = failures.findIndex((f) => f.url === remainingUrl);
+        if (existing >= 0) {
+          failures[existing] = { url: remainingUrl, reason: PAIRING_REQUIRED_REASON };
+        } else {
+          failures.push({ url: remainingUrl, reason: PAIRING_REQUIRED_REASON });
+        }
+      }
+      failed = failures.length;
+      imageHydration.update((s) => ({
+        ...s,
+        status: 'cancelled',
+        failed,
+        failures: [...failures],
+      }));
+      void saveFailures('images', failures);
+      return { fetched, skipped, failed, cancelled: true };
     }
   }
 
