@@ -242,16 +242,11 @@ export async function pingHelper(origin: string): Promise<boolean> {
 }
 
 /**
- * Probe a candidate pairing token against the helper. Returns:
- *   'valid'       — helper accepted the token (2xx response).
+ * Probe a candidate pairing token against the helper's dedicated
+ * `GET /auth/check` endpoint (bsky-saves v0.6.3+). Returns:
+ *   'valid'       — helper accepted the token (2xx response, empty body).
  *   'rejected'    — helper returned 401 / 403; the token is wrong.
  *   'unreachable' — network error, helper not running, CORS failure, etc.
- *
- * Implemented today as a no-op `POST /enrich` with an empty `uris[]` — the
- * helper returns `{enriched: [], errors: []}` for that input when auth
- * passes, 401 when the token is missing or wrong. This is a temporary
- * stand-in for the dedicated `/auth/check` endpoint proposed in the
- * bsky-saves session-token spec (PR #9). Swap when that lands.
  *
  * The token is passed explicitly rather than read from the pairing-token
  * store so the modal can verify a user's pasted token without committing
@@ -266,13 +261,11 @@ export async function probePairingToken(
   const base = origin.replace(/\/+$/, '');
   let res: Response;
   try {
-    res = await fetch(`${base}/enrich`, {
-      method: 'POST',
+    res = await fetch(`${base}/auth/check`, {
+      method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ uris: [] }),
     });
   } catch {
     return 'unreachable';
