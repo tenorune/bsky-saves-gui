@@ -1,16 +1,22 @@
 // S5 (helper-served) — Playwright against a real `bsky-saves serve --gui`.
 //
 // The helper listens on http://127.0.0.1:47826 by default, serving both
-// the bundled GUI at `/` and the helper API at `/api/*`. CI installs the
-// latest published wheel, boots the helper, and runs this suite against
-// it. Locally, devs without a helper see the suite cleanly skip — the
-// beforeAll probe checks `/` and sets a guard.
+// the bundled GUI at `/` and the helper API surface (`/ping`, `/fetch`,
+// `/enrich`, `/hydrate-threads`, `/fetch-image`, `/extract-article`).
+// CI installs the latest published wheel, boots the helper, and runs
+// this suite against it. Locally, devs without a helper see the suite
+// cleanly skip — the `beforeAll` probe checks /ping and sets a guard.
 //
 // What this catches:
 //   - Wheel installation works at all.
 //   - Helper boots, binds the expected port, serves the GUI HTML.
-//   - /api/version, /api/health match the contract from
-//     docs/bsky-saves-gui-dist-workstream.md §4.
+//   - /ping matches the diagnostic shape from
+//     docs/bsky-saves-gui-dist-workstream.md §4 item 13 — `name`,
+//     `version`, `features` (the v0.6.x baseline that
+//     `lib/helper-client.ts::isPingPayload` validates at runtime).
+//     `protocol` and `gui_bundled` land in a later helper release and
+//     are tolerated-but-not-required here so the suite passes against
+//     today's and tomorrow's wheels.
 //   - GUI mounts without uncaught console errors against a live helper.
 //
 // What this does NOT catch (yet):
@@ -27,8 +33,10 @@ test.use({ baseURL: HELPER_ORIGIN });
 let helperReachable = false;
 
 test.beforeAll(async () => {
+  // Probe /ping — works regardless of whether `--gui` is passed, so the
+  // suite can run against a helper that exposes only the API surface.
   try {
-    const res = await fetch(HELPER_ORIGIN, {
+    const res = await fetch(`${HELPER_ORIGIN}/ping`, {
       signal: AbortSignal.timeout(2000),
     });
     helperReachable = res.ok;
@@ -52,22 +60,25 @@ test('GET / serves the bundled GUI', async ({ page }) => {
   ).toBeVisible();
 });
 
-test('GET /api/health returns 200', async () => {
-  const res = await fetch(`${HELPER_ORIGIN}/api/health`);
-  expect(res.status).toBe(200);
-});
-
-test('GET /api/version returns the documented shape', async () => {
-  // Contract per docs/bsky-saves-gui-dist-workstream.md §4 item 13:
-  //   { "helper": "0.4.3", "protocol": "1", "gui_bundled": "0.5.0" }
-  // Strict on `helper` (semver-ish) and `protocol` (string); `gui_bundled`
-  // is best-effort because some wheel versions may not have it yet.
-  const res = await fetch(`${HELPER_ORIGIN}/api/version`);
+test('GET /ping returns the bsky-saves diagnostic payload', async () => {
+  const res = await fetch(`${HELPER_ORIGIN}/ping`);
   expect(res.ok).toBe(true);
   const body = (await res.json()) as Record<string, unknown>;
-  expect(typeof body.helper).toBe('string');
-  expect(body.helper as string).toMatch(/^\d+\.\d+\.\d+/);
-  expect(typeof body.protocol).toBe('string');
+  // Strict on what `helper-client.ts::isPingPayload` validates at runtime
+  // — the GUI refuses to use a helper whose /ping doesn't satisfy this.
+  expect(body.name).toBe('bsky-saves');
+  expect(typeof body.version).toBe('string');
+  expect(body.version as string).toMatch(/^\d+\.\d+\.\d+/);
+  expect(Array.isArray(body.features)).toBe(true);
+  // Soft-check additive fields from the post-v0.6.0 contract: present if
+  // the wheel ships them, accepted as `null` for dev installs that
+  // skipped the GUI-fetch build hook, ignored entirely otherwise.
+  if ('protocol' in body) {
+    expect(typeof body.protocol === 'string' || body.protocol === null).toBe(true);
+  }
+  if ('gui_bundled' in body) {
+    expect(typeof body.gui_bundled === 'string' || body.gui_bundled === null).toBe(true);
+  }
 });
 
 test('sign-in page mounts without console errors against a live helper', async ({
