@@ -1,7 +1,5 @@
 # Bluesky Saves Exporter
 
-> _Working title — final product name TBD. The user-visible name is set by `VITE_APP_NAME` and can be changed without touching code._
-
 A web GUI for [`bsky-saves`](https://github.com/tenorune/bsky-saves) that lets a Bluesky user export their saved posts as JSON, a flat Markdown file, or a self-contained HTML/CSS archive.
 
 ## What it does
@@ -18,8 +16,6 @@ The reference deployment lives at the domain configured for this build (see `VIT
 ## How it works
 
 Static SPA. Pyodide loads the published `bsky-saves` Python package in your browser; AT Protocol requests go directly from your browser to your PDS. Inventory is stored locally (IndexedDB in persist mode, sessionStorage in session mode). Exports are generated and downloaded entirely client-side.
-
-See the design spec: [`docs/superpowers/specs/2026-05-01-bsky-saves-gui-design.md`](docs/superpowers/specs/2026-05-01-bsky-saves-gui-design.md).
 
 ## Privacy
 
@@ -45,7 +41,7 @@ When the GUI is served from the hosted PWA (HTTPS, e.g. `saves.lightseed.net`) a
 
 - **Chrome / Edge / Brave** (Chromium-based): allowed. Newer Chrome versions may show a one-time Private Network Access (PNA) permission prompt; grant it to enable detection.
 - **Firefox**: allowed. Firefox treats `localhost` as a potentially-trustworthy origin and exempts it from the mixed-content block.
-- **Safari** (current macOS + iOS): **blocked**. Safari enforces the W3C secure-contexts rule strictly and refuses HTTPS-to-HTTP requests even when the target is `localhost`. The console shows `insecure content from http://localhost:... was blocked` / `Fetch API cannot load ... due to access control checks`. The GUI silently degrades to the in-browser Pyodide fallback for fetch; **image and article backups won't run** unless a Cloudflare Worker proxy is configured (see workaround 3 below).
+- **Safari** (current macOS + iOS): **blocked**. Safari enforces the W3C secure-contexts rule strictly and refuses HTTPS-to-HTTP requests even when the target is `localhost`. The GUI silently degrades to the in-browser Pyodide fallback for fetch; **image and article backups won't run** unless a Cloudflare Worker proxy is configured (see workaround 3 below).
 
 The behavior is browser-enforced before any JavaScript runs — there is no client-side flag we can set to override it.
 
@@ -58,11 +54,19 @@ Pick one based on your priorities:
 3. **Set up a Cloudflare Worker proxy** ([`templates/cf-worker/`](templates/cf-worker/)). The hosted GUI can call your worker over HTTPS for image and article backups, sidestepping the mixed-content rule entirely. ~10 minutes of setup, runs on Cloudflare's free tier, no local helper needed.
 4. **Skip image and article backups.** JSON / Markdown / HTML export work entirely in-browser on any browser; only the hydration features need a backend.
 
-Long-term, the only real fix on the helper side would be serving HTTPS with a self-signed certificate — but that brings its own one-time trust-prompt UX cost and certificate-management overhead. Not currently on the roadmap.
+## The proxy templates
 
-## The proxy template
+Two Cloudflare Worker templates ship under `templates/cf-worker/`, both deployable to the user's own Cloudflare account:
 
-A Cloudflare Worker template at `templates/cf-worker/` provides the same capability without installing Python — the user deploys it to their own Cloudflare account. See `templates/cf-worker/README.md` for deployment instructions.
+- **`worker.js`** — image-only proxy. Hand-written, ~200 lines, easy to audit. Sufficient if you only want image backups.
+- **`dist/worker-with-articles.bundle.js`** — image proxy + article extraction (Mozilla Readability + linkedom). Pre-built bundle. Pick this one if you also want article-text backups.
+
+Two deployment paths, depending on preference:
+
+- **In-app setup guide** — Settings → Backups → "Custom Cloudflare Worker proxy" walks you through the Cloudflare dashboard step-by-step (no CLI required). Source for either worker variant is presented inline with a Copy button. ~10 minutes end-to-end.
+- **Command line via `wrangler`** — see [`templates/cf-worker/README.md`](templates/cf-worker/README.md) for the technical path with `wrangler deploy`.
+
+The same proxy works around CORS for image and article fetches and serves over HTTPS, so it bypasses the mixed-content limitation that blocks Safari from reaching `http://localhost`-served helpers.
 
 ## Development
 

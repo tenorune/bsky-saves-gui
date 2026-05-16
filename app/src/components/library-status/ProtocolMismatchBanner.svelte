@@ -23,7 +23,10 @@
      PairingRequiredBanner — all three are "your helper relationship
      needs attention" variants of one visual treatment. */
   .protocol-mismatch {
-    margin: 0 0 0.6rem;
+    /* -10px left/right matches .route__title-row and .progress-bar--header
+       in Library.svelte so the banner spans from the Library title's left
+       edge to the Refresh button's right edge. */
+    margin: 0 -10px 0.6rem;
     padding: 0.5rem 0.7rem;
     border-radius: 6px;
     background: color-mix(in oklab, gold 18%, Canvas);

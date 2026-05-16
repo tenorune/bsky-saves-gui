@@ -45,7 +45,7 @@ all of them by editing env files.
 | `VITE_OPERATOR_HANDLE` | Bluesky handle of the deployer for the beacon button label and privacy text | `tenorune.lightseed.net` |
 | `VITE_BEACON_AT_URI` | AT URI of the pinned beacon post the "tell …" button likes | (created at deploy time) |
 | `VITE_DEFAULT_PDS` | PDS endpoint pre-filled into sign-in | `https://bsky.social` |
-| `VITE_HELPER_ORIGIN` | Loopback origin the helper-detector probes | `http://127.0.0.1:7878` |
+| `VITE_HELPER_ORIGIN` | Loopback origin the helper-detector probes | `http://localhost:47826` |
 | `VITE_REPO_URL` | Issue tracker link in footer / privacy policy | (the repo) |
 | `VITE_PYODIDE_VERSION` | Pinned Pyodide release | (chosen at impl time) |
 

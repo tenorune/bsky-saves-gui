@@ -1,33 +1,109 @@
 # Cloudflare Worker Proxy — Deploy Instructions
 
-This directory contains a single-file Cloudflare Worker that acts as a CORS
-proxy for article-URL fetches made by bsky-saves-gui. Deploy it to **your own
-Cloudflare account** — the app developer never sees your traffic.
+This directory contains Cloudflare Worker templates that act as a CORS proxy
+for image and article-URL fetches made by bsky-saves-gui. Deploy one to **your
+own Cloudflare account** — the app developer never sees your traffic.
 
-## What it does
+The hosted GUI can call your worker over HTTPS for image and article backups,
+sidestepping the mixed-content rule that blocks Safari from reaching a local
+`http://localhost`-served helper.
 
-`POST /fetch` accepts a JSON body `{"url": "<https URL>"}`, fetches the URL
-server-side (bypassing browser CORS restrictions), and returns:
+## Two flavors
 
-```json
-{
-  "status": 200,
-  "headers": { "content-type": "text/html; charset=utf-8" },
-  "body_b64": "<base64-encoded response body>"
-}
+Pick one based on what you want to back up:
+
+| File | What it proxies | Notes |
+|---|---|---|
+| [`worker.js`](worker.js) | Images only (`POST /fetch`). | Hand-written, ~200 lines, easy to audit. Sufficient if you only want image backups. |
+| [`dist/worker-with-articles.bundle.js`](dist/worker-with-articles.bundle.js) | Images **and** article extraction (`POST /fetch` + `POST /extract-article`, Mozilla Readability + linkedom). | Pre-built ESM bundle. Pick this one if you also want article-text backups. Source lives at [`src/worker-with-articles.ts`](src/worker-with-articles.ts). |
+
+Both variants use the same `ALLOWED_ORIGIN` / `SHARED_SECRET` configuration
+and the same `/fetch` and `/capabilities` endpoints, so you can swap one for
+the other later without re-configuring the GUI.
+
+## Two ways to deploy
+
+| Path | Best for | Time |
+|---|---|---|
+| **Dashboard (no CLI)** — below | Most users. No tools to install. | ~10 minutes |
+| **Command line (`wrangler`)** — [further down](#command-line-path-wrangler) | If you already use wrangler, or prefer a versioned worker dir. | ~10 minutes |
+
+The GUI also ships an in-app walkthrough: **Settings → Backups → "Custom
+Cloudflare Worker proxy"** opens a step-by-step modal with the source for
+either variant inline and a Copy button. The steps below mirror that flow so
+you can follow it without leaving the GitHub README.
+
+---
+
+## Dashboard path (no CLI)
+
+Prerequisite: a [Cloudflare account](https://dash.cloudflare.com/sign-up).
+The free tier allows 100,000 worker requests per day, which is more than
+enough for personal use of bsky-saves-gui.
+
+### 1. Generate a shared secret
+
+Open your browser's DevTools (F12 → Console) and paste:
+
+```js
+crypto.getRandomValues(new Uint8Array(32)).reduce((a,b)=>a+b.toString(16).padStart(2,'0'),'')
 ```
 
-Callers must send `X-Proxy-Secret` matching the secret you set. Only requests
-from `ALLOWED_ORIGIN` are accepted.
+Press Enter. You'll get a 64-character hex string. Copy it — you'll paste it
+twice below.
 
-## Prerequisites
+### 2. Create the worker on Cloudflare
 
-- A [Cloudflare account](https://dash.cloudflare.com/sign-up) (free tier is
-  sufficient).
+Go to [dash.cloudflare.com](https://dash.cloudflare.com) → **Compute** →
+**Workers & Pages** → **Create application** → **Start with Hello World!**
+Name it something like `bsky-saves-image-proxy`. Click **Deploy** to accept
+the placeholder.
+
+### 3. Paste the worker source
+
+On the worker page click **Edit code**. Paste one of the templates over the
+placeholder, then click **Deploy**:
+
+- Image only → copy [`worker.js`](worker.js).
+- Image + article extraction → copy [`dist/worker-with-articles.bundle.js`](dist/worker-with-articles.bundle.js).
+
+### 4. Set environment variables
+
+Worker page → **Settings** → **Variables and Secrets**:
+
+- Variable `ALLOWED_ORIGIN` = the origin of your bsky-saves-gui deployment,
+  e.g. `https://saves.lightseed.net`. Multiple origins may be supplied as a
+  comma-separated list, e.g. `https://saves.example.com,https://staging.example.com`.
+- Secret `SHARED_SECRET` = the 64-character hex string from step 1.
+
+### 5. Copy the worker URL and test it
+
+The URL is at the top of the worker page, ending in `.workers.dev`. Test it by
+pasting `<that URL>/fetch` into a browser tab — you should see
+`{"error":"Origin not allowed"}` with status 403. That means the worker is
+reachable and gating origins correctly.
+
+### 6. Paste into the app
+
+In bsky-saves-gui, go to **Settings → Backups → Custom Cloudflare Worker
+proxy**. Put the URL into **Proxy URL** and the same hex string into
+**Shared secret**. Click Save. The app will probe the worker to confirm
+it's reachable.
+
+---
+
+## Command-line path (`wrangler`)
+
+The more technical alternative. Use this if you already use wrangler or want
+the worker source under version control.
+
+### Prerequisites
+
+- A [Cloudflare account](https://dash.cloudflare.com/sign-up).
 - [Node.js](https://nodejs.org) 18 or later.
 - `wrangler` CLI — the Cloudflare deployment tool.
 
-## Step 1 — Install wrangler
+### Step 1 — Install wrangler
 
 ```bash
 npm install -g wrangler
@@ -38,7 +114,7 @@ Verify:
 wrangler --version
 ```
 
-## Step 2 — Log in to Cloudflare
+### Step 2 — Log in to Cloudflare
 
 ```bash
 wrangler login
@@ -46,42 +122,42 @@ wrangler login
 
 This opens a browser window. Authorize wrangler. Close the tab when prompted.
 
-## Step 3 — Copy the template files
+### Step 3 — Copy the template files
 
-Copy the two files from this directory into a new working folder:
+Copy the worker source you want plus the `wrangler.toml` template into a new
+working folder:
 
 ```bash
 mkdir my-bsky-proxy
-cp worker.js my-bsky-proxy/
+# pick one:
+cp worker.js my-bsky-proxy/                              # image only
+cp dist/worker-with-articles.bundle.js my-bsky-proxy/    # image + articles
 cp wrangler.toml.template my-bsky-proxy/wrangler.toml
 cd my-bsky-proxy
 ```
 
-## Step 4 — Customize `wrangler.toml`
+### Step 4 — Customize `wrangler.toml`
 
-Open `wrangler.toml` and set `name` to something meaningful for your account,
-for example:
+Open `wrangler.toml` and set `name` and `main` to match the file you copied:
 
 ```toml
 name = "my-bsky-saves-proxy"
 main = "worker.js"
+# or, for the articles variant:
+# main = "worker-with-articles.bundle.js"
 compatibility_date = "2025-01-01"
 ```
 
 You can leave everything else as-is.
 
-## Step 5 — Get your secrets from the app
+### Step 5 — Set the secrets
 
-Open bsky-saves-gui in your browser and go to **Settings → Proxy setup**.
-The app generates a fresh `SHARED_SECRET` for you and shows the values to paste.
 You need two strings:
 
 | Value | Where to find it |
 |---|---|
-| `SHARED_SECRET` | Generated by the app in Settings → Proxy setup |
-| `ALLOWED_ORIGIN` | The origin of your bsky-saves-gui deployment, e.g. `https://saves.lightseed.net`. Multiple origins may be supplied as a comma-separated list, e.g. `https://saves.example.com,https://staging.example.com`. |
-
-## Step 6 — Set the secrets
+| `SHARED_SECRET` | Generate one. From DevTools console: `crypto.getRandomValues(new Uint8Array(32)).reduce((a,b)=>a+b.toString(16).padStart(2,'0'),'')` |
+| `ALLOWED_ORIGIN` | The origin of your bsky-saves-gui deployment, e.g. `https://saves.lightseed.net`. Multiple origins may be supplied as a comma-separated list. |
 
 Run the following two commands in your `my-bsky-proxy` folder. Wrangler will
 prompt you to paste the value for each:
@@ -89,17 +165,17 @@ prompt you to paste the value for each:
 ```bash
 wrangler secret put SHARED_SECRET
 ```
-Paste the `SHARED_SECRET` shown by the app. Press Enter.
+Paste the hex string. Press Enter.
 
 ```bash
 wrangler secret put ALLOWED_ORIGIN
 ```
 Paste your app's origin (e.g. `https://saves.lightseed.net`). Press Enter.
 
-Secrets are encrypted and stored by Cloudflare. They are never in `wrangler.toml`
-and never committed to any repository.
+Secrets are encrypted and stored by Cloudflare. They are never in
+`wrangler.toml` and never committed to any repository.
 
-## Step 7 — Deploy
+### Step 6 — Deploy
 
 ```bash
 wrangler deploy
@@ -113,16 +189,31 @@ Published my-bsky-saves-proxy (x.xx sec)
 
 Copy the worker URL.
 
-## Step 8 — Configure the app
+### Step 7 — Configure the app
 
-Back in bsky-saves-gui, in **Settings → Proxy setup**, paste the worker URL
-into the "Worker URL" field and save. The app will probe the worker with your
-`SHARED_SECRET` to confirm it's reachable.
+In bsky-saves-gui, go to **Settings → Backups → Custom Cloudflare Worker
+proxy**. Paste the worker URL into the "Proxy URL" field and the same
+`SHARED_SECRET` into the "Shared secret" field, then Save. The app will probe
+the worker with your secret to confirm it's reachable.
 
-## Updating
+### Building the articles bundle from source
 
-When a new version of `worker.js` is published in this repo, copy it over your
-existing `worker.js` and run `wrangler deploy` again. Secrets are preserved.
+`dist/worker-with-articles.bundle.js` is committed pre-built so users can copy
+it without running a build. If you want to rebuild it (e.g. you patched the
+source):
+
+```bash
+cd templates/cf-worker
+pnpm install
+pnpm build
+```
+
+### Updating
+
+When a new version of the worker is published in this repo, copy it over your
+existing file and run `wrangler deploy` again. Secrets are preserved.
+
+---
 
 ## Security notes
 
@@ -136,8 +227,6 @@ existing `worker.js` and run `wrangler deploy` again. Secrets are preserved.
 - Only `http://` and `https://` URLs are proxied. Other schemes are rejected.
 - Upstream responses larger than 10 MB are refused.
 - Upstream fetches time out after 20 seconds.
-- The free Cloudflare Workers tier allows 100,000 requests per day, which
-  is more than enough for personal use of bsky-saves-gui.
 
 ## Endpoints
 
@@ -183,12 +272,22 @@ Error responses follow the same JSON shape:
 | `500` | Worker misconfigured (missing env var) |
 | `502` | Upstream fetch failed or timed out |
 
+### `GET /capabilities`
+
+Returns `{ "endpoints": [...] }` for runtime detection. Use this to discover
+whether a deployed worker supports `/extract-article` in addition to `/fetch`.
+
+### `POST /extract-article` (articles bundle only)
+
+Body `{ "url": "https://..." }`, returns
+`{ url, title, text, fetched_at, note? }` matching the local helper's shape.
+
 ## Deploying as the site's operator proxy
 
 The bsky-saves-gui app supports a layered image-backup backend strategy:
 
 1. **Local helper** (`bsky-saves serve`) — most private, requires user to install bsky-saves locally.
-2. **User-deployed Cloudflare Worker** — user runs `wrangler deploy` and pastes URL+secret into Settings.
+2. **User-deployed Cloudflare Worker** — user runs `wrangler deploy` or follows the dashboard path and pastes URL+secret into Settings.
 3. **Operator-deployed Cloudflare Worker** *(this section)* — set up by the site operator; used as a fallback when no helper or user-worker is configured. Users opt in by default but can opt out from Settings → Backup → Advanced.
 
 Operators who deploy this worker should harden it with a URL allowlist so that
@@ -234,40 +333,8 @@ Operators should clearly document in their privacy policy:
 
 See `docs/privacy.md` in the GUI repo for the canonical reference.
 
-## Article extraction (optional)
+## Notes
 
-Two worker variants ship in this directory:
-
-- `worker.js` — image proxy only. Hand-written, ~200 lines, easy to audit.
-- `dist/worker-with-articles.bundle.js` — image proxy + article extraction
-  (`POST /extract-article`, Mozilla Readability + linkedom). Pre-built ESM bundle.
-
-Source for the bundled variant lives at `src/worker-with-articles.ts`.
-
-### Build the bundle
-
-```bash
-cd templates/cf-worker
-pnpm install
-pnpm build
-```
-
-This regenerates `dist/worker-with-articles.bundle.js`. The bundle is committed
-to the repo so users who copy-paste from the in-app Setup Guide can use it
-without running a build.
-
-### Endpoints
-
-Both variants:
-- `OPTIONS /fetch` — CORS preflight.
-- `POST /fetch` — image/raw-bytes proxy. Body: `{ "url": "https://..." }`.
-- `GET /capabilities` — returns `{ "endpoints": [...] }` for runtime detection.
-
-`worker-with-articles.bundle.js` only:
-- `POST /extract-article` — body `{ "url": "https://..." }`, returns
-  `{ url, title, text, fetched_at, note? }` matching the local helper's shape.
-
-### Notes
 - Cloudflare Workers' free plan limits CPU per request; large pages with heavy
   Readability work may need the Standard usage model.
 - The `URL_ALLOWLIST` env var (if set) applies to both `/fetch` and
