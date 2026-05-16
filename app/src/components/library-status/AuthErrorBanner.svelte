@@ -7,7 +7,7 @@
 
 <div class="auth-error" role="alert">
   <span class="auth-error__text">
-    <strong>Couldn't refresh.</strong>
+    <strong>Couldn't refresh —</strong>
     {message ? message : 'Your sign-in expired. Please sign in again to continue.'}
   </span>
   <button type="button" class="auth-error__cta" on:click={() => navigate('/')}>Sign in</button>
@@ -15,7 +15,10 @@
 
 <style>
   .auth-error {
-    margin: 0 0 0.6rem;
+    /* -10px left/right matches .route__title-row and .progress-bar--header
+       in Library.svelte so the banner spans from the Library title's left
+       edge to the Refresh button's right edge. */
+    margin: 0 -10px 0.6rem;
     padding: 0.5rem 0.7rem;
     border-radius: 6px;
     background: color-mix(in oklab, red 12%, Canvas);
