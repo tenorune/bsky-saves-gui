@@ -41,7 +41,7 @@ When the GUI is served from the hosted PWA (HTTPS, e.g. `saves.lightseed.net`) a
 
 - **Chrome / Edge / Brave** (Chromium-based): allowed. Newer Chrome versions may show a one-time Private Network Access (PNA) permission prompt; grant it to enable detection.
 - **Firefox**: allowed. Firefox treats `localhost` as a potentially-trustworthy origin and exempts it from the mixed-content block.
-- **Safari** (current macOS + iOS): **blocked**. Safari enforces the W3C secure-contexts rule strictly and refuses HTTPS-to-HTTP requests even when the target is `localhost`. The console shows `insecure content from http://localhost:... was blocked` / `Fetch API cannot load ... due to access control checks`. The GUI silently degrades to the in-browser Pyodide fallback for fetch; **image and article backups won't run** unless a Cloudflare Worker proxy is configured (see workaround 3 below).
+- **Safari** (current macOS + iOS): **blocked**. Safari enforces the W3C secure-contexts rule strictly and refuses HTTPS-to-HTTP requests even when the target is `localhost`. The GUI silently degrades to the in-browser Pyodide fallback for fetch; **image and article backups won't run** unless a Cloudflare Worker proxy is configured (see workaround 3 below).
 
 The behavior is browser-enforced before any JavaScript runs — there is no client-side flag we can set to override it.
 
