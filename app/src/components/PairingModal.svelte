@@ -83,10 +83,11 @@
         </button>
       </header>
       <p class="modal__body">
-        Run <code>bsky-saves token</code> in a terminal on this machine to
-        print your pairing token, then paste it below. The token is stored
-        only in this browser and is sent to your local helper to authorize
-        image, article, and thread backups.
+        The pairing token is printed by <code>bsky-saves serve</code> on its
+        first run on this machine. If you missed it or the token has already
+        been generated, run <code>bsky-saves token</code> to print it again.
+        Paste it below. The token is stored only in this browser and is sent
+        to your local helper to authorize image, article, and thread backups.
       </p>
       <label class="modal__field">
         <span>Pairing token</span>
@@ -95,7 +96,7 @@
           bind:value={pastedToken}
           autocomplete="off"
           spellcheck="false"
-          placeholder="Paste from `bsky-saves token`"
+          placeholder="Paste from `bsky-saves serve` (first run) or `bsky-saves token`"
           disabled={status === 'verifying'}
         />
       </label>
