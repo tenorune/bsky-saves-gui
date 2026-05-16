@@ -39,6 +39,27 @@ The full configuration table lives in the design spec: [Configuration section](d
 
 The published [`bsky-saves`](https://pypi.org/project/bsky-saves/) Python package provides the `bsky-saves serve` command — a loopback HTTP daemon on `127.0.0.1:47826` that fetches images and extracts article text on the browser's behalf (working around CORS). Install with `pipx install bsky-saves` and run `bsky-saves serve`.
 
+### Browser compatibility for the local helper
+
+When the GUI is served from the hosted PWA (HTTPS, e.g. `saves.lightseed.net`) and the helper runs locally at `http://127.0.0.1:47826` (HTTP), browsers apply security policies to that cross-origin loopback path. Behavior differs by browser:
+
+- **Chrome / Edge / Brave** (Chromium-based): allowed. Newer Chrome versions may show a one-time Private Network Access (PNA) permission prompt; grant it to enable detection.
+- **Firefox**: allowed. Firefox treats `localhost` as a potentially-trustworthy origin and exempts it from the mixed-content block.
+- **Safari** (current macOS + iOS): **blocked**. Safari enforces the W3C secure-contexts rule strictly and refuses HTTPS-to-HTTP requests even when the target is `localhost`. The console shows `insecure content from http://localhost:... was blocked` / `Fetch API cannot load ... due to access control checks`. The GUI silently degrades to the in-browser Pyodide fallback for fetch; **image and article backups won't run** unless a Cloudflare Worker proxy is configured (see workaround 3 below).
+
+The behavior is browser-enforced before any JavaScript runs — there is no client-side flag we can set to override it.
+
+#### Workarounds for Safari users
+
+Pick one based on your priorities:
+
+1. **Use the helper-served GUI directly.** Open `http://127.0.0.1:47826` in Safari with `bsky-saves serve --gui` running. The GUI is bundled into the wheel; same features, no mixed-content boundary (the page itself is served over HTTP from `localhost`). Bookmark it.
+2. **Use a different browser for the hosted PWA.** Chrome, Edge, Firefox, Brave, Arc — any Chromium-based or Firefox-based browser. Helper detection works there.
+3. **Set up a Cloudflare Worker proxy** ([`templates/cf-worker/`](templates/cf-worker/)). The hosted GUI can call your worker over HTTPS for image and article backups, sidestepping the mixed-content rule entirely. ~10 minutes of setup, runs on Cloudflare's free tier, no local helper needed.
+4. **Skip image and article backups.** JSON / Markdown / HTML export work entirely in-browser on any browser; only the hydration features need a backend.
+
+Long-term, the only real fix on the helper side would be serving HTTPS with a self-signed certificate — but that brings its own one-time trust-prompt UX cost and certificate-management overhead. Not currently on the roadmap.
+
 ## The proxy template
 
 A Cloudflare Worker template at `templates/cf-worker/` provides the same capability without installing Python — the user deploys it to their own Cloudflare account. See `templates/cf-worker/README.md` for deployment instructions.
