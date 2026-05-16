@@ -14,6 +14,18 @@ export interface HydrationFailure {
   readonly reason: string;
 }
 
+/**
+ * Canonical `reason` string for items a hydrator bailed on because the
+ * helper signaled a pairing failure (401 + `WWW-Authenticate: Bearer`).
+ * Used by image / article / thread hydrators to tag both the item that
+ * triggered the 401 and any items the loop didn't get to attempt.
+ *
+ * Kept as a top-level constant rather than inlined in each hydrator so
+ * the BackupFailuresModal (or any future consumer that wants to render
+ * pairing failures specially) can match against the same string.
+ */
+export const PAIRING_REQUIRED_REASON = 'Pairing required — re-pair your helper to retry.';
+
 export interface HydrationProgress {
   readonly status: HydrationStatus;
   readonly total: number;

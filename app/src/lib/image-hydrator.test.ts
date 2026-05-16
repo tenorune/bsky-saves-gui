@@ -227,3 +227,48 @@ describe('hydration invariant: count never resets across runs', () => {
     expect(fetcher2).not.toHaveBeenCalled();
   });
 });
+
+describe('hydrateImages bails out on pairing 401', () => {
+  it('tags the just-failed item and remaining items with PAIRING_REQUIRED_REASON, sets status to cancelled', async () => {
+    // Simulate what handleAuthed401 in helper-client.ts does on a real
+    // pairing 401: the fetcher throws (modelling the underlying error)
+    // AND markPairingStale flips the store to 'stale'. The hydrator's
+    // post-attempt check then triggers the bail-out path.
+    const { setPairingToken, markPairingStale, _resetPairingTokenForTests } = await import('./pairing-token');
+    const { PAIRING_REQUIRED_REASON } = await import('./hydration-state');
+    _resetPairingTokenForTests();
+    setPairingToken('a'.repeat(22));
+
+    let calls = 0;
+    const fetcher = vi.fn(async (_url: string) => {
+      calls++;
+      if (calls === 2) {
+        markPairingStale(); // second URL is where the 401 lands
+        throw new Error('helper /fetch-image returned 401');
+      }
+      return okBlob(calls);
+    });
+    const { hydrateImages } = await import('./image-hydrator');
+    const { imageHydration } = await import('./hydration-state');
+    const result = await hydrateImages(inv, { fetcher });
+
+    // 1 hydrated (URL 1), 2 failed (URL 2 = the 401 trigger, URL 3 = never attempted)
+    expect(result.fetched).toBe(1);
+    expect(result.failed).toBe(2);
+    expect(result.cancelled).toBe(true);
+
+    const state = get(imageHydration);
+    expect(state.status).toBe('cancelled');
+    // The trigger URL and the un-attempted URL should both carry the
+    // pairing-required reason. The first URL (successfully fetched)
+    // should not be in failures at all.
+    const reasonsByUrl = Object.fromEntries(state.failures.map((f) => [f.url, f.reason]));
+    expect(reasonsByUrl['https://x/2.jpg']).toBe(PAIRING_REQUIRED_REASON);
+    expect(reasonsByUrl['https://x/3.jpg']).toBe(PAIRING_REQUIRED_REASON);
+    expect(reasonsByUrl['https://x/1.jpg']).toBeUndefined();
+
+    // The fetcher should not have been called for URL 3 — the bail-out
+    // stops the loop, it doesn't attempt-and-fail-fast.
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+});

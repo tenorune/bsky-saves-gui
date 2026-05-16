@@ -389,3 +389,56 @@ describe('hydrateArticles refreshes inventoryState after persisting', () => {
     }
   });
 });
+
+describe('hydrateArticles bails out on pairing 401', () => {
+  it('tags the just-failed item and remaining items with PAIRING_REQUIRED_REASON', async () => {
+    const { setPairingToken, markPairingStale, _resetPairingTokenForTests } = await import('./pairing-token');
+    const { PAIRING_REQUIRED_REASON } = await import('./hydration-state');
+    _resetPairingTokenForTests();
+    setPairingToken('a'.repeat(22));
+
+    // Inventory with 3 fully-unhydrated URLs so the bail-out has both a
+    // just-failed item AND an un-attempted item to tag. (The default
+    // makeInventory fixture pre-hydrates URL "c", which would shrink
+    // urlsToFetch to two URLs and miss the un-attempted case.)
+    const inv = {
+      saves: [
+        { uri: 'a', embed: { url: 'https://example.com/a' } },
+        { uri: 'b', embed: { url: 'https://example.com/b' } },
+        { uri: 'c', embed: { url: 'https://example.com/c' } },
+      ],
+    };
+
+    let calls = 0;
+    const fetcher = vi.fn(async (url: string) => {
+      calls++;
+      if (calls === 2) {
+        markPairingStale();
+        throw new Error('helper /extract-article returned 401');
+      }
+      return {
+        url,
+        title: `Title for ${url}`,
+        text: `Body for ${url}`,
+        fetched_at: '2026-05-16T12:00:00Z',
+      };
+    });
+    const { hydrateArticles } = await import('./article-hydrator');
+    const { articleHydration } = await import('./hydration-state');
+    const result = await hydrateArticles(inv, { fetcher });
+
+    expect(result.fetched).toBe(1);
+    expect(result.failed).toBe(2);
+    expect(result.cancelled).toBe(true);
+
+    const state = get(articleHydration);
+    expect(state.status).toBe('cancelled');
+    const reasonsByUrl = Object.fromEntries(state.failures.map((f) => [f.url, f.reason]));
+    expect(reasonsByUrl['https://example.com/b']).toBe(PAIRING_REQUIRED_REASON);
+    expect(reasonsByUrl['https://example.com/c']).toBe(PAIRING_REQUIRED_REASON);
+    expect(reasonsByUrl['https://example.com/a']).toBeUndefined();
+
+    // URL c never reached the fetcher — bail-out stopped the loop.
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+});
