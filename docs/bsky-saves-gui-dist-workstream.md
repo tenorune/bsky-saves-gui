@@ -123,7 +123,7 @@ The runtime safety net that lets the GUI run ahead of any given wheel:
 - Helper binds to `127.0.0.1` only by default; never `0.0.0.0`.
 - Helper validates the `Host` header against `{127.0.0.1, localhost}:<port>` and rejects anything else with `421 Misdirected Request`.
 - Helper validates the `Origin` header against an allowlist: `http://127.0.0.1:<port>`, `http://localhost:<port>`, `https://saves.lightseed.net`. All other origins receive `403`.
-- Helper requires a session token (random per-start) for every request. The token is embedded in the locally-served `index.html` and, for the hosted PWA, surfaced via an explicit pairing step (display token in the terminal / system tray; user pastes once).
+- Helper requires a session token in `Authorization: Bearer <token>` on every authed endpoint (`/ping` is exempt; it's diagnostic-only and the GUI's pre-pairing probe relies on it). The token is a persistent secret on disk at a platform-conventional config path (`$XDG_CONFIG_HOME/bsky-saves/token`, `%APPDATA%\bsky-saves\token`, or `~/Library/Application Support/bsky-saves/token`), `0600` perms, lazily generated on first `bsky-saves serve` or `bsky-saves token` invocation. The wheel-served GUI receives it via sentinel substitution into the served `index.html` (`<meta name="bsky-saves-token" content="__BSKY_SAVES_TOKEN__">` in the GUI bundle; helper replaces the sentinel with the real token at serve time). The hosted PWA at `saves.lightseed.net` reaches the same literal sentinel unsubstituted, so its startup code falls through to a pairing flow: the user runs `bsky-saves token`, copies the printed value, pastes once. `bsky-saves token --rotate` regenerates the file and invalidates all paired sessions; same UX as rotating an API key.
 
 ### R4 — GUI/helper version skew exposes destructive endpoints
 
@@ -182,25 +182,27 @@ The smallest change set in `bsky-saves` that lets this workstream run end-to-end
 7. Mount `_gui/` as static files at `/`. Apply SPA fallback: unknown paths return `index.html`.
 8. Bind to `127.0.0.1` only by default; require an explicit `--host` flag for any other bind address. `--host 0.0.0.0` prints a security warning to stderr.
 9. Validate `Host` header. Reject anything not in `{127.0.0.1, localhost}:<port>` with `421`.
-10. Apply `Origin` allowlist on every API route. Default allowlist: `http://127.0.0.1:<port>`, `http://localhost:<port>`, `https://saves.lightseed.net`. Configurable via `--allowed-origin` for advanced users.
-11. Generate a random session token on daemon startup. Embed it in the served `index.html` (a `<meta name="bsky-saves-token">` tag is sufficient). Require it in `Authorization: Bearer <token>` on every API request.
+10. Apply `Origin` allowlist on every API route. Default allowlist: `http://127.0.0.1:<port>`, `http://localhost:<port>`, `https://saves.lightseed.net`. Configurable via `--allow-origin` for advanced users.
+11. Session token: persistent secret on disk, lazily generated on first `bsky-saves serve` or `bsky-saves token` invocation, stored at the platform-conventional config path with `0600` perms (`$XDG_CONFIG_HOME/bsky-saves/token`, `%APPDATA%\bsky-saves\token`, or `~/Library/Application Support/bsky-saves/token`). Required as `Authorization: Bearer <token>` on every authed API request; missing or wrong → `401`. `/ping` is exempt (item 13). Persistent rather than per-startup so the hosted-PWA pairing UX survives daemon restarts — the trust model is the same as `.netrc` / `~/.gh/hosts.yml`, and the DNS-rebinding mitigation lives in Host/Origin, not in the token's lifetime.
+    - **Wheel-served path:** the GUI bundle ships `index.html` with the literal sentinel `<meta name="bsky-saves-token" content="__BSKY_SAVES_TOKEN__">`. At serve time, the helper string-substitutes `__BSKY_SAVES_TOKEN__` with the actual token before sending the response. Sentinel chosen so it cannot collide with a real base64url token. Sentinel-based (not HTML-parsing) so the substitution doesn't break against future Vite output shapes.
+    - **Hosted-PWA path:** the GUI loaded from `saves.lightseed.net` receives the literal sentinel unsubstituted (no helper involved). The GUI's startup code detects the unsubstituted value, treats this context as unpaired, and prompts the user to run `bsky-saves token` locally and paste the output.
+    - **CLI:** `bsky-saves token` prints the current token (lazy-generating if no token file exists yet, so users can run it without ever having run `serve`). `bsky-saves token --rotate` regenerates and invalidates all paired sessions; standard "rotate the credential" path for incident response.
 12. Emit security headers on the served GUI:
     - `X-Frame-Options: DENY`
     - `Referrer-Policy: no-referrer`
-    - `Content-Security-Policy: default-src 'self'; script-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'`
+    - `Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'`. The `'wasm-unsafe-eval'` allowance is required by Pyodide's `WebAssembly.compile/instantiate` in the no-helper fallback path; without it the bundled-GUI initialization fails.
     - `Cache-Control: no-store` on `index.html`, long-lived immutable on `/assets/*` (Vite-hashed).
 
 ### API endpoints required for the contract
 
-13. `GET /api/version` → `{ "helper": "0.4.3", "protocol": "1", "gui_bundled": "0.5.0" }`. Returns 200 without authentication so the GUI can probe before the user is signed in.
-14. `GET /api/health` → `200` with empty body. Used by `probeHelper()` for liveness.
-15. All other endpoints require the session token and the origin allowlist check.
+13. `GET /ping` → unauthenticated diagnostic shape: `{ "name": "bsky-saves", "version": "0.7.0", "protocol": "2", "gui_bundled": "0.7.0", "features": ["fetch", "enrich", "hydrate-threads", "fetch-image", "extract-article", "jwt-credentials"] }`. Stays unauthenticated indefinitely — it's the pre-pairing probe the GUI uses to detect a helper at all; requiring auth on it would create a catch-22 for hosted-PWA users (can't probe without a token, can't know whether to prompt for a token without probing). `gui_bundled` may be `null` for dev installs that haven't run the GUI-fetch build hook. `protocol` bumps when an existing endpoint's request shape, response shape, status code semantics, or auth requirement changes in a non-additive way; new endpoints and new optional fields don't bump it.
+14. All other endpoints require the session token and the origin allowlist check.
 
 ### Release process
 
-16. Wheel changelog notes the bundled `GUI_VERSION` for each release.
-17. Wheel published via PyPI Trusted Publishers (OIDC), not long-lived tokens.
-18. Pre-release smoke test in `bsky-saves` CI: start `bsky-saves serve --gui` against a freshly built wheel, `curl /` returns the bundled `index.html`, `curl /api/version` returns the expected shape.
+15. Wheel changelog notes the bundled `GUI_VERSION` for each release.
+16. Wheel published via PyPI Trusted Publishers (OIDC), not long-lived tokens.
+17. Pre-release smoke test in `bsky-saves` CI: start `bsky-saves serve --gui` against a freshly built wheel, `curl /` returns the bundled `index.html` (with `__BSKY_SAVES_TOKEN__` substituted), `curl /ping` returns the expected shape.
 
 ### Non-goals for MVP
 

@@ -166,9 +166,8 @@ jobs:
       # `bsky-saves serve --gui` on the default port (47826), and runs
       # the helper.spec.ts suite against it. Verifies the wheel-internal
       # consistency the workstream doc §5 S5 describes: the wheel's
-      # bundled GUI mounts cleanly against the wheel's helper, and the
-      # /api/health + /api/version endpoints match the documented shape
-      # (workstream doc §4 items 13-14).
+      # bundled GUI mounts cleanly against the wheel's helper, and
+      # /ping matches the documented shape (workstream doc §4 item 13).
       - name: S5 (helper-served) — Install bsky-saves
         run: pipx install bsky-saves
 
