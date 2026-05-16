@@ -83,8 +83,42 @@ export async function startLibraryRefresh(
         // earlier or streams pages into it, it MUST re-establish a
         // "completed pagination" gate first.
         const freshSaves = (partialInv as { saves?: unknown }).saves;
+        const freshSavesArr: unknown[] = Array.isArray(freshSaves) ? freshSaves : [];
+
+        // BUG #35 GUARD. A fetch that returns zero entries when the prior
+        // inventory was non-empty is almost always a "fetch path
+        // completed without throwing but returned empty" failure mode —
+        // helper proxied a PDS auth error and returned `{saves: []}`,
+        // pyodide ran with stale creds, PNA-blocked Chrome got a
+        // not-quite-thrown empty response, etc. Reconciling here would
+        // tag every prior save as removed_detected_at; under `keep-lost`
+        // or `sync` that silently deletes the user's library, and under
+        // `keep-all` it orphans them under the "unsaved" filter.
+        //
+        // Treat zero-against-nonzero as a fetch failure: throw, fall
+        // through to the outer catch, surface via AuthErrorBanner. The
+        // prior inventory stays intact because saveInventory hasn't
+        // been called yet on this path.
+        //
+        // Legitimate "user emptied their Bluesky saves" case is the
+        // only false positive. Handled by the explicit Settings → Clear
+        // data affordance, called out in the error message.
+        const priorSavesArr: unknown[] = Array.isArray(
+          (priorInventory as { saves?: unknown } | null)?.saves,
+        )
+          ? ((priorInventory as { saves: unknown[] }).saves)
+          : [];
+        if (priorSavesArr.length > 0 && freshSavesArr.length === 0) {
+          throw new Error(
+            `Refresh returned zero saves, but your library had ${priorSavesArr.length}. ` +
+              `Refusing to reconcile — this would mark every saved post as removed. ` +
+              `Check your helper and credentials, then try again. ` +
+              `If you really meant to empty your library, use Settings → Clear data.`,
+          );
+        }
+
         const reconciled = reconcileInventory(
-          Array.isArray(freshSaves) ? freshSaves : [],
+          freshSavesArr,
           priorInventory as { fetched_at?: unknown; saves?: unknown } | null,
           get(retainMode),
           new Date().toISOString(),
