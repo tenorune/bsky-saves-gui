@@ -7,6 +7,13 @@ export type HelperFacts =
       readonly detected: true;
       readonly version: string;
       readonly features: readonly string[];
+      /**
+       * Stable compat-band integer-as-string from /ping. Undefined for
+       * v0.6.0 helpers that pre-date the field (the GUI ignores absence;
+       * the ProtocolMismatchBanner only fires when `protocol` IS reported
+       * AND exceeds MAX_KNOWN_PROTOCOL).
+       */
+      readonly protocol?: string;
     };
 
 export type CapabilitySnapshot = {
@@ -81,7 +88,12 @@ export function computeCapabilitySnapshot(
   const f = new Set(helper.features);
   const fetchOk = f.has('fetch') && f.has('enrich') && f.has('hydrate-threads') && f.has('jwt-credentials');
   return {
-    helper: { detected: true, version: helper.version, features: helper.features },
+    helper: {
+      detected: true,
+      version: helper.version,
+      features: helper.features,
+      ...(helper.protocol !== undefined ? { protocol: helper.protocol } : {}),
+    },
     fetch:   fetchOk ? { kind: 'helper' } : { kind: 'pyodide' },
     enrich:  fetchOk ? { kind: 'helper' } : { kind: 'pyodide' },
     threads: fetchOk ? { kind: 'helper' } : { kind: 'pyodide' },
