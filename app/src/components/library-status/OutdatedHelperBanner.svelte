@@ -7,7 +7,7 @@
 
 <div class="outdated-helper" role="alert">
   <span>
-    Your helper is outdated ({version}). Upgrade to {MIN_HELPER_VERSION}+ for faster fetch and the JWT-pair auth path.
+    Your helper is outdated ({version}). Upgrade to {MIN_HELPER_VERSION}+ for faster fetch and stronger security.
   </span>
   <a class="outdated-helper__link" href="https://github.com/tenorune/bsky-saves#install" target="_blank" rel="noopener noreferrer">How to upgrade</a>
 </div>
