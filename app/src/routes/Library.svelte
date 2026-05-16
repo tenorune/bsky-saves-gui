@@ -18,6 +18,7 @@
   import LibraryStatusPanel from '../components/LibraryStatusPanel.svelte';
   import CollapsibleBlock from '../components/CollapsibleBlock.svelte';
   import CustomProxySetupModal from '../components/CustomProxySetupModal.svelte';
+  import PairingModal from '../components/PairingModal.svelte';
   import BackupFailuresModal from '../components/BackupFailuresModal.svelte';
   import { panelCollapse, setBackupsCollapsed } from '$lib/panel-collapse-pref';
   import { rkeyOf } from '../reader/inventory-shape';
@@ -26,6 +27,7 @@
   import { saveLibraryScroll, consumeLibraryScroll } from '$lib/library-scroll';
 
   let setupOpen = false;
+  let pairingOpen = false;
   let failuresOpen: 'images' | 'articles' | 'threads' | null = null;
   let didRestoreScroll = false;
 
@@ -204,6 +206,7 @@
           onViewImageFailures={() => (failuresOpen = 'images')}
           onViewArticleFailures={() => (failuresOpen = 'articles')}
           onViewThreadFailures={() => (failuresOpen = 'threads')}
+          onPair={() => (pairingOpen = true)}
         />
       </CollapsibleBlock>
     {/if}
@@ -224,6 +227,11 @@
   open={setupOpen}
   on:close={() => (setupOpen = false)}
   on:change={() => initCapabilitySnapshot()}
+/>
+
+<PairingModal
+  open={pairingOpen}
+  on:close={() => (pairingOpen = false)}
 />
 
 <BackupFailuresModal

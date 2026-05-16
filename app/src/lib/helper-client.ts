@@ -1,8 +1,38 @@
 // Client for the local bsky-saves serve daemon. Speaks the API specified in
 // docs/bsky-saves-serve-requirements.md: GET /ping for capability detection,
 // POST /fetch-image for byte fetching (added in a later plan).
+//
+// Auth model (docs/bsky-saves-gui-dist-workstream.md §4 item 11): every
+// endpoint EXCEPT /ping requires `Authorization: Bearer <token>` once the
+// helper ships token enforcement. Until then, the header is harmless if
+// the helper ignores it; if the helper enforces it, an unpaired GUI will
+// 401 and the PairingRequiredBanner UX takes over.
+//
+// 401-driven `markPairingStale` is intentionally NOT wired here yet — a
+// 401 from /fetch can mean either "GUI's pairing token is bad" OR "the
+// helper proxied an upstream PDS auth failure" (see existing tests under
+// "throws on 401 createSession failed"). Differentiating needs the
+// helper-side signal from bsky-saves PR #9 (probably WWW-Authenticate:
+// Bearer or a typed error body). Deferring until that lands; the initial
+// pairing flow (unpaired-on-startup → user pastes → paired) works without it.
 
+import { get } from 'svelte/store';
 import { config } from './config';
+import { pairingToken } from './pairing-token';
+
+/**
+ * Add `Authorization: Bearer <token>` to `headers` if the pairing store
+ * holds a token (state 'paired' or 'stale' — we keep sending the stale
+ * token because the helper will keep 401ing, which is cheap and stable).
+ * No-op when the GUI is unpaired.
+ */
+function withAuthHeaders(headers: Record<string, string>): Record<string, string> {
+  const { state, token } = get(pairingToken);
+  if (token !== null && state !== 'unpaired') {
+    return { ...headers, Authorization: `Bearer ${token}` };
+  }
+  return headers;
+}
 
 export type HelperStatus =
   | { status: 'available'; version: string; features: readonly string[] }
@@ -73,6 +103,49 @@ export async function pingHelper(origin: string): Promise<boolean> {
 }
 
 /**
+ * Probe a candidate pairing token against the helper. Returns:
+ *   'valid'       — helper accepted the token (2xx response).
+ *   'rejected'    — helper returned 401 / 403; the token is wrong.
+ *   'unreachable' — network error, helper not running, CORS failure, etc.
+ *
+ * Implemented today as a no-op `POST /enrich` with an empty `uris[]` — the
+ * helper returns `{enriched: [], errors: []}` for that input when auth
+ * passes, 401 when the token is missing or wrong. This is a temporary
+ * stand-in for the dedicated `/auth/check` endpoint proposed in the
+ * bsky-saves session-token spec (PR #9). Swap when that lands.
+ *
+ * The token is passed explicitly rather than read from the pairing-token
+ * store so the modal can verify a user's pasted token without committing
+ * it to the store until the probe succeeds.
+ */
+export type PairingProbeResult = 'valid' | 'rejected' | 'unreachable';
+
+export async function probePairingToken(
+  origin: string,
+  token: string,
+): Promise<PairingProbeResult> {
+  const base = origin.replace(/\/+$/, '');
+  let res: Response;
+  try {
+    res = await fetch(`${base}/enrich`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ uris: [] }),
+    });
+  } catch {
+    return 'unreachable';
+  }
+  if (res.ok) return 'valid';
+  if (res.status === 401 || res.status === 403) return 'rejected';
+  // Other 4xx/5xx: treat as unreachable (helper alive but misbehaving;
+  // user can't fix this by re-pasting the token).
+  return 'unreachable';
+}
+
+/**
  * Fetch a single image via the local helper's POST /fetch-image endpoint.
  * The helper does the outbound HTTP from the user's machine and streams the
  * raw bytes back. Throws on non-2xx response or network error.
@@ -86,7 +159,7 @@ export async function fetchImageViaHelper(origin: string, imageUrl: string): Pro
   const base = origin.replace(/\/+$/, '');
   const res = await fetch(`${base}/fetch-image`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: withAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ url: imageUrl }),
   });
   if (!res.ok) {
@@ -143,7 +216,7 @@ export async function extractArticleViaHelper(
   const base = origin.replace(/\/+$/, '');
   const res = await fetch(`${base}/extract-article`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: withAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ url: articleUrl }),
     signal: options.signal,
   });
@@ -211,7 +284,7 @@ export async function fetchSaves(
   const base = origin.replace(/\/+$/, '');
   const res = await fetch(`${base}/fetch`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: withAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       credentials: serialiseCredentials(req.credentials),
       cursor: req.cursor,
@@ -252,7 +325,7 @@ export async function enrichUris(origin: string, req: EnrichRequest): Promise<En
   const base = origin.replace(/\/+$/, '');
   const res = await fetch(`${base}/enrich`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: withAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ uris: req.uris }),
   });
   if (!res.ok) {
@@ -295,7 +368,7 @@ export async function hydrateThreads(
   const base = origin.replace(/\/+$/, '');
   const res = await fetch(`${base}/hydrate-threads`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: withAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       uris: req.uris,
       credentials: serialiseCredentials(req.credentials),

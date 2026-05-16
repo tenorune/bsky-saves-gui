@@ -36,6 +36,7 @@
   import { assetToggles, setAssetToggle, loadAssetToggles, clearAssetToggles } from '$lib/asset-toggles';
   import { installHintDismissed, loadInstallHintPref, clearInstallHintPref } from '$lib/install-hint-pref';
   import { clearPanelCollapse } from '$lib/panel-collapse-pref';
+  import { clearPairingToken } from '$lib/pairing-token';
   import {
     retainMode,
     loadRetainMode,
@@ -298,6 +299,13 @@
     ]);
     clearLastSession();
     clearSessionHeartbeat();
+    // Pairing token is per-device local state, not user-account data,
+    // but Clear data is a "wipe everything in this browser" affordance
+    // by the user's contract — leaving the token would surprise them.
+    // The next visit to a saves.lightseed.net page with a running
+    // helper will re-prompt to pair (or auto-pair via the meta tag if
+    // wheel-served).
+    clearPairingToken();
     // Resets all five hydration-progress stores — not just image/article.
     // The fetch/enrich/thread progress counters were previously left
     // stale after Clear data (issue #24).

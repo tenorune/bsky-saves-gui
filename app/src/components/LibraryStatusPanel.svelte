@@ -2,6 +2,7 @@
   import { capabilitySnapshot } from '$lib/capability-snapshot';
   import { assetToggles, setAssetToggle } from '$lib/asset-toggles';
   import { installHintDismissed } from '$lib/install-hint-pref';
+  import { pairingToken } from '$lib/pairing-token';
   import { libraryRefreshState } from '$lib/library-refresh';
   import { imageHydration, articleHydration, threadProgress } from '$lib/hydration-state';
   import { computeDominantBackend, prospectiveBackendName } from '$lib/dominant-backend';
@@ -14,6 +15,7 @@
   import AssetRow from './library-status/AssetRow.svelte';
   import AuthErrorBanner from './library-status/AuthErrorBanner.svelte';
   import OutdatedHelperBanner from './library-status/OutdatedHelperBanner.svelte';
+  import PairingRequiredBanner from './library-status/PairingRequiredBanner.svelte';
   import InstallHelperHint from './library-status/InstallHelperHint.svelte';
 
   /** Optional callbacks the parent can pass; if undefined, the row hides the affordance. */
@@ -22,6 +24,13 @@
   export let onViewImageFailures: (() => void) | null = null;
   export let onViewArticleFailures: (() => void) | null = null;
   export let onViewThreadFailures: (() => void) | null = null;
+  /**
+   * Called when the user clicks "Pair" on the PairingRequiredBanner.
+   * Parent should open whatever pairing UI it owns (typically
+   * PairingModal). When null, the banner doesn't render — no point
+   * showing a "Pair" CTA the parent can't act on.
+   */
+  export let onPair: (() => void) | null = null;
 
   // Wire row badges to the same persistent state Settings's checkboxes use.
   // Off→on flip kicks off the matching hydrator over the existing inventory
@@ -63,6 +72,13 @@
 
   $: outdated = snap.helper.detected && isHelperOutdated(snap.helper.version);
   $: helperVersion = snap.helper.detected ? snap.helper.version : '';
+  // PairingRequiredBanner gates on (a) helper detected via /ping, AND
+  // (b) the pairing-token store is not 'paired'. Both 'unpaired' (no
+  // token at all) and 'stale' (helper rejected the token we had) show
+  // the banner identically — the user's next action is the same in
+  // either case. When `onPair` isn't wired up, suppress regardless;
+  // no CTA without a parent to handle it.
+  $: needsPairing = snap.helper.detected && $pairingToken.state !== 'paired' && onPair !== null;
   $: pyodideOnly = !snap.helper.detected;
 
   // Threads. Same cumulative-coverage shape as images/articles —
@@ -147,6 +163,9 @@
   {/if}
   {#if outdated}
     <OutdatedHelperBanner version={helperVersion} />
+  {/if}
+  {#if needsPairing && onPair}
+    <PairingRequiredBanner onPair={onPair} />
   {/if}
 
   <!-- Don't render asset rows until the capability snapshot is real
