@@ -69,6 +69,87 @@ describe('helper-client probeHelper', () => {
     await probeHelper('http://127.0.0.1:47826/');
     expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:47826/ping', expect.any(Object));
   });
+
+  it('surfaces protocol + gui_bundled when v0.6.1+ /ping returns them', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          name: 'bsky-saves',
+          version: '0.6.1',
+          protocol: '1',
+          gui_bundled: '0.6.0',
+          features: ['fetch', 'enrich', 'hydrate-threads', 'fetch-image', 'extract-article', 'jwt-credentials'],
+        }),
+      })),
+    );
+    const { probeHelper } = await import('./helper-client');
+    const result = await probeHelper('http://127.0.0.1:47826');
+    expect(result).toMatchObject({
+      status: 'available',
+      version: '0.6.1',
+      protocol: '1',
+      gui_bundled: '0.6.0',
+    });
+  });
+
+  it('surfaces gui_bundled: null for dev-install helpers that skipped the GUI-fetch build hook', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          name: 'bsky-saves',
+          version: '0.6.1',
+          protocol: '1',
+          gui_bundled: null,
+          features: [],
+        }),
+      })),
+    );
+    const { probeHelper } = await import('./helper-client');
+    const result = await probeHelper('http://127.0.0.1:47826');
+    expect(result).toMatchObject({ status: 'available', gui_bundled: null });
+  });
+
+  it('omits the optional fields when the helper does not return them (v0.6.0 compat)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          name: 'bsky-saves',
+          version: '0.6.0',
+          features: [],
+        }),
+      })),
+    );
+    const { probeHelper } = await import('./helper-client');
+    const result = await probeHelper('http://127.0.0.1:47826');
+    expect(result).toEqual({
+      status: 'available',
+      version: '0.6.0',
+      features: [],
+    });
+  });
+
+  it('reports unavailable when /ping returns protocol with the wrong type', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          name: 'bsky-saves',
+          version: '0.6.1',
+          protocol: 1, // number, not string — wire-format violation
+          features: [],
+        }),
+      })),
+    );
+    const { probeHelper } = await import('./helper-client');
+    expect(await probeHelper('http://127.0.0.1:47826')).toEqual({ status: 'unavailable' });
+  });
 });
 
 describe('helper-client fetchImageViaHelper', () => {
@@ -519,5 +600,94 @@ describe('helper-client Authorization header (pairing)', () => {
         headers: expect.objectContaining({ Authorization: `Bearer ${VALID_TOKEN}` }),
       }),
     );
+  });
+});
+
+describe('helper-client 401 handling (pairing-cause detection)', () => {
+  const VALID_TOKEN = 'tok_' + 'a'.repeat(20);
+
+  it('marks pairing stale on 401 with WWW-Authenticate: Bearer realm="bsky-saves" (missing-header sub-case)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ error: 'authentication required' }), {
+        status: 401,
+        headers: { 'WWW-Authenticate': 'Bearer realm="bsky-saves"' },
+      })),
+    );
+    const { setPairingToken, pairingToken } = await import('./pairing-token');
+    const { get } = await import('svelte/store');
+    setPairingToken(VALID_TOKEN);
+    const { enrichUris } = await import('./helper-client');
+    await expect(
+      enrichUris('http://127.0.0.1:47826', { uris: ['at://a'] }),
+    ).rejects.toThrow();
+    expect(get(pairingToken).state).toBe('stale');
+  });
+
+  it('marks pairing stale on 401 with WWW-Authenticate carrying error="invalid_token" (wrong-token sub-case)', async () => {
+    // Recovery is identical for missing-header vs wrong-token per the
+    // bsky-saves v0.6.2 spec §5; this test pins that we route the
+    // RFC-6750-preferred `error="invalid_token"` variant through the
+    // same path.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ error: 'authentication required' }), {
+        status: 401,
+        headers: {
+          'WWW-Authenticate': 'Bearer realm="bsky-saves", error="invalid_token"',
+        },
+      })),
+    );
+    const { setPairingToken, pairingToken } = await import('./pairing-token');
+    const { get } = await import('svelte/store');
+    setPairingToken(VALID_TOKEN);
+    const { enrichUris } = await import('./helper-client');
+    await expect(
+      enrichUris('http://127.0.0.1:47826', { uris: ['at://a'] }),
+    ).rejects.toThrow();
+    expect(get(pairingToken).state).toBe('stale');
+  });
+
+  it('leaves pairing state alone on 401 without WWW-Authenticate (upstream-cause)', async () => {
+    // This is the existing "helper proxied an upstream PDS auth failure"
+    // shape — the helper itself authed us correctly but our credentials
+    // were rejected at the next hop. Marking pairingStale here would
+    // mislead the user.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ error: 'createSession failed' }), {
+        status: 401,
+      })),
+    );
+    const { setPairingToken, pairingToken } = await import('./pairing-token');
+    const { get } = await import('svelte/store');
+    setPairingToken(VALID_TOKEN);
+    const { enrichUris } = await import('./helper-client');
+    await expect(
+      enrichUris('http://127.0.0.1:47826', { uris: ['at://a'] }),
+    ).rejects.toThrow();
+    expect(get(pairingToken).state).toBe('paired'); // unchanged
+  });
+
+  it('does not flip state when 401 fires without a sent Authorization header', async () => {
+    // Unpaired GUI + helper requires auth. The 401 is expected and the
+    // pairing flow recovers via the banner (no token to mark "stale");
+    // there's nothing the 401 handler can do that the banner isn't
+    // already doing, so it should no-op.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('', {
+        status: 401,
+        headers: { 'WWW-Authenticate': 'Bearer' },
+      })),
+    );
+    // No setPairingToken — state starts 'unpaired'.
+    const { pairingToken } = await import('./pairing-token');
+    const { get } = await import('svelte/store');
+    const { enrichUris } = await import('./helper-client');
+    await expect(
+      enrichUris('http://127.0.0.1:47826', { uris: ['at://a'] }),
+    ).rejects.toThrow();
+    expect(get(pairingToken).state).toBe('unpaired'); // unchanged
   });
 });

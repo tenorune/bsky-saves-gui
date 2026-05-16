@@ -12,11 +12,10 @@
 //   - Helper boots, binds the expected port, serves the GUI HTML.
 //   - /ping matches the diagnostic shape from
 //     docs/bsky-saves-gui-dist-workstream.md §4 item 13 — `name`,
-//     `version`, `features` (the v0.6.x baseline that
-//     `lib/helper-client.ts::isPingPayload` validates at runtime).
-//     `protocol` and `gui_bundled` land in a later helper release and
-//     are tolerated-but-not-required here so the suite passes against
-//     today's and tomorrow's wheels.
+//     `version`, `protocol`, `gui_bundled`, `features`. All five fields
+//     are required of the helper we exercise (CI installs the latest
+//     PyPI wheel, which is >= v0.6.1; `protocol` + `gui_bundled` shipped
+//     in v0.6.1 and the suite floors there).
 //   - GUI mounts without uncaught console errors against a live helper.
 //
 // What this does NOT catch (yet):
@@ -70,15 +69,11 @@ test('GET /ping returns the bsky-saves diagnostic payload', async () => {
   expect(typeof body.version).toBe('string');
   expect(body.version as string).toMatch(/^\d+\.\d+\.\d+/);
   expect(Array.isArray(body.features)).toBe(true);
-  // Soft-check additive fields from the post-v0.6.0 contract: present if
-  // the wheel ships them, accepted as `null` for dev installs that
-  // skipped the GUI-fetch build hook, ignored entirely otherwise.
-  if ('protocol' in body) {
-    expect(typeof body.protocol === 'string' || body.protocol === null).toBe(true);
-  }
-  if ('gui_bundled' in body) {
-    expect(typeof body.gui_bundled === 'string' || body.gui_bundled === null).toBe(true);
-  }
+  // v0.6.1 added protocol + gui_bundled; CI installs the latest wheel
+  // (>= 0.6.1) so both are required. `gui_bundled` is null for dev
+  // installs but the wheel always populates it.
+  expect(typeof body.protocol).toBe('string');
+  expect(typeof body.gui_bundled === 'string' || body.gui_bundled === null).toBe(true);
 });
 
 test('sign-in page mounts without console errors against a live helper', async ({

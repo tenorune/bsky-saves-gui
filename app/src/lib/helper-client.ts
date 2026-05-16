@@ -18,7 +18,7 @@
 
 import { get } from 'svelte/store';
 import { config } from './config';
-import { pairingToken } from './pairing-token';
+import { pairingToken, markPairingStale } from './pairing-token';
 
 /**
  * Add `Authorization: Bearer <token>` to `headers` if the pairing store
@@ -34,25 +34,162 @@ function withAuthHeaders(headers: Record<string, string>): Record<string, string
   return headers;
 }
 
+/**
+ * True when the GUI is being served from the same origin as the helper —
+ * the wheel-served (`bsky-saves serve --gui`) path. In that mode the
+ * helper substitutes the `__BSKY_SAVES_TOKEN__` sentinel in `index.html`
+ * with the current persistent token on every page load, so reloading
+ * the page is itself the recovery from a stale-token 401.
+ */
+function isBundledGuiOrigin(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return new URL(window.location.href).origin === new URL(config.helperOrigin).origin;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Persistent budget for automatic page reloads on 401, capped at one per
+ * 10s. Without a cap, a helper that keeps 401ing after reload (e.g.,
+ * because the upstream PDS auth is broken, or the helper itself crashed)
+ * would loop the page forever.
+ */
+const RELOAD_BUDGET_KEY = 'helper-401-reload-at:v1';
+const RELOAD_COOLDOWN_MS = 10_000;
+
+function consumeReloadBudget(): boolean {
+  if (typeof localStorage === 'undefined' || typeof location === 'undefined') return false;
+  try {
+    const last = parseInt(localStorage.getItem(RELOAD_BUDGET_KEY) ?? '0', 10);
+    if (Date.now() - last < RELOAD_COOLDOWN_MS) return false;
+    localStorage.setItem(RELOAD_BUDGET_KEY, String(Date.now()));
+  } catch {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * React to a 401 from an authed helper endpoint.
+ *
+ * Distinguishes pairing-cause 401 from upstream-cause 401 via the
+ * `WWW-Authenticate: Bearer ...` header. Contract locked in
+ * `tenorune/bsky-saves#10` and the v0.6.2 spec at
+ * `bsky-saves/docs/superpowers/specs/2026-05-16-bsky-saves-v0.6.2-session-token.md §5`:
+ *
+ *   Pairing-401 (missing auth header):
+ *     `WWW-Authenticate: Bearer realm="bsky-saves"`
+ *   Pairing-401 (wrong token value):
+ *     `WWW-Authenticate: Bearer realm="bsky-saves", error="invalid_token"`
+ *   Upstream-cause 401 (PDS createSession / refresh propagated through
+ *   /fetch or /hydrate-threads):
+ *     header absent
+ *
+ * Recovery is identical for both pairing sub-cases — the
+ * missing-vs-wrong distinction is informational only. The header alone
+ * is the discriminator; absence means existing upstream-cause handling
+ * runs (re-prompt app password, refresh, etc.) and pairing state is
+ * untouched.
+ *
+ * The bsky-saves response also includes
+ * `Access-Control-Expose-Headers: WWW-Authenticate` so cross-origin
+ * fetches from `saves.lightseed.net` can actually read the header;
+ * without that the browser filters it out and our detection silently
+ * fails for hosted-PWA users. Verified on their side in PR #10.
+ *
+ * On a pairing-cause 401:
+ *   - Bundled GUI (helper origin == window origin): reload the page;
+ *     the helper substitutes the fresh persistent token into
+ *     `index.html`'s sentinel on every page load. Capped at one reload
+ *     per 10s to avoid infinite loops if reload doesn't recover (helper
+ *     crashed, upstream auth permanently broken, etc.).
+ *   - Hosted GUI: flip pairingStale; the PairingRequiredBanner takes
+ *     over and prompts the user to re-paste from `bsky-saves token`.
+ *
+ * No-op when the request didn't carry an Authorization header (the GUI
+ * was unpaired; no pairing state to mark stale, the banner is already
+ * doing its job from the empty-token side).
+ */
+function handleAuthed401(res: Response, sentAuth: boolean): void {
+  if (res.status !== 401 || !sentAuth) return;
+  // RFC 7235 §2.1: auth scheme name is case-insensitive. Header name is
+  // case-insensitive too per the Fetch API's normalization, but we
+  // lowercase the value for the prefix check to handle a future helper
+  // that emits "bearer" / "BEARER" without breaking detection.
+  const challenge = res.headers.get('WWW-Authenticate');
+  const isPairingChallenge =
+    challenge !== null && challenge.toLowerCase().startsWith('bearer');
+  if (!isPairingChallenge) return;
+  if (isBundledGuiOrigin() && consumeReloadBudget()) {
+    // Defer the reload so the current request's caller gets to reject
+    // with its normal error message before navigation tears the page
+    // down — keeps error logging coherent during the reload window.
+    setTimeout(() => {
+      if (typeof location !== 'undefined') location.reload();
+    }, 100);
+    return;
+  }
+  markPairingStale();
+}
+
 export type HelperStatus =
-  | { status: 'available'; version: string; features: readonly string[] }
+  | {
+      status: 'available';
+      version: string;
+      features: readonly string[];
+      /**
+       * Stable compat-band integer-as-string. Bumps when an existing
+       * endpoint changes in a non-additive way; new endpoints and new
+       * optional fields don't bump it. Optional on the type because v0.6.0
+       * helpers don't return it — only v0.6.1+ do (see
+       * docs/bsky-saves-gui-dist-workstream.md §4 item 13).
+       */
+      protocol?: string;
+      /**
+       * The GUI tag whose `dist.tar.gz` was vendored into this helper at
+       * wheel-build time. Matches `GUI_VERSION` in `bsky-saves`'s
+       * `pyproject.toml`. `null` for dev installs that skipped the
+       * GUI-fetch build hook. Optional on the type for backward compat
+       * with v0.6.0 helpers that don't return the field at all.
+       */
+      gui_bundled?: string | null;
+    }
   | { status: 'unavailable' };
 
 interface PingPayload {
   readonly name: string;
   readonly version: string;
   readonly features: readonly string[];
+  readonly protocol?: string;
+  readonly gui_bundled?: string | null;
 }
 
 function isPingPayload(v: unknown): v is PingPayload {
   if (!v || typeof v !== 'object') return false;
   const r = v as Record<string, unknown>;
-  return (
-    r.name === 'bsky-saves' &&
-    typeof r.version === 'string' &&
-    Array.isArray(r.features) &&
-    r.features.every((f) => typeof f === 'string')
-  );
+  if (
+    r.name !== 'bsky-saves' ||
+    typeof r.version !== 'string' ||
+    !Array.isArray(r.features) ||
+    !r.features.every((f) => typeof f === 'string')
+  ) {
+    return false;
+  }
+  // Soft-validate the additive v0.6.1 fields: if present, the types must
+  // match; if absent, the payload is still valid (v0.6.0 helpers in the
+  // field don't ship them). Rejects payloads where the wheel returns the
+  // field with the wrong type (e.g., a number instead of a string).
+  if (r.protocol !== undefined && typeof r.protocol !== 'string') return false;
+  if (
+    r.gui_bundled !== undefined &&
+    r.gui_bundled !== null &&
+    typeof r.gui_bundled !== 'string'
+  ) {
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -73,6 +210,8 @@ export async function probeHelper(origin: string): Promise<HelperStatus> {
       status: 'available',
       version: body.version,
       features: body.features,
+      ...(body.protocol !== undefined ? { protocol: body.protocol } : {}),
+      ...(body.gui_bundled !== undefined ? { gui_bundled: body.gui_bundled } : {}),
     };
   } catch {
     return { status: 'unavailable' };
@@ -157,11 +296,14 @@ const HELPER_IMAGE_MAX_BYTES = 25 * 1024 * 1024;
 
 export async function fetchImageViaHelper(origin: string, imageUrl: string): Promise<Blob> {
   const base = origin.replace(/\/+$/, '');
+  const headers = withAuthHeaders({ 'Content-Type': 'application/json' });
+  const sentAuth = 'Authorization' in headers;
   const res = await fetch(`${base}/fetch-image`, {
     method: 'POST',
-    headers: withAuthHeaders({ 'Content-Type': 'application/json' }),
+    headers,
     body: JSON.stringify({ url: imageUrl }),
   });
+  handleAuthed401(res, sentAuth);
   if (!res.ok) {
     throw new Error(`helper /fetch-image returned ${res.status}`);
   }
@@ -214,12 +356,15 @@ export async function extractArticleViaHelper(
   options: { signal?: AbortSignal } = {},
 ): Promise<ExtractedArticle> {
   const base = origin.replace(/\/+$/, '');
+  const headers = withAuthHeaders({ 'Content-Type': 'application/json' });
+  const sentAuth = 'Authorization' in headers;
   const res = await fetch(`${base}/extract-article`, {
     method: 'POST',
-    headers: withAuthHeaders({ 'Content-Type': 'application/json' }),
+    headers,
     body: JSON.stringify({ url: articleUrl }),
     signal: options.signal,
   });
+  handleAuthed401(res, sentAuth);
   if (!res.ok) {
     throw new Error(`helper /extract-article returned ${res.status}`);
   }
@@ -282,15 +427,18 @@ export async function fetchSaves(
   req: FetchSavesRequest,
 ): Promise<FetchSavesResponse> {
   const base = origin.replace(/\/+$/, '');
+  const headers = withAuthHeaders({ 'Content-Type': 'application/json' });
+  const sentAuth = 'Authorization' in headers;
   const res = await fetch(`${base}/fetch`, {
     method: 'POST',
-    headers: withAuthHeaders({ 'Content-Type': 'application/json' }),
+    headers,
     body: JSON.stringify({
       credentials: serialiseCredentials(req.credentials),
       cursor: req.cursor,
       limit: req.limit,
     }),
   });
+  handleAuthed401(res, sentAuth);
   if (!res.ok) {
     let msg = `helper /fetch returned ${res.status}`;
     try {
@@ -323,11 +471,14 @@ export interface EnrichResponse {
 
 export async function enrichUris(origin: string, req: EnrichRequest): Promise<EnrichResponse> {
   const base = origin.replace(/\/+$/, '');
+  const headers = withAuthHeaders({ 'Content-Type': 'application/json' });
+  const sentAuth = 'Authorization' in headers;
   const res = await fetch(`${base}/enrich`, {
     method: 'POST',
-    headers: withAuthHeaders({ 'Content-Type': 'application/json' }),
+    headers,
     body: JSON.stringify({ uris: req.uris }),
   });
+  handleAuthed401(res, sentAuth);
   if (!res.ok) {
     let msg = `helper /enrich returned ${res.status}`;
     try {
@@ -366,14 +517,17 @@ export async function hydrateThreads(
   req: HydrateThreadsRequest,
 ): Promise<HydrateThreadsResponse> {
   const base = origin.replace(/\/+$/, '');
+  const headers = withAuthHeaders({ 'Content-Type': 'application/json' });
+  const sentAuth = 'Authorization' in headers;
   const res = await fetch(`${base}/hydrate-threads`, {
     method: 'POST',
-    headers: withAuthHeaders({ 'Content-Type': 'application/json' }),
+    headers,
     body: JSON.stringify({
       uris: req.uris,
       credentials: serialiseCredentials(req.credentials),
     }),
   });
+  handleAuthed401(res, sentAuth);
   if (!res.ok) {
     let msg = `helper /hydrate-threads returned ${res.status}`;
     try {
