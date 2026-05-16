@@ -1,7 +1,11 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { _resetPairingTokenForTests } from './pairing-token';
 
 beforeEach(() => {
   vi.unstubAllGlobals();
+  // Reset pairing-token state so tests start from 'unpaired'; tests that
+  // need a paired state call setPairingToken() themselves.
+  _resetPairingTokenForTests();
 });
 
 describe('helper-client probeHelper', () => {
@@ -432,5 +436,88 @@ describe('hydrateThreads', () => {
       credentials: { handle: '', appPassword: '', pds: '' },
     })).rejects.toThrow(/missing credentials/);
     vi.unstubAllGlobals();
+  });
+});
+
+describe('helper-client Authorization header (pairing)', () => {
+  // The 5 authed wrappers all share withAuthHeaders(); we spot-check two
+  // representative endpoints (enrich → JSON POST, fetch-image → JSON POST
+  // returning bytes) for both pairing states. The others are mechanically
+  // identical.
+  const VALID_TOKEN = 'tok_' + 'a'.repeat(20); // 24 chars, base64url-shaped
+
+  it('omits Authorization when the GUI is unpaired', async () => {
+    const fetchMock = vi.fn(async () => new Response(
+      JSON.stringify({ enriched: [], errors: [] }),
+      { status: 200 },
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+    const { enrichUris } = await import('./helper-client');
+    await enrichUris('http://127.0.0.1:47826', { uris: ['at://a'] });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:47826/enrich',
+      expect.objectContaining({
+        headers: expect.not.objectContaining({ Authorization: expect.anything() }),
+      }),
+    );
+  });
+
+  it('sets Authorization: Bearer <token> when paired (enrich)', async () => {
+    const fetchMock = vi.fn(async () => new Response(
+      JSON.stringify({ enriched: [], errors: [] }),
+      { status: 200 },
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+    const { setPairingToken } = await import('./pairing-token');
+    setPairingToken(VALID_TOKEN);
+    const { enrichUris } = await import('./helper-client');
+    await enrichUris('http://127.0.0.1:47826', { uris: ['at://a'] });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:47826/enrich',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: `Bearer ${VALID_TOKEN}` }),
+      }),
+    );
+  });
+
+  it('sets Authorization: Bearer <token> when paired (fetch-image)', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: { get: (h: string) => (h.toLowerCase() === 'content-type' ? 'image/png' : null) },
+      blob: async () => new Blob(['IMG'], { type: 'image/png' }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { setPairingToken } = await import('./pairing-token');
+    setPairingToken(VALID_TOKEN);
+    const { fetchImageViaHelper } = await import('./helper-client');
+    await fetchImageViaHelper('http://127.0.0.1:47826', 'https://cdn.bsky.app/img/foo.jpg');
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:47826/fetch-image',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: `Bearer ${VALID_TOKEN}` }),
+      }),
+    );
+  });
+
+  it('keeps sending the token when state is stale', async () => {
+    // Stale = the helper rejected the token but we keep it around so a
+    // re-pair can replace it. Until then, no harm in continuing to send;
+    // the helper will keep 401ing, which is cheap and stable.
+    const fetchMock = vi.fn(async () => new Response(
+      JSON.stringify({ enriched: [], errors: [] }),
+      { status: 200 },
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+    const { setPairingToken, markPairingStale } = await import('./pairing-token');
+    setPairingToken(VALID_TOKEN);
+    markPairingStale();
+    const { enrichUris } = await import('./helper-client');
+    await enrichUris('http://127.0.0.1:47826', { uris: ['at://a'] });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:47826/enrich',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: `Bearer ${VALID_TOKEN}` }),
+      }),
+    );
   });
 });
