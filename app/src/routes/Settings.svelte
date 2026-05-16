@@ -19,6 +19,11 @@
     setOperatorProxyOptOut,
     clearOperatorProxyOptOut,
   } from '$lib/operator-proxy-opt-out';
+  import {
+    loadHelperOptOut,
+    setHelperOptOut,
+    clearHelperOptOut,
+  } from '$lib/helper-opt-out';
   import { config } from '$lib/config';
   import { cancelImageBackup } from '$lib/start-image-backup';
   import { cancelArticleBackup } from '$lib/start-article-backup';
@@ -55,6 +60,7 @@
   let importInputEl: HTMLInputElement | undefined;
 
   let operatorProxyOptOut = false;
+  let helperOptOut = false;
   let backupAdvancedOpen = false;
   let setupModalOpen = false;
   let customProxyConfigured = false;
@@ -121,6 +127,7 @@
 
   onMount(async () => {
     operatorProxyOptOut = await loadOperatorProxyOptOut();
+    helperOptOut = await loadHelperOptOut();
     savedCredentialsPresent = await hasCredentials();
     await refreshCustomProxyStatus();
     void probeOperatorProxy();
@@ -160,6 +167,17 @@
   async function handleDisableOperatorProxyClick() {
     await disableOperatorProxy();
     operatorProxyOptOut = await loadOperatorProxyOptOut();
+  }
+
+  // The "Use the local helper" checkbox mirrors helperOptOut inverted —
+  // checked = use the helper (opt-out false), unchecked = don't use it
+  // (opt-out true). Re-init the capability snapshot so the new routing
+  // takes effect immediately for the next refresh.
+  async function handleToggleUseHelper(event: Event) {
+    const useHelper = (event.target as HTMLInputElement).checked;
+    helperOptOut = !useHelper;
+    await setHelperOptOut(helperOptOut);
+    await initCapabilitySnapshot();
   }
 
   $: toggles = $assetToggles;
@@ -324,6 +342,7 @@
     await Promise.all([
       clearAssetToggles(),
       clearOperatorProxyOptOut(),
+      clearHelperOptOut(),
       clearInstallHintPref(),
       clearProxyConfig(),
       clearRetainMode(),
@@ -331,9 +350,11 @@
     ]);
     resetLibraryFilters();
     operatorProxyOptOut = false;
+    helperOptOut = false;
     customProxyConfigured = false;
-    // Recompute capability snapshot since operator-proxy opt-out and
-    // custom proxy config both affect routing / backend selection.
+    // Recompute capability snapshot since helper-opt-out, operator-proxy
+    // opt-out, and custom proxy config all affect routing / backend
+    // selection.
     await initCapabilitySnapshot();
     status = 'All preferences reset to defaults.';
   }
@@ -518,6 +539,16 @@
       {:else if prospectiveBackendName($capabilitySnapshot.articles.kind)}
         <span class="backend-note">— {toggles.articles ? 'via' : 'would use'} {prospectiveBackendName($capabilitySnapshot.articles.kind)}</span>
       {/if}
+    </label>
+
+    <label class="checkbox settings-section--spaced">
+      <input
+        type="checkbox"
+        checked={!helperOptOut}
+        on:change={handleToggleUseHelper}
+      />
+      <span>Use the local helper from this browser</span>
+      <span class="backend-note">— if a <code>bsky-saves serve</code> daemon is running, route image / article / thread / fetch through it. Uncheck to skip the helper entirely and use the in-browser fallback (Pyodide) plus any configured worker proxy.</span>
     </label>
 
     <details

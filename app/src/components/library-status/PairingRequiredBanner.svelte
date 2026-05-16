@@ -1,27 +1,36 @@
 <script lang="ts">
   /**
-   * Click handler for the "Pair" action. The button opens whatever
-   * pairing UI the parent route has wired up — typically the
-   * PairingModal. Required (not nullable) because there's no point
-   * rendering the banner without a way to act on it.
+   * Click handler for the primary "Pair" action. Opens whatever
+   * pairing UI the parent has wired up (typically PairingModal).
+   * Required because there's no point rendering the banner without
+   * a way to act on it.
    */
   export let onPair: () => void;
+  /**
+   * Click handler for the secondary "Don't pair" action. Persists a
+   * "skip the helper from this browser" preference; parent should
+   * also dismiss the modal (if open) and re-init the capability
+   * snapshot so the GUI routes through Pyodide / worker paths.
+   */
+  export let onDecline: () => void;
 </script>
 
 <div class="pairing-required" role="alert">
-  <span>
+  <span class="pairing-required__text">
     Local helper detected — pair to enable backups.
   </span>
   <button type="button" class="pairing-required__action" on:click={onPair}>
     Pair
   </button>
+  <button type="button" class="pairing-required__decline" on:click={onDecline}>
+    Don't pair
+  </button>
 </div>
 
 <style>
-  /* Same gold-tinted background as OutdatedHelperBanner — the two are
-     in the same "your helper needs attention" family and should read
-     as variants of one visual treatment rather than two unrelated
-     notifications. */
+  /* Same gold-tinted family as OutdatedHelperBanner and
+     ProtocolMismatchBanner — all three are "your helper relationship
+     needs attention" variants of one visual treatment. */
   .pairing-required {
     margin: 0 0 0.6rem;
     padding: 0.5rem 0.7rem;
@@ -34,6 +43,7 @@
     gap: 0.5rem;
     align-items: center;
   }
+  .pairing-required__text { flex: 1 1 18rem; }
   .pairing-required__action {
     margin-left: auto;
     font: inherit;
@@ -45,4 +55,18 @@
     color: CanvasText;
     cursor: pointer;
   }
+  /* Decline is intentionally subtler — text-link styling, no border,
+     so the visual weight clearly favours "Pair" as the primary action. */
+  .pairing-required__decline {
+    font: inherit;
+    font-size: 0.8rem;
+    padding: 0.25rem 0.3rem;
+    background: none;
+    border: 0;
+    color: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+    opacity: 0.7;
+  }
+  .pairing-required__decline:hover { opacity: 1; }
 </style>
