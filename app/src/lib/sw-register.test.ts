@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { handleRegistration } from './sw-register';
+import { handleRegistration, isLoopbackHost, cleanupServiceWorker } from './sw-register';
 
 type Listener = () => void;
 
@@ -34,6 +34,86 @@ function makeRegistration(opts: {
     },
   } as unknown as ServiceWorkerRegistration & { dispatch(evt: string): void };
 }
+
+describe('isLoopbackHost', () => {
+  it('returns true for "localhost"', () => {
+    expect(isLoopbackHost('localhost')).toBe(true);
+  });
+
+  it('returns true for "127.0.0.1"', () => {
+    expect(isLoopbackHost('127.0.0.1')).toBe(true);
+  });
+
+  it('returns false for the hosted PWA hostname', () => {
+    expect(isLoopbackHost('saves.lightseed.net')).toBe(false);
+  });
+
+  it('returns false for an empty string', () => {
+    expect(isLoopbackHost('')).toBe(false);
+  });
+
+  it('returns false for arbitrary hostnames', () => {
+    expect(isLoopbackHost('example.com')).toBe(false);
+    expect(isLoopbackHost('192.168.1.5')).toBe(false);
+  });
+});
+
+describe('cleanupServiceWorker', () => {
+  function makeFakeNavigator(regs: ServiceWorkerRegistration[]): Navigator {
+    return {
+      serviceWorker: {
+        getRegistrations: vi.fn(async () => regs),
+      },
+    } as unknown as Navigator;
+  }
+
+  function makeFakeRegistration(): ServiceWorkerRegistration {
+    return { unregister: vi.fn(async () => true) } as unknown as ServiceWorkerRegistration;
+  }
+
+  function makeFakeCaches(names: string[]): CacheStorage {
+    return {
+      keys: vi.fn(async () => names),
+      delete: vi.fn(async () => true),
+    } as unknown as CacheStorage;
+  }
+
+  it('unregisters every existing service worker registration', async () => {
+    const reg1 = makeFakeRegistration();
+    const reg2 = makeFakeRegistration();
+    const nav = makeFakeNavigator([reg1, reg2]);
+    await cleanupServiceWorker({ navigator: nav, cacheStorage: makeFakeCaches([]) });
+    expect(reg1.unregister).toHaveBeenCalledOnce();
+    expect(reg2.unregister).toHaveBeenCalledOnce();
+  });
+
+  it('deletes every cache returned by caches.keys()', async () => {
+    const cacheStorage = makeFakeCaches(['workbox-precache-v2-foo', 'navigations', 'pyodide-cdn']);
+    await cleanupServiceWorker({ navigator: makeFakeNavigator([]), cacheStorage });
+    expect(cacheStorage.delete).toHaveBeenCalledWith('workbox-precache-v2-foo');
+    expect(cacheStorage.delete).toHaveBeenCalledWith('navigations');
+    expect(cacheStorage.delete).toHaveBeenCalledWith('pyodide-cdn');
+  });
+
+  it('does not throw if getRegistrations rejects', async () => {
+    const nav = {
+      serviceWorker: { getRegistrations: vi.fn(async () => { throw new Error('boom'); }) },
+    } as unknown as Navigator;
+    await expect(cleanupServiceWorker({ navigator: nav, cacheStorage: makeFakeCaches([]) }))
+      .resolves.toBeUndefined();
+  });
+
+  it('does not throw if caches API is absent', async () => {
+    await expect(cleanupServiceWorker({ navigator: makeFakeNavigator([]), cacheStorage: undefined }))
+      .resolves.toBeUndefined();
+  });
+
+  it('does not throw if navigator.serviceWorker is absent', async () => {
+    const nav = {} as unknown as Navigator;
+    await expect(cleanupServiceWorker({ navigator: nav, cacheStorage: makeFakeCaches([]) }))
+      .resolves.toBeUndefined();
+  });
+});
 
 describe('handleRegistration', () => {
   it('sends skipWaiting to a worker that is already waiting at registration time', () => {

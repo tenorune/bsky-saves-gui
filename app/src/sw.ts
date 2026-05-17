@@ -23,10 +23,36 @@ import { registerRoute, NavigationRoute } from 'workbox-routing';
 import { NetworkFirst, StaleWhileRevalidate } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
 import type { RouteHandlerCallbackOptions } from 'workbox-core';
+import { isLoopbackHost } from './lib/sw-register';
 
 declare const self: ServiceWorkerGlobalScope & {
   __WB_MANIFEST: Array<{ revision: string | null; url: string }>;
 };
+
+// Loopback bypass for the bundled-GUI context: if an older SW from a
+// prior `bsky-saves serve` install is still active when v0.6.4+ ships,
+// the page-side sw-register.ts can't clean it up until the new SW
+// activates (the old SW serves cached HTML that references old assets).
+// As soon as the new SW activates here, it nukes its caches and
+// unregisters itself so the next navigation hits the network directly.
+// See sw-register.ts header for the full rationale on why the SW is
+// dropped on loopback hostnames. Hosted PWA at saves.lightseed.net is
+// unaffected (different hostname; the rest of this file runs normally).
+if (isLoopbackHost(self.location.hostname)) {
+  self.addEventListener('activate', (event) => {
+    event.waitUntil((async () => {
+      try {
+        const names = await caches.keys();
+        await Promise.all(names.map((n) => caches.delete(n).catch(() => undefined)));
+      } catch { /* no Cache Storage — nothing to clean */ }
+      try {
+        await self.registration.unregister();
+      } catch { /* unregister rejected — page-side cleanup will catch it */ }
+    })());
+  });
+  // Skip the rest of the SW setup so this short-lived instance doesn't
+  // bother precaching or routing anything before it disappears.
+} else {
 
 cleanupOutdatedCaches();
 precacheAndRoute(self.__WB_MANIFEST);
@@ -64,6 +90,11 @@ registerRoute(
   }),
 );
 
+} // end non-loopback setup
+
+// SKIP_WAITING listener runs in both branches: on loopback it lets the
+// page-side update flow activate the new (self-unregistering) SW without
+// waiting for every tab to close.
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();

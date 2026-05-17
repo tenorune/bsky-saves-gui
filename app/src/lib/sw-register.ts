@@ -10,13 +10,77 @@
 //     reload existing tabs — the user picks up the new build on their next
 //     cold load. This is the "silent next-load update" pattern.
 //
+// Loopback-host bypass: the bundled-GUI context (helper-served at
+// http://localhost:47826 or http://127.0.0.1:47826) does NOT register the
+// SW. The SW caches `index.html` with a per-install pairing token baked
+// into the meta tag, but Cache Storage is origin-scoped (not install-scoped),
+// so a cache populated by an earlier `bsky-saves serve` install — or the
+// `bsky-saves-installer` build — ends up serving the prior install's token
+// to a later install that has a different token. The GUI then sends the
+// stale token in `Authorization: Bearer`, the helper 401s, and the user
+// sees the pairing modal even though substitution was correct. The SW's
+// raison d'être for the hosted PWA (offline asset precache) doesn't help
+// a bundled GUI anyway — the helper is local and always available — so we
+// drop the SW entirely on loopback hostnames and proactively unregister
+// any leftover from a prior install. Hosted PWA at saves.lightseed.net is
+// unaffected.
+//
 // No banner UI. The bricking safety net is the SW's network-first strategy
 // for navigation requests (configured in vite.config.ts).
 
 const SW_URL = '/sw.js';
 
+/**
+ * True iff `hostname` is a loopback address — `localhost` or `127.0.0.1`.
+ * Used to detect the bundled-GUI context where the SW is dropped.
+ * Pure function; takes the hostname so tests don't have to mutate
+ * `window.location`.
+ */
+export function isLoopbackHost(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1';
+}
+
+/**
+ * Unregister every active SW under this origin and delete every cache it
+ * owns. Used on the loopback-host bypass path to clear a leftover SW from
+ * a prior `bsky-saves serve` install. Defensive against missing APIs
+ * (some embedded browsers don't ship Cache Storage) and against the
+ * unregister promise rejecting (cross-platform support is patchy).
+ */
+export async function cleanupServiceWorker(opts: {
+  navigator: Navigator;
+  cacheStorage: CacheStorage | undefined;
+}): Promise<void> {
+  const sw = (opts.navigator as Navigator & { serviceWorker?: ServiceWorkerContainer }).serviceWorker;
+  if (sw && typeof sw.getRegistrations === 'function') {
+    try {
+      const regs = await sw.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister().catch(() => undefined)));
+    } catch {
+      /* getRegistrations rejected — nothing we can do, move on */
+    }
+  }
+  const cacheStorage = opts.cacheStorage;
+  if (cacheStorage && typeof cacheStorage.keys === 'function') {
+    try {
+      const names = await cacheStorage.keys();
+      await Promise.all(names.map((n) => cacheStorage.delete(n).catch(() => undefined)));
+    } catch {
+      /* keys() rejected — likely no Cache Storage; move on */
+    }
+  }
+}
+
 export function registerServiceWorker(): void {
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+  if (typeof window !== 'undefined' && isLoopbackHost(window.location.hostname)) {
+    // Bundled-GUI bypass — see file header.
+    void cleanupServiceWorker({
+      navigator,
+      cacheStorage: typeof caches === 'undefined' ? undefined : caches,
+    });
+    return;
+  }
   // Wait for window load so the SW registration doesn't compete with
   // first-paint resources on slow networks.
   const start = () => {
