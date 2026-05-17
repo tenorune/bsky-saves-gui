@@ -81,9 +81,40 @@ export function initPairingToken(): void {
   // Path 1: meta tag.
   if (typeof document !== 'undefined') {
     const meta = document.querySelector(`meta[name="${META_NAME}"]`);
-    const content = meta?.getAttribute('content');
-    if (isValidTokenShape(content)) {
-      store.set({ state: 'paired', token: content });
+    const rawContent = meta?.getAttribute('content');
+    // Diagnostic FIRST (so TypeScript's narrowing after the type-guard
+    // call doesn't strip the string union off `rawContent`): a meta tag
+    // is PRESENT but the value didn't shape-match. Two expected cases
+    // that should NOT warn:
+    //   - The hosted PWA at saves.lightseed.net reaches the GUI with
+    //     the literal sentinel because no helper is in the request path.
+    //     That's the documented unpaired-startup behavior, not a fault.
+    //   - The tag is absent entirely (jsdom unit-test setups, older
+    //     hand-rolled deployments).
+    // Anything else means either (a) the helper didn't substitute, or
+    // (b) the helper produced a token shape this GUI doesn't recognize
+    // (e.g., a future bsky-saves bumped MIN/MAX token length or alphabet
+    // beyond our regex). Surface it to the console so the next bug
+    // report includes specifics instead of "the modal just opens".
+    // Length only; we don't log the value itself even when it failed
+    // validation — it might still be a real secret.
+    const contentLength = typeof rawContent === 'string' ? rawContent.length : -1;
+    if (
+      meta !== null &&
+      typeof rawContent === 'string' &&
+      rawContent !== SENTINEL &&
+      !isValidTokenShape(rawContent)
+    ) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[bsky-saves] meta[name="${META_NAME}"] present but content failed pairing-token shape validation. ` +
+          `Pairing UI may prompt the user despite the helper's substitution. ` +
+          `Open a GUI issue with these details:`,
+        { length: contentLength, allowedRange: [MIN_TOKEN_LEN, MAX_TOKEN_LEN] },
+      );
+    }
+    if (isValidTokenShape(rawContent)) {
+      store.set({ state: 'paired', token: rawContent });
       return;
     }
   }
