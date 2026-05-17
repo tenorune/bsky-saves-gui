@@ -548,7 +548,6 @@
         on:change={handleToggleUseHelper}
       />
       <span>Use the local helper from this browser</span>
-      <span class="backend-note">— if a <code>bsky-saves serve</code> daemon is running, route image / article / thread / fetch through it. Uncheck to skip the helper entirely and use the in-browser fallback (Pyodide) plus any configured worker proxy.</span>
     </label>
 
     <details
