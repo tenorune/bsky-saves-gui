@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 import {
   pairingToken,
@@ -115,6 +115,43 @@ describe('pairingToken store', () => {
       localStorage.setItem(STORAGE_KEY, 'not-a-token');
       initPairingToken();
       expect(get(pairingToken)).toEqual({ state: 'unpaired', token: null });
+    });
+
+    describe('diagnostic warning', () => {
+      let warnSpy: ReturnType<typeof vi.spyOn>;
+
+      beforeEach(() => {
+        warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      });
+
+      it('does NOT warn when the meta tag is absent', () => {
+        setMeta(null);
+        initPairingToken();
+        expect(warnSpy).not.toHaveBeenCalled();
+      });
+
+      it('does NOT warn on the unsubstituted sentinel (expected hosted-PWA path)', () => {
+        setMeta(SENTINEL);
+        initPairingToken();
+        expect(warnSpy).not.toHaveBeenCalled();
+      });
+
+      it('does NOT warn on a valid token', () => {
+        setMeta(VALID_TOKEN_43);
+        initPairingToken();
+        expect(warnSpy).not.toHaveBeenCalled();
+      });
+
+      it('warns when meta is present with non-sentinel content that fails validation', () => {
+        // Length below MIN — simulates a future helper using a shorter
+        // token format than the GUI knows about.
+        setMeta('tooshort');
+        initPairingToken();
+        expect(warnSpy).toHaveBeenCalledTimes(1);
+        const [msg, details] = warnSpy.mock.calls[0];
+        expect(msg).toMatch(/meta\[name="bsky-saves-token"\] present but content failed/);
+        expect(details).toMatchObject({ length: 8, allowedRange: [22, 64] });
+      });
     });
   });
 
