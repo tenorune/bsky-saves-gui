@@ -79,4 +79,66 @@ describe('atproto.createSession', () => {
     const url = fetchSpy.mock.calls[0][0] as string;
     expect(url).toBe('https://pds.example/xrpc/com.atproto.server.createSession');
   });
+
+  describe('network / timeout failures', () => {
+    it('throws NetworkError when fetch rejects with a TypeError (DNS / TCP / TLS failure)', async () => {
+      fetchSpy.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+      const { createSession, NetworkError } = await import('./atproto');
+      await expect(
+        createSession({ pds: 'https://bsky.social', identifier: 'a', password: 'b' }),
+      ).rejects.toBeInstanceOf(NetworkError);
+    });
+
+    it('throws NetworkError when the abort signal fires (timeout)', async () => {
+      fetchSpy.mockImplementationOnce((_url, init: RequestInit) => {
+        // Mirror the real fetch contract: reject with a DOMException when
+        // the caller's signal aborts. The signal in init.signal is what
+        // createSession composes from its timeout AbortController.
+        return new Promise((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () => {
+            reject(new DOMException('The operation was aborted.', 'AbortError'));
+          });
+        });
+      });
+      const { createSession, NetworkError } = await import('./atproto');
+      await expect(
+        createSession({
+          pds: 'https://bsky.social',
+          identifier: 'a',
+          password: 'b',
+          timeoutMs: 10,
+        }),
+      ).rejects.toBeInstanceOf(NetworkError);
+    });
+
+    it('passes the abort signal to fetch', async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ accessJwt: 'a', refreshJwt: 'r', handle: 'h', did: 'd' }),
+          { status: 200 },
+        ),
+      );
+      const { createSession } = await import('./atproto');
+      await createSession({
+        pds: 'https://bsky.social',
+        identifier: 'a',
+        password: 'b',
+        timeoutMs: 5000,
+      });
+      const init = fetchSpy.mock.calls[0][1] as RequestInit;
+      expect(init.signal).toBeInstanceOf(AbortSignal);
+    });
+
+    it('PdsError on 5xx exposes the status code', async () => {
+      fetchSpy.mockResolvedValueOnce(new Response('upstream is down', { status: 504 }));
+      const { createSession, PdsError } = await import('./atproto');
+      try {
+        await createSession({ pds: 'https://bsky.social', identifier: 'a', password: 'b' });
+        expect.fail('expected to throw');
+      } catch (e) {
+        expect(e).toBeInstanceOf(PdsError);
+        expect((e as InstanceType<typeof PdsError>).status).toBe(504);
+      }
+    });
+  });
 });
