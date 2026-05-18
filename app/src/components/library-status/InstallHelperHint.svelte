@@ -1,10 +1,18 @@
 <script lang="ts">
   import { dismissInstallHint } from '$lib/install-hint-pref';
+  import { isMobileOs } from '$lib/is-mobile';
 
   /** When false, render only the tip text + "How to install" link (no dismiss). */
   export let showDismiss: boolean = true;
+
+  // Local helper is desktop-only — installing Python + binding a loopback
+  // port isn't a thing on phones/tablets. Suppress the hint there so it
+  // doesn't read as a recommendation the user can't act on. Computed once
+  // at component creation; mobile-ness doesn't change inside a session.
+  const hidden = isMobileOs();
 </script>
 
+{#if !hidden}
 <div class="install-hint" class:install-hint--compact={!showDismiss}>
   <span>
     Tip: install <code>bsky-saves</code> locally for faster fetch and built-in image &amp; article backup.
@@ -14,6 +22,7 @@
     <button type="button" class="install-hint__dismiss" on:click={dismissInstallHint}>Dismiss</button>
   {/if}
 </div>
+{/if}
 
 <style>
   .install-hint {

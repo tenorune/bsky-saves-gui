@@ -32,6 +32,7 @@
   import { terminateSharedDriver } from '$lib/pyodide-worker-driver';
   import { clearFailures } from '$lib/failure-store';
   import { resetAllHydrationProgress } from '$lib/hydration-state';
+  import { isMobileOs } from '$lib/is-mobile';
   import { resetLibraryFilters } from '$lib/library-filters';
   import { exportJson } from '../exporters/json-exporter';
   import { downloadFile } from '../exporters/file-download';
@@ -61,6 +62,10 @@
 
   let operatorProxyOptOut = false;
   let helperOptOut = false;
+  // Mobile devices can't run the local helper (no Python, no port binding),
+  // so the toggle is noise there. Computed once at mount; the resolution
+  // doesn't change inside a session.
+  const hideHelperControls = isMobileOs();
   let backupAdvancedOpen = false;
   let setupModalOpen = false;
   let customProxyConfigured = false;
@@ -541,14 +546,16 @@
       {/if}
     </label>
 
-    <label class="checkbox settings-section--spaced">
-      <input
-        type="checkbox"
-        checked={!helperOptOut}
-        on:change={handleToggleUseHelper}
-      />
-      <span>Use the local helper from this browser</span>
-    </label>
+    {#if !hideHelperControls}
+      <label class="checkbox settings-section--spaced">
+        <input
+          type="checkbox"
+          checked={!helperOptOut}
+          on:change={handleToggleUseHelper}
+        />
+        <span>Use the local helper from this browser</span>
+      </label>
+    {/if}
 
     <details
       class="advanced-toggle"
