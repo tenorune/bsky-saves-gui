@@ -164,17 +164,19 @@
           <code>SHARED_SECRET</code> env var on your worker (step 4); the
           Shared&nbsp;secret field at the bottom of this modal is filled
           in automatically.
-          <div class="modal__generate">
+          <div class="modal__generate-btn-row">
             <button
               type="button"
               class="modal__generate-btn"
               on:click={handleGenerateSecret}
             >{generatedSecret ? 'Regenerate' : 'Generate'}</button>
-            {#if generatedSecret}
-              <code class="modal__generated">{generatedSecret}</code>
-              <CopyButton text={generatedSecret} label="Copy secret" />
-            {/if}
           </div>
+          {#if generatedSecret}
+            <div class="modal__codeblock">
+              <pre>{generatedSecret}</pre>
+              <CopyButton text={generatedSecret} label="Copy secret" />
+            </div>
+          {/if}
           <details class="modal__secret-howto">
             <summary>How is this generated?</summary>
             <p>
@@ -340,12 +342,8 @@
   .modal__steps ul li {
     margin-bottom: 0.15rem;
   }
-  .modal__generate {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
+  .modal__generate-btn-row {
     margin: 0.5rem 0;
-    flex-wrap: wrap;
   }
   .modal__generate-btn {
     font: inherit;
@@ -356,16 +354,6 @@
     background: color-mix(in oklab, royalblue 15%, Canvas);
     color: CanvasText;
     cursor: pointer;
-  }
-  .modal__generated {
-    flex: 1 1 auto;
-    padding: 0.4rem 0.6rem;
-    background: color-mix(in oklab, CanvasText 8%, Canvas);
-    border-radius: 4px;
-    font-size: 0.8rem;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    word-break: break-all;
-    min-width: 0;
   }
   .modal__secret-howto {
     margin: 0.5rem 0 0;

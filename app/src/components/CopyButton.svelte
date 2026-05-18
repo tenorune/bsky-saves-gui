@@ -7,18 +7,56 @@
   let copied = false;
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
-  async function handleClick() {
-    try {
-      await navigator.clipboard.writeText(text);
-      copied = true;
-      if (timeoutId !== null) clearTimeout(timeoutId);
-      timeoutId = setTimeout(() => {
-        copied = false;
-        timeoutId = null;
-      }, 1500);
-    } catch {
-      // Older browsers without clipboard API; ignore.
+  /**
+   * Copy `value` to the clipboard. Tries `navigator.clipboard.writeText`
+   * first (the modern path); on rejection — iOS Safari quirks, async-
+   * context user-activation tracking, restricted contexts — falls back
+   * to the classic temporary-textarea + `document.execCommand('copy')`
+   * dance. execCommand is deprecated but still works in every shipping
+   * browser, including the ones where the Clipboard API silently fails
+   * inside modals. Returns true if either path succeeded.
+   */
+  async function copyToClipboard(value: string): Promise<boolean> {
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(value);
+        return true;
+      } catch {
+        /* fall through to execCommand fallback */
+      }
     }
+    if (typeof document === 'undefined') return false;
+    // Off-screen textarea so the page layout doesn't shift. `readonly`
+    // prevents the keyboard from popping on mobile while we select.
+    const ta = document.createElement('textarea');
+    ta.value = value;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.top = '0';
+    ta.style.left = '-9999px';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, value.length);
+    let ok = false;
+    try {
+      ok = document.execCommand('copy');
+    } catch {
+      ok = false;
+    }
+    document.body.removeChild(ta);
+    return ok;
+  }
+
+  async function handleClick() {
+    const ok = await copyToClipboard(text);
+    if (!ok) return;
+    copied = true;
+    if (timeoutId !== null) clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => {
+      copied = false;
+      timeoutId = null;
+    }, 1500);
   }
 </script>
 
