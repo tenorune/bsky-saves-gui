@@ -16,6 +16,25 @@
 
   const SECRET_GEN = `crypto.getRandomValues(new Uint8Array(32)).reduce((a,b)=>a+b.toString(16).padStart(2,'0'),'')`;
 
+  let generatedSecret = '';
+
+  /**
+   * Fill {@link generatedSecret} with a 64-character hex string from
+   * `crypto.getRandomValues`. Same shape as the DevTools snippet below
+   * — kept for users who want to see what's being generated — but
+   * usable without DevTools (mobile, anyone unfamiliar with the
+   * console). Also seeds the Shared-secret field at the bottom of the
+   * modal so the user doesn't have to copy-paste it twice on this
+   * page; they still copy once into the Cloudflare dashboard.
+   */
+  function handleGenerateSecret() {
+    const bytes = crypto.getRandomValues(new Uint8Array(32));
+    generatedSecret = Array.from(bytes)
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+    workerSecret = generatedSecret;
+  }
+
   type Tab = 'image' | 'articles';
   let activeTab: Tab = 'image';
   $: workerSource = activeTab === 'image' ? workerSourceImageOnly : workerSourceWithArticles;
@@ -141,14 +160,35 @@
       <ol class="modal__steps">
         <li>
           <strong>Generate a shared secret.</strong>
-          Open your browser's DevTools (F12 → Console). Paste this and press
-          Enter:
-          <div class="modal__codeblock">
-            <pre>{SECRET_GEN}</pre>
-            <CopyButton text={SECRET_GEN} label="Copy command" />
+          A 64-character hex string. You'll paste it into the
+          <code>SHARED_SECRET</code> env var on your worker (step 4); the
+          Shared&nbsp;secret field at the bottom of this modal is filled
+          in automatically.
+          <div class="modal__generate-btn-row">
+            <button
+              type="button"
+              class="modal__generate-btn"
+              on:click={handleGenerateSecret}
+            >{generatedSecret ? 'Regenerate' : 'Generate'}</button>
           </div>
-          You'll get a 64-character hex string. Copy it — you'll paste it twice
-          below.
+          {#if generatedSecret}
+            <div class="modal__codeblock">
+              <pre>{generatedSecret}</pre>
+              <CopyButton text={generatedSecret} label="Copy secret" />
+            </div>
+          {/if}
+          <details class="modal__secret-howto">
+            <summary>How is this generated?</summary>
+            <p>
+              Locally in your browser via <code>crypto.getRandomValues</code>
+              — 32 random bytes, hex-encoded. Nothing leaves the page. If you
+              prefer the console, paste this into DevTools (F12 → Console):
+            </p>
+            <div class="modal__codeblock">
+              <pre>{SECRET_GEN}</pre>
+              <CopyButton text={SECRET_GEN} label="Copy command" />
+            </div>
+          </details>
         </li>
 
         <li>
@@ -301,6 +341,31 @@
   }
   .modal__steps ul li {
     margin-bottom: 0.15rem;
+  }
+  .modal__generate-btn-row {
+    margin: 0.5rem 0;
+  }
+  .modal__generate-btn {
+    font: inherit;
+    font-size: 0.85rem;
+    padding: 0.3rem 0.75rem;
+    border: 1px solid color-mix(in oklab, CanvasText 25%, transparent);
+    border-radius: 4px;
+    background: color-mix(in oklab, royalblue 15%, Canvas);
+    color: CanvasText;
+    cursor: pointer;
+  }
+  .modal__secret-howto {
+    margin: 0.5rem 0 0;
+    font-size: 0.85rem;
+    opacity: 0.85;
+  }
+  .modal__secret-howto > summary {
+    cursor: pointer;
+    user-select: none;
+  }
+  .modal__secret-howto > p {
+    margin: 0.5rem 0;
   }
   .modal__codeblock {
     position: relative;
