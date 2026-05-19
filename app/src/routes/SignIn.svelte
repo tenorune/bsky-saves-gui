@@ -9,7 +9,7 @@
   import { DecryptError } from '$lib/crypto';
   import { startLibraryRefresh } from '$lib/library-refresh';
   import { assetToggles, setAssetToggle, loadAssetToggles } from '$lib/asset-toggles';
-  import { createSession, InvalidCredentialsError } from '$lib/atproto';
+  import { createSession, InvalidCredentialsError, NetworkError, PdsError } from '$lib/atproto';
   import { setLastSession } from '$lib/last-session';
   import { saveAccount } from '$lib/account-store';
   import { clearInventory } from '$lib/inventory-store';
@@ -24,6 +24,12 @@
   let useDifferentAccount = false;
   let unlockPassphrase = '';
   let unlockError = '';
+  // True while createSession is in flight. Disables the Sign in button
+  // and flips its label, so the user gets honest feedback that the
+  // request was accepted — without this the button looks dead on PDS
+  // outages (the createSession fetch can sit pending for 30s before
+  // the timeout kicks in).
+  let submitting = false;
 
   $: showForm = !savedPresent || useDifferentAccount;
 
@@ -110,13 +116,29 @@
     resetAllHydrationProgress();
 
     let session;
+    submitting = true;
     try {
       session = await createSession({ pds, identifier: handle, password: appPassword });
     } catch (e) {
-      error = e instanceof InvalidCredentialsError
-        ? 'Wrong handle or app password.'
-        : e instanceof Error ? e.message : String(e);
+      // Discriminate the three failure modes so the user sees an
+      // actionable message instead of a stack-trace fragment. PDS
+      // outages (503/504) and network errors are routine — pre-2026
+      // these surfaced as "TypeError: Failed to fetch" or as a
+      // forever-pending button; both unhelpful.
+      if (e instanceof InvalidCredentialsError) {
+        error = 'Wrong handle or app password.';
+      } else if (e instanceof NetworkError) {
+        error = e.message;
+      } else if (e instanceof PdsError) {
+        error = e.status >= 500
+          ? `Bluesky returned ${e.status}. The PDS may be having trouble — check https://status.bsky.app and try again in a moment.`
+          : `Bluesky returned ${e.status}. ${e.message}`;
+      } else {
+        error = e instanceof Error ? e.message : String(e);
+      }
       return;
+    } finally {
+      submitting = false;
     }
 
     // Set the draft FIRST so persistence-mode checks during
@@ -323,7 +345,9 @@
       <p class="error" role="alert">{error}</p>
     {/if}
 
-    <button type="submit">Sign in</button>
+    <button type="submit" disabled={submitting}>
+      {submitting ? 'Signing in…' : 'Sign in'}
+    </button>
   </form>
   {/if}
 </section>
@@ -426,6 +450,10 @@
     padding: 0.5rem 1rem;
     font: inherit;
     cursor: pointer;
+  }
+  button[type='submit']:disabled {
+    cursor: progress;
+    opacity: 0.7;
   }
   .saved-creds {
     margin-bottom: 1.5rem;
