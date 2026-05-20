@@ -1,5 +1,5 @@
 {
-  "title": "Switch coordination workflow to manifest-driven; update README to match",
+  "title": "Cut GraphQL usage: swap gh pr create for REST POST in the workflow template",
   "files": [
     {
       "source": "coordination/coord-repo-bootstrap/README.md",

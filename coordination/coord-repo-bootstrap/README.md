@@ -130,6 +130,8 @@ Drop this file into each primary repo at `.github/workflows/coordination-pr.yml`
 
 The workflow is **manifest-driven**: one workflow input (the manifest path) ⇒ one PR with any number of files, single commit, title taken from the manifest. Whitespace in inputs is trimmed automatically. Title and file count are read once and exposed as step outputs, so titles with shell-special characters (`$`, backticks, etc.) are passed via env-var rather than embedded in `${{ }}` expressions on shell command lines — no shell-injection foot-gun.
 
+PR creation is a direct **REST `POST /repos/.../pulls`** call via `curl` rather than `gh pr create`. The `gh` CLI's PR-create path runs several GraphQL operations under the hood (current-user lookup, repo-metadata expansion with default-branch + protection rules, then the createPullRequest mutation) and can cost 50–150 GraphQL points per workflow run on a 5000-points/hour budget that's shared with the maintainer's personal `gh` activity. REST PR creation is one call, one point, against a separate REST budget. Same observable outcome; the response shape gives us the html_url which we surface via `::notice::` in the run summary.
+
 ```yaml
 name: Coordination PR
 
@@ -298,16 +300,24 @@ jobs:
           git push -u origin "$BRANCH"
           echo "BRANCH=$BRANCH" >> "$GITHUB_ENV"
 
-      - name: Open PR via gh
+      - name: Open PR via REST API
         if: env.COORD_TOKEN != '' && env.BRANCH != ''
         working-directory: coord-repo
         env:
-          GH_TOKEN: ${{ env.COORD_TOKEN }}
           MANIFEST_PATH: ${{ steps.clean.outputs.manifest }}
           TITLE: ${{ steps.manifest.outputs.title }}
           FILES_COUNT: ${{ steps.manifest.outputs.files_count }}
           BASE: ${{ steps.clean.outputs.base }}
         run: |
+          # Direct REST POST /repos/.../pulls instead of `gh pr create`.
+          # gh's PR-create path runs 3–5 GraphQL operations per call
+          # (current-user lookup, repo-metadata expansion with
+          # default-branch + protection rules, then the mutation itself),
+          # which can cost 50–150 GraphQL points per workflow run on a
+          # 5000-points/hour budget shared with the maintainer's
+          # personal gh activity. The REST endpoint is one call, one
+          # point, and uses a separate REST budget. Same observable
+          # behavior; the response shape gives us the html_url to log.
           MFT="../source-repo/${MANIFEST_PATH}"
           FILES_TABLE="$(
             echo "| Source (this repo) | Target (coord repo) |"
@@ -328,12 +338,22 @@ jobs:
           See the cross-repo coordination process in the coord repo's README for context.
           EOF
           )"
-          gh pr create \
-            --repo tenorune/bsky-saves-coordination \
-            --base "$BASE" \
-            --head "$BRANCH" \
-            --title "$TITLE" \
-            --body "$BODY"
+          PAYLOAD="$(jq -n \
+            --arg title "$TITLE" \
+            --arg head "$BRANCH" \
+            --arg base "$BASE" \
+            --arg body "$BODY" \
+            '{title: $title, head: $head, base: $base, body: $body}')"
+          RESPONSE="$(curl -fsSL -X POST \
+            -H "Authorization: Bearer ${COORD_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" \
+            "https://api.github.com/repos/tenorune/bsky-saves-coordination/pulls")"
+          PR_URL="$(echo "$RESPONSE" | jq -r '.html_url')"
+          echo "::notice::Coordination PR opened: $PR_URL"
+          echo "$PR_URL"
 ```
 
 ## Glossary
