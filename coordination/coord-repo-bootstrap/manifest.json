@@ -1,0 +1,9 @@
+{
+  "title": "Switch coordination workflow to manifest-driven; update README to match",
+  "files": [
+    {
+      "source": "coordination/coord-repo-bootstrap/README.md",
+      "target": "README.md"
+    }
+  ]
+}
