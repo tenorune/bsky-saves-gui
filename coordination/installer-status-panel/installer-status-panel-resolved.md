@@ -23,6 +23,9 @@
 Plus, in session mode only:
 - Idle heartbeat at ~15s cadence to keep the helper's TTL alive
 
+Plus, recommended in persist mode (added by R8's coalesced-flush model):
+- `beforeunload` push with `priority: "final"` so the helper synchronously flushes pre-tab-close state to disk
+
 Sign-out is explicitly NOT a trigger (it stops the push loop but doesn't clear; see R5).
 
 ---
@@ -39,7 +42,10 @@ Sign-out is explicitly NOT a trigger (it stops the push loop but doesn't clear; 
 - `storage.session_ttl_seconds` — pairs with `storage.mode === "session"` to advertise the helper TTL value the GUI is choosing.
 - `last_activity.errors` clarified to `{kind, message, count}` object shape rather than an unspecified array.
 
-Any future additions follow the `schema_version` bump rules in §4.4 notes.
+Subsequently (R8) added:
+- Optional top-level `priority` string field; `"final"` triggers the helper's persist-mode synchronous-flush path.
+
+Any future additions follow the `schema_version` bump rules in §4.4 notes plus the §4.7 sensitivity-check-at-PR-time gate.
 
 ---
 
@@ -77,3 +83,60 @@ Any future additions follow the `schema_version` bump rules in §4.4 notes.
 - **Session mode after sign-out**: heartbeats stop, TTL fires within ~60s, helper drops the in-memory snapshot, panel goes blank.
 
 This mirrors the GUI's own persist/session contract: the user's local library outlives sign-out in persist mode, and is transient in session mode. The helper snapshot's lifecycle tracks that exactly.
+
+---
+
+## R6 — Push debouncing rate
+
+**Raised by:** GUI (2026-05-18) as §7 Q5.
+**Resolved by:** Joint (2026-05-20) — GUI ratified CLI's confirmation.
+
+**Question:** GUI proposed max one push per 500ms. CLI team: does this match what the helper's HTTP stack can comfortably handle, or should the floor be tighter (250ms / 1s)?
+
+**Resolution:** **500ms locked** as the contract floor. CLI confirmed (2026-05-18) the helper can comfortably handle pushes at 10–100/sec — `ThreadingHTTPServer` per-thread, per-request work is sub-millisecond — so 500ms is generous. CLI noted the GUI could tighten to 250ms later for snappier panel feedback during hydration bursts without breaking the contract; the 500ms documented in §4.3 is a floor, not a target. GUI implementation will use 500ms initially and reassess only if panel UX feels laggy.
+
+---
+
+## R7 — Session-mode heartbeat cadence and TTL
+
+**Raised by:** GUI (2026-05-18) as §7 Q6.
+**Resolved by:** Joint (2026-05-20) — GUI ratified CLI's confirmation.
+
+**Question:** GUI proposed 15s heartbeat / 60s TTL (4× safety margin against a single missed push). CLI team: any preference on the TTL value?
+
+**Resolution:** **15s heartbeat / 60s TTL locked.** CLI confirmed (2026-05-18) the helper's implementation is lazy expiry — `now() vs memory_expires_at` comparison on each `GET /status`; no background timer — so any TTL value is equally cheap on the helper side. The number is anchored by panel UX intuition ("tab probably closed by now"), not by helper performance. 60s is the published value; the heartbeat must remain ≤ TTL/3 to survive a single missed push (15s satisfies this). The TTL value is in the payload (`storage.session_ttl_seconds`), so future tuning is a payload-only change.
+
+---
+
+## R8 — Persist-mode disk-write frequency
+
+**Raised by:** GUI (2026-05-18) as §7 Q7.
+**Resolved by:** Joint (2026-05-20) — GUI adopted CLI's coalesced-flush proposal.
+
+**Question:** Per §4.2, the helper atomic-writes to disk on every persist-mode push. For a heavy hydration phase (~2 pushes/second from §4.3 debouncer) that's a lot of disk writes. Coalesce, or keep per-push?
+
+**Resolution:** **Coalesced background flush** per CLI's proposal:
+
+- In-memory snapshot updates immediately on every `POST /status` (so `GET /status` always sees the latest).
+- Disk flush happens at most once per second via a debounced background task that observes the in-memory snapshot.
+- GUI can send `priority: "final"` (new optional top-level string in the §4.4 payload) to bypass the coalescer and flush immediately — used on `beforeunload` so terminal state lands on disk before tab close. GUI implementation uses `navigator.sendBeacon()` or `fetch({keepalive: true})` because the unload event doesn't reliably await async work.
+- Helper shutdown (SIGTERM / Ctrl-C) synchronously flushes the latest in-memory snapshot to disk before exiting.
+
+Tradeoff accepted: up to ~1s of staleness on crash (the in-memory state ahead of disk by at most one debounce window). The phase-1 contract does not promise crash-recovery freshness beyond the pre-push value.
+
+GUI design call on `priority`: defined as a string enum, not a boolean, so future priorities (`"low"` for non-essential idle heartbeats, etc.) can be added without a schema bump.
+
+Implementation note for the helper: the per-write tmp-name concurrency hazard CLI flagged in §4.2 (the broader inventory-writer's single-tmp scheme racing under multi-threaded writes) is sidestepped naturally by the single background flush task. Per-write tmp names called out in §4.2 as defense-in-depth.
+
+---
+
+## R9 — Resolved-questions archive companion file missing
+
+**Raised by:** CLI (2026-05-18) as §7 Q9.
+**Resolved by:** GUI (2026-05-20) — pushed companion file in the same PR as this revision.
+
+**Question:** §4.2, §4.3, §6, and other sections backlink to `R3`/`R4`/`R5` in `installer-status-panel-resolved.md`, but that file was not present at the coord repo's `main` (raw URL returned 404). The GUI revision's changelog said "resolved appendix seeded with R1–R5" but the companion file wasn't included in the merged version.
+
+**Resolution:** Root cause was the original coordination workflow being single-file per run; the GUI's first push only carried `installer-status-panel.md`, not its companion. The workflow has since been upgraded (2026-05-20) to a manifest-driven model that PRs an arbitrary file list in a single PR. The GUI's 2026-05-20 revision includes both files in one PR via that mechanism, closing the gap.
+
+Process forward: any future revision that touches both files will include both in the manifest. Workflow drift between the body's `(see R<n>)` backlinks and the appendix's presence is now mechanically prevented — the manifest review during PR is where any mismatch surfaces.

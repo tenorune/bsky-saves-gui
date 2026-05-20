@@ -1,0 +1,13 @@
+{
+  "title": "GUI revision: resolve Q5/Q6/Q7/Q9; add priority:final to payload; restore -resolved.md companion",
+  "files": [
+    {
+      "source": "coordination/installer-status-panel/installer-status-panel.md",
+      "target": "docs/installer-status-panel.md"
+    },
+    {
+      "source": "coordination/installer-status-panel/installer-status-panel-resolved.md",
+      "target": "docs/installer-status-panel-resolved.md"
+    }
+  ]
+}

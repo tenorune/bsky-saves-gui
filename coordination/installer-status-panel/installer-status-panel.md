@@ -1,6 +1,6 @@
 # Installer status panel — cross-repo coordination doc
 
-> **Status:** drafting (2026-05-18). GUI revision: session-mode TTL + clear-path correction + `current_state` field + heartbeat/debounce requirements. Awaiting CLI + installer review.
+> **Status:** drafting (2026-05-20). GUI revision: session-mode TTL + clear-path correction + `current_state` field + heartbeat/debounce requirements. CLI revision: answers to Q5–Q7, restored §4.7 security model, raised Q9. GUI revision (this round): resolves Q5/Q6/Q7/Q9 in body; adds optional `priority: "final"` payload field per CLI's Q7 proposal; restores `installer-status-panel-resolved.md` companion (R1–R9). Awaiting installer review of Q8.
 > **Lives at:** `bsky-saves-coordination:docs/installer-status-panel.md` (canonical). Mirrored as a draft in each primary repo's `coordination` branch and PRed back via cross-repo workflow.
 > **Audience:** maintainers of `bsky-saves` (helper / CLI), `bsky-saves-gui` (Svelte PWA), and `bsky-saves-install` (native macOS app + future Win/Linux installers).
 > **Scope:** the contract for the installer's status panel — what info it surfaces, where the info comes from, who's responsible for each leg.
@@ -21,8 +21,8 @@ This document captures the design that emerged from the v0.6.x release-cycle con
 
 | Repo | What it owns in this design |
 |---|---|
-| `bsky-saves` | The helper daemon. New `POST /status`, `GET /status`, and `DELETE /status` endpoints in phase 1; the on-disk status-cache file for persist mode; an in-memory TTL slot for session mode; auth gating identical to other credentialed endpoints. |
-| `bsky-saves-gui` | Pushing summary library stats to the helper at meaningful moments. Owns the payload contents (§4.4), the push trigger list (§4.3), the session-mode heartbeat (§4.3), and how library state is computed. |
+| `bsky-saves` | The helper daemon. New `POST /status`, `GET /status`, and `DELETE /status` endpoints in phase 1; the on-disk status-cache file for persist mode with coalesced background flush; an in-memory TTL slot for session mode; auth gating identical to other credentialed endpoints. |
+| `bsky-saves-gui` | Pushing summary library stats to the helper at meaningful moments. Owns the payload contents (§4.4), the push trigger list (§4.3), the session-mode heartbeat (§4.3), the `priority: "final"` hint on terminal pushes (§4.3, §4.4), and how library state is computed. |
 | `bsky-saves-install` | The status panel UI. Polls `GET /status` and renders. Distinguishes "no snapshot yet", "active snapshot", and "stale snapshot" (where `updated_at` is older than a UI-defined threshold). In later phases, issues commands. |
 
 Each repo owns its part of the contract. The three repos coordinate via this document.
@@ -49,12 +49,13 @@ For the typical installer user the library lives in tier 2 or 3 (they use the GU
 GUI                       Helper                            Panel (installer)
 ─── POST /status ─────►   ┌─────────────────────┐
                           │ in-memory snapshot  │  ◄── GET /status ─── (poll)
+                          │     (always)        │
                           │                     │
                           │ persist mode:       │
-                          │   atomic-write ↓    │
+                          │   coalesced flush ↓ │
                           └─────────────────────┘
                                    │
-                                   ▼
+                                   ▼ (≤ 1/s, +priority:final, +shutdown)
                           <config_dir>/bsky-saves/status.json
                                    ▲
                               load on
@@ -62,7 +63,7 @@ GUI                       Helper                            Panel (installer)
                               (persist mode only)
 ```
 
-The helper is a state-cache proxy: it holds the latest status the GUI reported. In persist mode it mirrors that to a small file on disk so it survives helper restarts. In session mode it holds it in memory with a TTL that expires when the GUI's heartbeats stop. Either way, `GET /status` serves whatever the current state is.
+The helper is a state-cache proxy: it holds the latest status the GUI reported. In persist mode it mirrors that to a small file on disk so it survives helper restarts, with disk writes coalesced through a background flush task. In session mode it holds it in memory with a TTL that expires when the GUI's heartbeats stop. Either way, `GET /status` serves whatever the current state is.
 
 ### 4.2 Helper-side surface (`bsky-saves` repo)
 
@@ -73,8 +74,8 @@ The helper is a state-cache proxy: it holds the latest status the GUI reported. 
 - Response: `204 No Content` on accept.
 - Concurrency: last-write-wins (see [R3](./installer-status-panel-resolved.md#r3--multiple-gui-sessions-on-one-helper)). The payload always carries `did` so per-DID indexing is a forward-compatible upgrade.
 - **Mode-dependent storage** (the privacy-critical bit):
-  - When `storage.mode === "persist"` (default), the helper updates its in-memory copy AND atomic-writes the on-disk mirror at `<config_dir>/bsky-saves/status.json`. Snapshot survives helper restart (loaded into memory on startup).
-  - When `storage.mode === "session"`, the helper updates its in-memory copy ONLY — no disk write — and applies a TTL whose value comes from the payload's `storage.session_ttl_seconds`. Each subsequent push from the same DID refreshes the TTL. When the TTL expires with no refresh, the helper drops the in-memory snapshot.
+  - When `storage.mode === "persist"` (default), the helper updates its in-memory copy IMMEDIATELY on every push (so subsequent `GET /status` reflects the latest), and queues a flush to a coalesced background task. The background task atomic-writes the on-disk mirror at `<config_dir>/bsky-saves/status.json` at most once per second. If the incoming push has `priority: "final"` (§4.4), the coalescer is bypassed and the flush runs synchronously before returning 204. On helper shutdown (SIGTERM / Ctrl-C), any in-memory snapshot newer than the on-disk copy is synchronously flushed before exit. Tradeoff: up to ~1s of staleness on crash; acceptable for status (the contract doesn't promise crash-recovery freshness beyond the pre-push value). See [R8](./installer-status-panel-resolved.md#r8--persist-mode-disk-write-frequency).
+  - When `storage.mode === "session"`, the helper updates its in-memory copy ONLY — no disk write, ever, even with `priority: "final"` — and applies a TTL whose value comes from the payload's `storage.session_ttl_seconds`. Each subsequent push from the same DID refreshes the TTL. When the TTL expires with no refresh, the helper drops the in-memory snapshot.
   - The two storage tiers (memory-session, disk-persist) are independent. A session-mode push does NOT overwrite a previously written persist-mode disk snapshot from a different sign-in. Implementer's note: a simple model is `{ memory_snapshot, memory_expires_at, disk_snapshot }`. Reads (`GET /status`) prefer unexpired memory, fall back to disk, return 404 if neither exists.
 
 The mode-dependent split honors the GUI's persist-vs-session privacy contract: a session-mode user closes their browser expecting "this browser keeps no record"; the heartbeat-driven TTL ensures the helper drops the snapshot within ~60s of tab close, and nothing was ever written to disk.
@@ -96,7 +97,7 @@ The mode-dependent split honors the GUI's persist-vs-session privacy contract: a
 
 - Same directory as the token file (`status.json` sibling to `token`).
 - File perms: `0600` (matches the token file's threat model — the status payload carries handle info worth keeping out of other users' reads).
-- Written via the existing `atomic_write_inventory` pattern (temp + `os.replace`).
+- Written by the coalesced background flush task. Uses concurrency-safe per-write tmp names (not the broader inventory-writer's single-tmp scheme) since the background task is single-threaded by design — the per-write naming is defense in depth against a future contributor running the same writer from multiple threads.
 - Loaded into the helper's in-memory cache on startup; if file missing, in-memory cache starts empty.
 - NOT written in session mode. The file's presence reflects exactly one user history: a persist-mode push happened, the daemon now caches it across restarts.
 
@@ -114,7 +115,11 @@ The GUI is responsible for **what** to push and **when**.
 
 **Push triggers — REQUIRED in session mode:**
 
-- Idle heartbeat at a cadence shorter than the helper's session TTL (e.g., heartbeat every 15s when TTL is 60s — see Q6). This keeps the helper's in-memory session-mode snapshot alive while the tab is open. In persist mode the heartbeat is optional (no TTL to keep alive).
+- Idle heartbeat at 15s cadence (within the helper's 60s session TTL — see [R7](./installer-status-panel-resolved.md#r7--session-mode-heartbeat-cadence-and-ttl)). This keeps the helper's in-memory session-mode snapshot alive while the tab is open. In persist mode the heartbeat is optional (no TTL to keep alive).
+
+**Push triggers — RECOMMENDED in persist mode:**
+
+- On `beforeunload` (tab close, navigation away), send a final push with `priority: "final"` (§4.4) so the helper bypasses its coalescer and flushes the latest in-memory state to disk synchronously. Without this, up to ~1s of state can be lost on tab close. The push is sent via `navigator.sendBeacon()` or a `fetch()` with `keepalive: true` because the unload event doesn't reliably await async work otherwise. Session mode does NOT use this — disk is never written for session mode.
 
 **Sign-out:**
 
@@ -126,7 +131,7 @@ The GUI is responsible for **what** to push and **when**.
 
 **Push rate limiting (debouncing):**
 
-- The GUI batches/coalesces pushes so that no more than one push is in flight per ~500ms (proposed; see Q5). A burst of state changes during hydration (e.g., 10 images completed per second from the underlying Svelte store updates) generates at most ~2 pushes per second, with the most recent state always carried forward. The cadence floor is a GUI implementation detail; the contract guarantees the helper won't be hit at JS-store-update rate.
+- The GUI batches/coalesces pushes so that no more than one push is in flight per 500ms (see [R6](./installer-status-panel-resolved.md#r6--push-debouncing-rate)). A burst of state changes during hydration (e.g., 10 images completed per second from the underlying Svelte store updates) generates at most ~2 pushes per second, with the most recent state always carried forward. The contract guarantees the helper won't be hit at JS-store-update rate; CLI implementation notes that the helper could handle tighter (250ms) without trouble if the GUI prefers snappier panel feedback during hydration bursts — GUI can tighten later without contract change.
 
 **Failure handling:**
 
@@ -144,6 +149,7 @@ The GUI is responsible for **what** to push and **when**.
   "schema_version": 1,
   "updated_at": "2026-05-17T20:15:00Z",
   "current_state": "idle",
+  "priority": "final",
   "library": {
     "handle": "alice.bsky.social",
     "did": "did:plc:abc123…",
@@ -180,10 +186,11 @@ Field-level notes:
 - `schema_version` — integer; bumps on non-backward-compatible payload changes. The panel reads older schemas and degrades gracefully (display what it understands, ignore what it doesn't).
 - `updated_at` — ISO-8601 UTC; helps the panel surface staleness when the GUI hasn't pushed recently.
 - `current_state` — one of `"idle"`, `"refreshing"`, `"hydrating"`, `"error"`. The panel uses this to show a live spinner during in-flight work without having to infer from `last_activity.finished_at`. `"error"` means the most recent activity failed; details in `last_activity.errors`.
+- `priority` — optional top-level string; when set to `"final"` the helper bypasses its persist-mode flush coalescer and writes to disk synchronously before responding. Used by the GUI on `beforeunload` to ensure the last-known state lands on disk before tab close. Absent or any other value = treated as normal-priority (default coalesced flush). Session mode ignores this field entirely — session never writes to disk regardless. Extensible to other values (e.g., `"low"` for non-essential idle heartbeats) without a schema bump.
 - `library` — minimal identity + counts. `did` is required from sign-in onward (drives last-write-wins single-slot today, per-DID indexing later). `by_status` mirrors the v0.6.0 retention categories. Always present once the user is signed in and has a non-empty inventory.
 - `hydration` — per-feature completion. Each entry is `{completed, total}`. Optional sections; absent entries mean the GUI can't cheaply compute that metric.
 - `storage.mode` — `"session"` or `"persist"`. Drives the helper's storage decision (§4.2). Required.
-- `storage.session_ttl_seconds` — integer; required when `mode === "session"`, null/absent in persist mode. The TTL the helper applies to its in-memory snapshot before dropping. Typical: 60s.
+- `storage.session_ttl_seconds` — integer; required when `mode === "session"`, null/absent in persist mode. The TTL the helper applies to its in-memory snapshot before dropping. Locked at 60s (see [R7](./installer-status-panel-resolved.md#r7--session-mode-heartbeat-cadence-and-ttl)); future tuning is a payload-only change.
 - `storage.browser_bytes_estimate` — `navigator.storage.estimate()` result if available; null otherwise. Informational; helps the panel show approximate disk footprint.
 - `last_activity.kind` — `"fetch" | "hydrate_articles" | "hydrate_threads" | "hydrate_images" | "manual_refresh" | "idle"`. The panel renders e.g. "Last activity: fetch · 2 min ago · +3 / −0."
 - `last_activity.errors` — array of `{kind: string, message: string, count: number}` objects. `kind` is a short stable identifier (e.g., `"pds_timeout"`, `"helper_504"`, `"thread_fetch_failed"`); `message` is human-readable; `count` is the multiplicity within this activity. Empty array means no errors. The panel can render counts and tooltip the messages.
@@ -192,7 +199,7 @@ Fields are optional except where noted; the GUI omits sections it can't cheaply 
 
 ### 4.5 Panel-side surface (`bsky-saves-install` repo)
 
-The panel polls `GET /status` at a low rate while open (≤ once every 5 seconds is plenty given humans don't watch dashboards updating at sub-second granularity), authenticates with the same session token it already holds from pairing, renders the fields.
+The panel polls `GET /status` at a low rate while open (≤ once every 5 seconds is plenty given humans don't watch dashboards updating at sub-second granularity — final cadence determined by Q8), authenticates with the same session token it already holds from pairing, renders the fields.
 
 UI choices live entirely in the installer repo. Suggested defaults: counts as numerals, hydration as bar gauges, `updated_at` rendered as "12 min ago" relative time, `current_state === "refreshing"` as a small spinner.
 
@@ -205,6 +212,44 @@ Staleness handling: if `updated_at` is older than a panel-defined threshold (e.g
 All three endpoints (`POST /status`, `GET /status`, `DELETE /status`) sit behind the existing `_check_token` middleware introduced in v0.6.2. Same `Authorization: Bearer <token>` semantics as `/fetch`, `/auth/check`, etc. Same `WWW-Authenticate` shaping on 401 (per v0.6.5's add) so the GUI's 401-interceptor handles them identically.
 
 The trust boundary is unchanged: anyone who can read `<config_dir>/bsky-saves/token` can call these endpoints; same as today.
+
+### 4.7 Security model — clear-text rationale
+
+The status payload is **clear text at every layer**: in transit on loopback HTTP, in helper process memory, and in the on-disk mirror file (persist mode only). This is intentional. The trust model and the payload's sensitivity bound jointly justify it.
+
+#### Layers and their protections
+
+| Stage | Form | What protects it |
+|---|---|---|
+| GUI → helper | Plain HTTP `POST /status` body | Helper binds `127.0.0.1` only; Bearer auth from `_check_token` |
+| Helper memory | Python dict in process heap | Standard same-user process isolation |
+| Helper → disk (persist mode only) | JSON file at `<config_dir>/bsky-saves/status.json`, `0600` | File-system perms; same trust boundary as the token file |
+| Helper → panel | Plain HTTP `GET /status` body | Same as GUI → helper |
+
+#### Why each layer isn't encrypted
+
+- **Wire is not HTTPS** because the helper binds loopback only. Loopback traffic never leaves the machine, so there's no off-machine MITM exposure. Adding HTTPS would require provisioning a self-signed cert that every consumer (GUI, panel, scripts using `bsky-saves token`) accepts; the threat model doesn't justify it. Other processes on the same machine running as the same user can sniff loopback traffic, but those same processes can also read the token file at `0600` and call the helper with full credentials — so loopback HTTPS doesn't add real defense.
+- **Memory is not encrypted** because any same-user process can attach a debugger to any other same-user process. Encryption at rest in process memory is theater.
+- **Disk is not encrypted** for the same reason the token file isn't: `0600` perms + same-user trust model. Encrypting it would require either OS-keychain integration (per-platform complexity) or a user-managed password, both of which exceed the value being protected.
+
+#### What the payload MUST NOT contain
+
+This is the load-bearing constraint that makes the above acceptable. Each new field is reviewed against this list at PR time:
+
+- Any save's full post text, author identity beyond the user's own handle, URI, or attached media
+- JWTs, app passwords, OAuth tokens, refresh tokens, or the pairing token itself
+- Image bytes, image URLs containing dynamic-key tokens, or local file paths revealing the user's filesystem layout
+- Per-save metadata (titles, dates, links, hashtags, replied-to identities)
+- Search queries, follow graph, mute/block lists, or any social-graph data
+- Anything that, if leaked, would compromise the user's account or their library's contents
+
+The phase-1 payload (§4.4) contains only: the user's own public Bluesky identity (handle + DID — both publicly resolvable), aggregate counts, completion ratios, storage mode, and last-activity summary. Sensitivity floor: roughly "someone who reads this learns Alice has 1,247 saves, last fetched 12 min ago, 78% have article hydration." That's lower-sensitivity than what's already in the user's tier-1 inventory file (which CLI users keep on disk in clear text without comparable scrutiny).
+
+#### Sensitivity check at PR time
+
+Any PR that adds a field to the payload (whether in `bsky-saves-gui`'s push code or in this doc's payload schema) must include a one-sentence note answering: *"What does this field tell a reader, and is it in the MUST NOT list above?"* If unsure, default to omitting and reopen the question with the maintainer of `bsky-saves` before merging.
+
+This check applies symmetrically to phase 2's command payloads when that work lands.
 
 ## 5. Phase 2 — commands from panel to GUI
 
@@ -237,12 +282,6 @@ Multi-handle / multi-inventory edge cases (the maintainer setup explicitly hits 
 
 Numbered for ease of reference. Answers go inline once locked; resolved items move to [`installer-status-panel-resolved.md`](./installer-status-panel-resolved.md) with a backlink from the section they inform.
 
-**Q5 — Push debouncing rate** *(raised by GUI 2026-05-18)*. GUI proposes max one push per 500ms (see §4.3). CLI team: does this match what the helper's HTTP stack can comfortably handle, or should the floor be tighter (250ms / 1s)? If 500ms is fine, this gets folded into §4.3 as the canonical floor.
-
-**Q6 — Session-mode heartbeat cadence and TTL** *(raised by GUI 2026-05-18)*. GUI proposes 15s heartbeat / 60s TTL (4× safety margin against a single missed push). CLI team: any preference on the TTL value? Longer TTL = more tolerance for network blips; shorter = quicker cleanup after tab close. Whatever's chosen, the heartbeat should be ≤ TTL/3 to survive a missed push.
-
-**Q7 — Persist-mode disk-write frequency** *(raised by GUI 2026-05-18)*. Per §4.2, the helper atomic-writes to disk on every persist-mode push. For a heavy hydration phase (~2 pushes/second from §4.3 debouncer) that's a lot of disk writes. Is this OK, or does the helper want to coalesce writes (e.g., flush at most once per second, with a final write triggered by a `priority: "final"` hint the GUI can send on `beforeunload`)?
-
 **Q8 — Installer poll cadence** *(raised by GUI 2026-05-18 for installer team)*. §4.5 suggests ≤ once per 5 seconds. Installer team: what cadence works best with idle-friendly power management on macOS / Windows? Slower polls (e.g., 10s) are friendlier to battery; faster (1–2s) feels more "live" to the user. Or: switch cadence based on whether the panel is currently visible / focused?
 
 ## 8. Maintenance
@@ -266,7 +305,9 @@ When the design changes substantively (e.g., adopting phase 2's command flow), b
 | Date | Author | Summary |
 |---|---|---|
 | 2026-05-17 | CLI | Initial draft (§§1–8 + Appendices A–B). Open questions Q1–Q4 surfaced. |
-| 2026-05-18 | GUI | Session-mode privacy: added mode-dependent storage to §4.2 (memory-only + TTL for session, atomic disk write for persist). Added `current_state` field and `storage.session_ttl_seconds` to §4.4 payload. Clarified `last_activity.errors` shape. Made §4.3 push triggers explicit (required vs. mode-required). Added `DELETE /status` endpoint to §4.2 for explicit "Clear all data" path; clarified that sign-out is NOT a clear. Documented push debouncing floor. Raised Q5–Q8. Resolved Q1–Q4 in body; resolved appendix seeded with R1–R5. |
+| 2026-05-18 | GUI | Session-mode privacy: added mode-dependent storage to §4.2 (memory-only + TTL for session, atomic disk write for persist). Added `current_state` field and `storage.session_ttl_seconds` to §4.4 payload. Clarified `last_activity.errors` shape. Made §4.3 push triggers explicit (required vs. mode-required). Added `DELETE /status` endpoint to §4.2 for explicit "Clear all data" path; clarified that sign-out is NOT a clear. Documented push debouncing floor. Raised Q5–Q8. Resolved Q1–Q4 in body; resolved appendix seeded with R1–R5 (companion file NOT in this PR — addressed below). |
+| 2026-05-18 | CLI | Answered Q5 (concurs with 500ms floor), Q6 (concurs with 60s/15s), Q7 (proposes coalesced background flush ≤1/s, with `priority: "final"` and shutdown-synchronous exceptions). Restored §4.7 security model (clear-text rationale + MUST-NOT list + sensitivity check at PR time) — drafted on a primary-repo branch that wasn't included in the GUI revision's basis. Noted in §4.2 that `<config_dir>/bsky-saves/status.json` write path may use concurrency-safe per-write tmp names if Q7 resolves on coalesced writes. Raised Q9 re: missing `installer-status-panel-resolved.md` companion file (R3/R4/R5 backlinks 404 against coord repo's main). No body content changed beyond §4.7 restoration; Q7's implied §4.2 body update held until the question resolves. |
+| 2026-05-20 | GUI | Resolved Q5 in §4.3 (500ms floor locked, with note that GUI may tighten to 250ms later without contract change). Resolved Q6 in §4.3 (15s heartbeat / 60s TTL locked). Resolved Q7 in §4.2 (adopts CLI's coalesced background flush proposal; persist-mode in-memory updates immediately, disk flush ≤ 1/s, `priority: "final"` bypass via `navigator.sendBeacon` on `beforeunload`, shutdown-synchronous flush). Added `priority` optional top-level string field to §4.4 payload (string-enum for forward compat: `"final"` is the only recognized non-default value today). Added "RECOMMENDED in persist mode" trigger to §4.3 covering the beforeunload final push. Resolved Q9 by including `installer-status-panel-resolved.md` in this same PR (workflow now supports multi-file manifests). Moved Q5/Q6/Q7/Q9 to appendix as R6/R7/R8/R9. Q8 (installer poll cadence) remains open. |
 
 ---
 
@@ -275,8 +316,9 @@ When the design changes substantively (e.g., adopting phase 2's command flow), b
 A condensed checklist for whoever drives phase 1 to ground. None of these are open design questions; they're sequencing-and-ownership decisions.
 
 - [ ] Confirm helper-side endpoints (`POST /status`, `GET /status`, `DELETE /status`) and persistence path with the `bsky-saves` maintainer.
-- [ ] GUI team commits to the §4.4 payload shape (or proposes amendments). Section 7 open questions Q5–Q8 resolved.
+- [ ] GUI team commits to the §4.4 payload shape (final shape locks once Q8 resolves and the panel team confirms no extra fields are needed for poll-cadence UX).
 - [ ] Installer team confirms polling cadence (Q8) and UI rendering pass.
+- [x] Resolved-questions companion file (`installer-status-panel-resolved.md`) seeded and present at coord repo's `main` (closed by GUI 2026-05-20 — see [R9](./installer-status-panel-resolved.md#r9--resolved-questions-archive-companion-file-missing)).
 - [ ] Spec docs open in each primary repo (`docs/superpowers/specs/YYYY-MM-DD-status-snapshot.md` per the project convention); plan docs follow; implementation goes through the existing subagent-driven-development flow.
 - [ ] Coordinated release: helper version that ships the endpoints, GUI version that ships the push call, installer version that ships the panel. All three pinned together in the installer's bundle.
 
@@ -289,3 +331,4 @@ A condensed checklist for whoever drives phase 1 to ground. None of these are op
 - **Library** — the user's collection of bookmarked saves, regardless of which storage tier holds it.
 - **Status / status payload** — the JSON object the GUI pushes to the helper to describe library state for panel consumption. Defined in §4.4.
 - **Persist mode / session mode** — the user's privacy choice at sign-in. Persist: data survives browser quit (IndexedDB / disk). Session: data wiped at tab close (sessionStorage / memory only). The helper's storage behavior in §4.2 mirrors this distinction.
+- **Priority hint** — the optional `priority` field in the §4.4 payload. `"final"` instructs the helper to bypass its persist-mode flush coalescer and write to disk synchronously before responding. Used by the GUI on `beforeunload` so terminal state lands on disk before tab close.
