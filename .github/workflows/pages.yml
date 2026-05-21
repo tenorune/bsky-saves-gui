@@ -47,7 +47,7 @@ jobs:
           VITE_OPERATOR_IMAGE_PROXY_KEY: ${{ vars.VITE_OPERATOR_IMAGE_PROXY_KEY }}
         run: pnpm build
 
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
 
       - uses: actions/upload-pages-artifact@v3
         with:
