@@ -154,6 +154,30 @@ let activation: ActivationInputs = {
 let wasActive = false;
 let subscriptionDisposers: Array<() => void> = [];
 
+// Locked by R7 (installer-status-panel-resolved.md). Heartbeat
+// cadence must be ≤ TTL/3 to survive a missed push.
+export const HEARTBEAT_MS = 15_000;
+
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+let persistenceModeNow: 'persist' | 'session-only' = 'persist';
+
+function refreshHeartbeat(): void {
+  const shouldRun = isActive(activation) && persistenceModeNow === 'session-only';
+  if (shouldRun && heartbeatTimer === null) {
+    heartbeatTimer = setInterval(() => {
+      void pushOnce();
+    }, HEARTBEAT_MS);
+  } else if (!shouldRun && heartbeatTimer !== null) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
+}
+
+export function _setPersistenceModeForTests(mode: 'persist' | 'session-only'): void {
+  persistenceModeNow = mode;
+  refreshHeartbeat();
+}
+
 function reevaluateActivation(): void {
   const nowActive = isActive(activation);
   if (nowActive && !wasActive) {
@@ -163,6 +187,7 @@ function reevaluateActivation(): void {
   // Active → Dormant doesn't need an action here — the debouncer simply
   // stops scheduling because schedulePush() checks isActive(activation).
   wasActive = nowActive;
+  refreshHeartbeat();
 }
 
 export function initStatusPusher(): void {
@@ -194,10 +219,15 @@ export function initStatusPusher(): void {
   subscriptionDisposers.push(imageHydration.subscribe(onChange));
   subscriptionDisposers.push(articleHydration.subscribe(onChange));
   subscriptionDisposers.push(threadProgress.subscribe(onChange));
-  subscriptionDisposers.push(persistenceMode.subscribe(onChange));
+  subscriptionDisposers.push(persistenceMode.subscribe((m) => {
+    persistenceModeNow = m;
+    refreshHeartbeat();
+    schedulePush(isActive(activation));
+  }));
 }
 
 export function _disposeStatusPusherForTests(): void {
+  if (heartbeatTimer !== null) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
   for (const dispose of subscriptionDisposers) dispose();
   subscriptionDisposers = [];
   activation = { helperDetected: false, pairingState: 'unpaired', lastSession: null };

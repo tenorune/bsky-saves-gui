@@ -7,6 +7,7 @@ import {
 } from './status-pusher';
 import { schedulePushForTests, _flushDebouncerForTests, DEBOUNCE_MS } from './status-pusher';
 import { initStatusPusher, _disposeStatusPusherForTests, _setActivationForTests } from './status-pusher';
+import { HEARTBEAT_MS, _setPersistenceModeForTests } from './status-pusher';
 import { setLastSession, clearLastSession } from './last-session';
 import { setPairingToken, clearPairingToken } from './pairing-token';
 
@@ -190,5 +191,75 @@ describe('initStatusPusher subscription wiring', () => {
     });
     await flushMicrotasks();
     expect(fetchSpy).not.toHaveBeenCalled(); // no extra push without rising edge
+  });
+});
+
+describe('heartbeat (session mode)', () => {
+  const fetchSpy = vi.fn();
+  beforeEach(() => {
+    vi.useFakeTimers();
+    fetchSpy.mockReset();
+    fetchSpy.mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchSpy);
+    _resetStatusPusherForTests();
+    setLastSession({ pds: 'https://bsky.social', accessJwt: 'a', refreshJwt: 'r', did: 'did:plc:alice', handle: 'alice.bsky.social' });
+    setPairingToken('AAAAAAAAAAAAAAAAAAAAAA');
+  });
+  afterEach(() => {
+    _disposeStatusPusherForTests();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    clearLastSession();
+    clearPairingToken();
+  });
+
+  const flushMicrotasks = async (): Promise<void> => {
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+  };
+
+  it('fires a heartbeat push every HEARTBEAT_MS while active + session mode', async () => {
+    initStatusPusher();
+    _setPersistenceModeForTests('session-only');
+    _setActivationForTests({
+      helperDetected: true,
+      pairingState: 'paired',
+      lastSession: { pds: 'https://bsky.social', accessJwt: 'a', refreshJwt: 'r', did: 'did:plc:alice', handle: 'alice.bsky.social' },
+    });
+    await flushMicrotasks(); // immediate fresh-state push
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    fetchSpy.mockClear();
+    await vi.advanceTimersByTimeAsync(HEARTBEAT_MS);
+    expect(fetchSpy).toHaveBeenCalledTimes(1); // heartbeat #1
+    await vi.advanceTimersByTimeAsync(HEARTBEAT_MS);
+    expect(fetchSpy).toHaveBeenCalledTimes(2); // heartbeat #2
+  });
+
+  it('does not run a heartbeat in persist mode', async () => {
+    initStatusPusher();
+    _setPersistenceModeForTests('persist');
+    _setActivationForTests({
+      helperDetected: true,
+      pairingState: 'paired',
+      lastSession: { pds: 'https://bsky.social', accessJwt: 'a', refreshJwt: 'r', did: 'did:plc:alice', handle: 'alice.bsky.social' },
+    });
+    await flushMicrotasks(); // immediate fresh-state push
+    fetchSpy.mockClear();
+    await vi.advanceTimersByTimeAsync(HEARTBEAT_MS * 3);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('clears the heartbeat when active flips to dormant', async () => {
+    initStatusPusher();
+    _setPersistenceModeForTests('session-only');
+    _setActivationForTests({
+      helperDetected: true,
+      pairingState: 'paired',
+      lastSession: { pds: 'https://bsky.social', accessJwt: 'a', refreshJwt: 'r', did: 'did:plc:alice', handle: 'alice.bsky.social' },
+    });
+    await flushMicrotasks();
+    fetchSpy.mockClear();
+    _setActivationForTests({ helperDetected: false, pairingState: 'paired', lastSession: null });
+    await vi.advanceTimersByTimeAsync(HEARTBEAT_MS * 3);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
