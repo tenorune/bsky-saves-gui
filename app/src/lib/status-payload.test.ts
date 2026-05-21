@@ -92,4 +92,21 @@ describe('buildStatusPayload', () => {
     expect(payload!.hydration.articles).toBeUndefined();
     expect(payload!.hydration.threads).toBeUndefined();
   });
+
+  it('storage.mode is "persist" with null TTL in persist mode', () => {
+    const payload = buildStatusPayload({ ...BASE_INPUTS, persistenceMode: 'persist' });
+    expect(payload!.storage.mode).toBe('persist');
+    expect(payload!.storage.session_ttl_seconds).toBeNull();
+  });
+
+  it('storage.mode is "session" with 60s TTL when persistenceMode is session-only', () => {
+    const payload = buildStatusPayload({ ...BASE_INPUTS, persistenceMode: 'session-only' });
+    expect(payload!.storage.mode).toBe('session');
+    expect(payload!.storage.session_ttl_seconds).toBe(60);
+  });
+
+  it('storage.browser_bytes_estimate passes through from inputs', () => {
+    const payload = buildStatusPayload({ ...BASE_INPUTS, browserBytesEstimate: 18234567 });
+    expect(payload!.storage.browser_bytes_estimate).toBe(18234567);
+  });
 });

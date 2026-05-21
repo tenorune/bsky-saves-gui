@@ -4,6 +4,10 @@ import type { HydrationProgress } from './hydration-state';
 import type { PersistenceMode } from './persistence-mode';
 import type { LastSession } from './last-session';
 
+// Locked by R7 in installer-status-panel-resolved.md. The value lives in
+// the payload so future tuning is a payload-only change.
+const SESSION_TTL_SECONDS = 60;
+
 export interface StatusSnapshotInputs {
   readonly inventoryState: InventoryState;
   readonly libraryRefreshState: LibraryRefreshState;
@@ -98,8 +102,8 @@ export function buildStatusPayload(inputs: StatusSnapshotInputs): StatusPayload 
       ...(hydrationEntry(inputs.threadProgress) ? { threads: hydrationEntry(inputs.threadProgress)! } : {}),
     },
     storage: {
-      mode: 'persist',
-      session_ttl_seconds: null,
+      mode: inputs.persistenceMode === 'session-only' ? 'session' : 'persist',
+      session_ttl_seconds: inputs.persistenceMode === 'session-only' ? SESSION_TTL_SECONDS : null,
       browser_bytes_estimate: inputs.browserBytesEstimate,
     },
     last_activity: {
