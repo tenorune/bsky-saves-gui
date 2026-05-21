@@ -43,6 +43,7 @@
   import { installHintDismissed, loadInstallHintPref, clearInstallHintPref } from '$lib/install-hint-pref';
   import { clearPanelCollapse } from '$lib/panel-collapse-pref';
   import { clearPairingToken } from '$lib/pairing-token';
+  import { deleteStatus } from '$lib/status-pusher';
   import {
     retainMode,
     loadRetainMode,
@@ -322,6 +323,10 @@
     ]);
     clearLastSession();
     clearSessionHeartbeat();
+    // Helper-side status snapshot. Must run BEFORE clearPairingToken()
+    // so the bearer is still available for auth; resolves silently on
+    // any failure since local wipe is the source of truth.
+    await deleteStatus().catch(() => { /* best-effort */ });
     // Pairing token is per-device local state, not user-account data,
     // but Clear data is a "wipe everything in this browser" affordance
     // by the user's contract — leaving the token would surprise them.
