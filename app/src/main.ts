@@ -5,6 +5,7 @@ import { loadAssetToggles } from './lib/asset-toggles';
 import { loadRetainMode } from './lib/retain-mode';
 import { loadPanelCollapse } from './lib/panel-collapse-pref';
 import { initPairingToken } from './lib/pairing-token';
+import { initStatusPusher } from './lib/status-pusher';
 import { registerServiceWorker } from './lib/sw-register';
 import { initStoragePersist } from './lib/storage-persist';
 
@@ -36,6 +37,7 @@ loadPanelCollapse().catch(() => { /* keep defaults */ });
 // yields a valid token; the PairingRequiredBanner takes over from there
 // when the capability snapshot reports a detected helper.
 initPairingToken();
+initStatusPusher();
 
 initStoragePersist();
 registerServiceWorker();

@@ -112,7 +112,7 @@ function consumeReloadBudget(): boolean {
  * was unpaired; no pairing state to mark stale, the banner is already
  * doing its job from the empty-token side).
  */
-function handleAuthed401(res: Response, sentAuth: boolean): void {
+export function handleAuthed401(res: Response, sentAuth: boolean): void {
   if (res.status !== 401 || !sentAuth) return;
   // RFC 7235 §2.1: auth scheme name is case-insensitive. Header name is
   // case-insensitive too per the Fetch API's normalization, but we
