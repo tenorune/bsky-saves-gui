@@ -8,6 +8,15 @@ import type { LastSession } from './last-session';
 // the payload so future tuning is a payload-only change.
 const SESSION_TTL_SECONDS = 60;
 
+export interface LastActivity {
+  readonly kind: 'fetch' | 'hydrate_articles' | 'hydrate_threads' | 'hydrate_images' | 'manual_refresh' | 'idle';
+  readonly started_at: string | null;
+  readonly finished_at: string | null;
+  readonly added: number;
+  readonly removed: number;
+  readonly errors: ReadonlyArray<{ kind: string; message: string; count: number }>;
+}
+
 export interface StatusSnapshotInputs {
   readonly inventoryState: InventoryState;
   readonly libraryRefreshState: LibraryRefreshState;
@@ -18,6 +27,7 @@ export interface StatusSnapshotInputs {
   readonly persistenceMode: PersistenceMode;
   readonly lastSession: LastSession | null;
   readonly browserBytesEstimate: number | null;
+  readonly lastActivity: LastActivity;
   readonly priority?: 'final';
 }
 
@@ -118,12 +128,12 @@ export function buildStatusPayload(inputs: StatusSnapshotInputs): StatusPayload 
       browser_bytes_estimate: inputs.browserBytesEstimate,
     },
     last_activity: {
-      kind: 'idle',
-      started_at: null,
-      finished_at: null,
-      added: 0,
-      removed: 0,
-      errors: [],
+      kind: inputs.lastActivity.kind,
+      started_at: inputs.lastActivity.started_at,
+      finished_at: inputs.lastActivity.finished_at,
+      added: inputs.lastActivity.added,
+      removed: inputs.lastActivity.removed,
+      errors: inputs.lastActivity.errors,
     },
   };
   return payload;

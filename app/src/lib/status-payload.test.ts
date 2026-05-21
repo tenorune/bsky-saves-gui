@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { buildStatusPayload, type StatusSnapshotInputs } from './status-payload';
+import type { LastActivity } from './status-payload';
 
 const IDLE_HYDRATION = { status: 'idle' as const, total: 0, fetched: 0, skipped: 0, failed: 0, failures: [] };
+
+const IDLE_ACTIVITY: LastActivity = {
+  kind: 'idle',
+  started_at: null,
+  finished_at: null,
+  added: 0,
+  removed: 0,
+  errors: [],
+};
 
 const BASE_INPUTS: StatusSnapshotInputs = {
   inventoryState: { status: 'ready', inventory: { saves: [] } as never },
@@ -13,6 +23,7 @@ const BASE_INPUTS: StatusSnapshotInputs = {
   persistenceMode: 'persist',
   lastSession: { pds: 'https://bsky.social', accessJwt: 'a', refreshJwt: 'r', did: 'did:plc:alice', handle: 'alice.bsky.social' },
   browserBytesEstimate: null,
+  lastActivity: IDLE_ACTIVITY,
 };
 
 describe('buildStatusPayload', () => {
@@ -108,6 +119,19 @@ describe('buildStatusPayload', () => {
   it('storage.browser_bytes_estimate passes through from inputs', () => {
     const payload = buildStatusPayload({ ...BASE_INPUTS, browserBytesEstimate: 18234567 });
     expect(payload!.storage.browser_bytes_estimate).toBe(18234567);
+  });
+
+  it('passes last_activity through from inputs verbatim', () => {
+    const activity: LastActivity = {
+      kind: 'fetch',
+      started_at: '2026-05-21T20:13:11Z',
+      finished_at: '2026-05-21T20:15:00Z',
+      added: 3,
+      removed: 1,
+      errors: [{ kind: 'pds_timeout', message: 'PDS took too long', count: 1 }],
+    };
+    const payload = buildStatusPayload({ ...BASE_INPUTS, lastActivity: activity });
+    expect(payload!.last_activity).toEqual(activity);
   });
 
   describe('current_state', () => {
