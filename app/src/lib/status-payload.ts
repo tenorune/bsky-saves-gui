@@ -48,6 +48,26 @@ export interface StatusPayload {
   };
 }
 
+// Mirrors feed-filter.ts::matchesShow. Kept inline to keep this module
+// dependency-free of /reader. The unknown subject_status case ("neither")
+// is intentionally absent from the §4.4 by_status payload — the panel
+// only renders the three named buckets.
+function categorize(save: { readonly subject_status?: string; readonly removed_detected_at?: string }): 'synced' | 'lost' | 'unsaved' | null {
+  if (save.removed_detected_at) return 'unsaved';
+  if (save.subject_status === 'not_found' || save.subject_status === 'blocked') return 'lost';
+  if (!save.subject_status) return 'synced';
+  return null;
+}
+
+function countByStatus(saves: ReadonlyArray<{ readonly subject_status?: string; readonly removed_detected_at?: string }>): { synced: number; lost: number; unsaved: number } {
+  const counts = { synced: 0, lost: 0, unsaved: 0 };
+  for (const s of saves) {
+    const cat = categorize(s);
+    if (cat !== null) counts[cat]++;
+  }
+  return counts;
+}
+
 export function buildStatusPayload(inputs: StatusSnapshotInputs): StatusPayload | null {
   if (inputs.lastSession === null) return null;
 
@@ -63,7 +83,9 @@ export function buildStatusPayload(inputs: StatusSnapshotInputs): StatusPayload 
       handle: inputs.lastSession.handle,
       did: inputs.lastSession.did,
       total_saves: totalSaves,
-      by_status: { synced: 0, lost: 0, unsaved: 0 },
+      by_status: inputs.inventoryState.status === 'ready'
+        ? countByStatus(inputs.inventoryState.inventory.saves)
+        : { synced: 0, lost: 0, unsaved: 0 },
     },
     hydration: {},
     storage: {

@@ -44,4 +44,25 @@ describe('buildStatusPayload', () => {
     });
     expect(payload!.library.total_saves).toBeNull();
   });
+
+  it('counts by_status by retain-mode predicates', () => {
+    const inv = {
+      saves: [
+        { uri: 'at://1' },                                  // synced
+        { uri: 'at://2', subject_status: 'not_found' },     // lost
+        { uri: 'at://3', subject_status: 'blocked' },       // lost
+        { uri: 'at://4', removed_detected_at: '2026-05-10T00:00:00Z' }, // unsaved
+        { uri: 'at://5', subject_status: 'unknown' },       // neither
+      ] as never,
+    };
+    const payload = buildStatusPayload({
+      ...BASE_INPUTS,
+      inventoryState: { status: 'ready', inventory: inv },
+    });
+    expect(payload!.library.by_status).toEqual({
+      synced: 1,
+      lost: 2,
+      unsaved: 1,
+    });
+  });
 });
