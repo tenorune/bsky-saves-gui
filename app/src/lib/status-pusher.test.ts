@@ -263,3 +263,60 @@ describe('heartbeat (session mode)', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
+
+describe('beforeunload (persist mode final push)', () => {
+  const fetchSpy = vi.fn();
+  beforeEach(() => {
+    fetchSpy.mockReset();
+    fetchSpy.mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchSpy);
+    _resetStatusPusherForTests();
+    setLastSession({ pds: 'https://bsky.social', accessJwt: 'a', refreshJwt: 'r', did: 'did:plc:alice', handle: 'alice.bsky.social' });
+    setPairingToken('AAAAAAAAAAAAAAAAAAAAAA');
+  });
+  afterEach(() => {
+    _disposeStatusPusherForTests();
+    vi.unstubAllGlobals();
+    clearLastSession();
+    clearPairingToken();
+  });
+
+  it('fires a fetch with keepalive:true and priority:"final" on beforeunload (persist + active)', () => {
+    initStatusPusher();
+    _setPersistenceModeForTests('persist');
+    _setActivationForTests({
+      helperDetected: true,
+      pairingState: 'paired',
+      lastSession: { pds: 'https://bsky.social', accessJwt: 'a', refreshJwt: 'r', did: 'did:plc:alice', handle: 'alice.bsky.social' },
+    });
+    fetchSpy.mockClear(); // clear the immediate fresh-state push
+    window.dispatchEvent(new Event('beforeunload'));
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(url).toMatch(/\/status$/);
+    expect(init.method).toBe('POST');
+    expect(init.keepalive).toBe(true);
+    expect(JSON.parse(init.body).priority).toBe('final');
+  });
+
+  it('does NOT fire on beforeunload in session mode', () => {
+    initStatusPusher();
+    _setPersistenceModeForTests('session-only');
+    _setActivationForTests({
+      helperDetected: true,
+      pairingState: 'paired',
+      lastSession: { pds: 'https://bsky.social', accessJwt: 'a', refreshJwt: 'r', did: 'did:plc:alice', handle: 'alice.bsky.social' },
+    });
+    fetchSpy.mockClear();
+    window.dispatchEvent(new Event('beforeunload'));
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('does NOT fire on beforeunload when dormant', () => {
+    initStatusPusher();
+    _setPersistenceModeForTests('persist');
+    // Don't set activation — pusher stays dormant.
+    window.dispatchEvent(new Event('beforeunload'));
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});

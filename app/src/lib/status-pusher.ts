@@ -224,6 +224,45 @@ export function initStatusPusher(): void {
     refreshHeartbeat();
     schedulePush(isActive(activation));
   }));
+
+  // Persist-mode beforeunload final push. `keepalive: true` lets the
+  // request outlive the page; `sendBeacon` would be more reliable but
+  // doesn't support custom auth headers. See spec §7.
+  if (typeof window !== 'undefined') {
+    const beforeUnloadHandler = (): void => {
+      if (!isActive(activation) || persistenceModeNow !== 'persist') return;
+      const inputs: StatusSnapshotInputs = {
+        inventoryState: get(inventoryState),
+        libraryRefreshState: get(libraryRefreshState),
+        fetchProgress: get(fetchProgress),
+        imageHydration: get(imageHydration),
+        articleHydration: get(articleHydration),
+        threadProgress: get(threadProgress),
+        persistenceMode: get(persistenceMode),
+        lastSession: get(lastSessionStore),
+        browserBytesEstimate: browserBytesCache.bytes,
+        lastActivity: currentActivity,
+        priority: 'final',
+      };
+      const payload = buildStatusPayload(inputs);
+      if (payload === null) return;
+      const { token } = get(pairingToken);
+      if (token === null) return;
+      try {
+        void fetch(`${config.helperOrigin}/status`, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+          keepalive: true,
+        });
+      } catch { /* page is unloading; nothing to recover from */ }
+    };
+    window.addEventListener('beforeunload', beforeUnloadHandler);
+    subscriptionDisposers.push(() => window.removeEventListener('beforeunload', beforeUnloadHandler));
+  }
 }
 
 export function _disposeStatusPusherForTests(): void {
