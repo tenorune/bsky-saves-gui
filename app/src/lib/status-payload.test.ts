@@ -109,4 +109,37 @@ describe('buildStatusPayload', () => {
     const payload = buildStatusPayload({ ...BASE_INPUTS, browserBytesEstimate: 18234567 });
     expect(payload!.storage.browser_bytes_estimate).toBe(18234567);
   });
+
+  describe('current_state', () => {
+    it('is "idle" when libraryRefreshState is idle', () => {
+      const payload = buildStatusPayload(BASE_INPUTS);
+      expect(payload!.current_state).toBe('idle');
+    });
+
+    it('is "refreshing" when libraryRefresh is running and fetch is in flight', () => {
+      const payload = buildStatusPayload({
+        ...BASE_INPUTS,
+        libraryRefreshState: { status: 'running' },
+        fetchProgress: { ...IDLE_HYDRATION, status: 'running', total: 100, fetched: 30 },
+      });
+      expect(payload!.current_state).toBe('refreshing');
+    });
+
+    it('is "hydrating" when libraryRefresh is running and fetch is done', () => {
+      const payload = buildStatusPayload({
+        ...BASE_INPUTS,
+        libraryRefreshState: { status: 'running' },
+        fetchProgress: { ...IDLE_HYDRATION, status: 'done', total: 100, fetched: 100 },
+      });
+      expect(payload!.current_state).toBe('hydrating');
+    });
+
+    it('is "error" when libraryRefreshState.status === "error"', () => {
+      const payload = buildStatusPayload({
+        ...BASE_INPUTS,
+        libraryRefreshState: { status: 'error', error: 'something broke' },
+      });
+      expect(payload!.current_state).toBe('error');
+    });
+  });
 });

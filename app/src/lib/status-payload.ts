@@ -77,6 +77,17 @@ function hydrationEntry(h: HydrationProgress): { completed: number; total: numbe
   return { completed: h.fetched + h.skipped, total: h.total };
 }
 
+function deriveCurrentState(
+  refresh: LibraryRefreshState,
+  fetch: HydrationProgress,
+): 'idle' | 'refreshing' | 'hydrating' | 'error' {
+  if (refresh.status === 'error') return 'error';
+  if (refresh.status === 'running') {
+    return fetch.status === 'done' ? 'hydrating' : 'refreshing';
+  }
+  return 'idle';
+}
+
 export function buildStatusPayload(inputs: StatusSnapshotInputs): StatusPayload | null {
   if (inputs.lastSession === null) return null;
 
@@ -87,7 +98,7 @@ export function buildStatusPayload(inputs: StatusSnapshotInputs): StatusPayload 
   const payload: StatusPayload = {
     schema_version: 1,
     updated_at: new Date().toISOString(),
-    current_state: 'idle',
+    current_state: deriveCurrentState(inputs.libraryRefreshState, inputs.fetchProgress),
     library: {
       handle: inputs.lastSession.handle,
       did: inputs.lastSession.did,
