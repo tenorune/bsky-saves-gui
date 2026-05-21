@@ -1,0 +1,61 @@
+# Dependency-update policy for bsky-saves-gui.
+#
+# Sets a weekly Monday cadence with a small open-PR cap. The ignore
+# blocks document subtrees where we've made a deliberate decision not
+# to auto-update — rationale per ignore.
+#
+# A new CVE in an ignored subtree still surfaces in the Security tab
+# (this file doesn't suppress alerts), but Dependabot won't auto-open
+# a PR for it. Re-evaluate by editing this file when the rationale
+# changes (e.g., when we're ready for wrangler 4).
+
+version: 2
+
+updates:
+  # Root npm/pnpm — the GUI itself.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+
+    ignore:
+      # undici (transitive via wrangler@3 → miniflare@3 → undici).
+      # Future undici 5.x CVEs are not fixable in-place: the patched
+      # line is 6.x, only reachable via wrangler 4 (a major bump that
+      # would also require rewriting templates/cf-worker integration
+      # tests for the new unstable_dev API). undici processes only
+      # deterministic test fixtures in our use — no untrusted input.
+      # The 2026-05-21 CVEs (HTTP smuggling, CRLF injection, WebSocket
+      # decompression) were dismissed under this rationale; future
+      # CVEs against undici 5.x get the same disposition.
+      - dependency-name: "undici"
+        versions: ["5.x"]
+
+  # cf-worker template — separate package.json + lockfile under
+  # templates/cf-worker/. Smaller dep tree; track separately so its
+  # updates don't compete with root PRs in the queue.
+  - package-ecosystem: "npm"
+    directory: "/templates/cf-worker"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "cf-worker-template"
+
+  # GitHub Actions versions (actions/checkout@v4 etc.) — security
+  # advisories on actions are rare but worth tracking.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "github-actions"
