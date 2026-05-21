@@ -68,6 +68,11 @@ function countByStatus(saves: ReadonlyArray<{ readonly subject_status?: string; 
   return counts;
 }
 
+function hydrationEntry(h: HydrationProgress): { completed: number; total: number } | undefined {
+  if (h.total === 0) return undefined;
+  return { completed: h.fetched + h.skipped, total: h.total };
+}
+
 export function buildStatusPayload(inputs: StatusSnapshotInputs): StatusPayload | null {
   if (inputs.lastSession === null) return null;
 
@@ -87,7 +92,11 @@ export function buildStatusPayload(inputs: StatusSnapshotInputs): StatusPayload 
         ? countByStatus(inputs.inventoryState.inventory.saves)
         : { synced: 0, lost: 0, unsaved: 0 },
     },
-    hydration: {},
+    hydration: {
+      ...(hydrationEntry(inputs.imageHydration) ? { images: hydrationEntry(inputs.imageHydration)! } : {}),
+      ...(hydrationEntry(inputs.articleHydration) ? { articles: hydrationEntry(inputs.articleHydration)! } : {}),
+      ...(hydrationEntry(inputs.threadProgress) ? { threads: hydrationEntry(inputs.threadProgress)! } : {}),
+    },
     storage: {
       mode: 'persist',
       session_ttl_seconds: null,

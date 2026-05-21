@@ -65,4 +65,31 @@ describe('buildStatusPayload', () => {
       unsaved: 1,
     });
   });
+
+  it('populates hydration.{articles,threads,images} when their stores have a total', () => {
+    const payload = buildStatusPayload({
+      ...BASE_INPUTS,
+      imageHydration: { ...IDLE_HYDRATION, total: 100, fetched: 30, skipped: 40 },
+      articleHydration: { ...IDLE_HYDRATION, total: 50, fetched: 10, skipped: 5 },
+      threadProgress: { ...IDLE_HYDRATION, total: 200, fetched: 100, skipped: 50 },
+    });
+    expect(payload!.hydration).toEqual({
+      images: { completed: 70, total: 100 },
+      articles: { completed: 15, total: 50 },
+      threads: { completed: 150, total: 200 },
+    });
+  });
+
+  it('omits a hydration bucket when its total is zero', () => {
+    const payload = buildStatusPayload({
+      ...BASE_INPUTS,
+      imageHydration: { ...IDLE_HYDRATION, total: 100, fetched: 30, skipped: 40 },
+      // articleHydration and threadProgress stay IDLE (total: 0)
+    });
+    expect(payload!.hydration).toEqual({
+      images: { completed: 70, total: 100 },
+    });
+    expect(payload!.hydration.articles).toBeUndefined();
+    expect(payload!.hydration.threads).toBeUndefined();
+  });
 });
