@@ -20,4 +20,28 @@ describe('buildStatusPayload', () => {
     const payload = buildStatusPayload({ ...BASE_INPUTS, lastSession: null });
     expect(payload).toBeNull();
   });
+
+  it('populates library.handle, library.did, library.total_saves from inputs', () => {
+    const inv = {
+      saves: [
+        { uri: 'at://1' }, { uri: 'at://2' }, { uri: 'at://3' },
+      ] as never,
+    };
+    const payload = buildStatusPayload({
+      ...BASE_INPUTS,
+      inventoryState: { status: 'ready', inventory: inv },
+    });
+    expect(payload).not.toBeNull();
+    expect(payload!.library.handle).toBe('alice.bsky.social');
+    expect(payload!.library.did).toBe('did:plc:alice');
+    expect(payload!.library.total_saves).toBe(3);
+  });
+
+  it('library.total_saves is null when inventoryState is not ready', () => {
+    const payload = buildStatusPayload({
+      ...BASE_INPUTS,
+      inventoryState: { status: 'loading' },
+    });
+    expect(payload!.library.total_saves).toBeNull();
+  });
 });

@@ -50,6 +50,35 @@ export interface StatusPayload {
 
 export function buildStatusPayload(inputs: StatusSnapshotInputs): StatusPayload | null {
   if (inputs.lastSession === null) return null;
-  // Placeholder — filled in by later tasks.
-  throw new Error('not implemented');
+
+  const totalSaves = inputs.inventoryState.status === 'ready'
+    ? inputs.inventoryState.inventory.saves.length
+    : null;
+
+  const payload: StatusPayload = {
+    schema_version: 1,
+    updated_at: new Date().toISOString(),
+    current_state: 'idle',
+    library: {
+      handle: inputs.lastSession.handle,
+      did: inputs.lastSession.did,
+      total_saves: totalSaves,
+      by_status: { synced: 0, lost: 0, unsaved: 0 },
+    },
+    hydration: {},
+    storage: {
+      mode: 'persist',
+      session_ttl_seconds: null,
+      browser_bytes_estimate: inputs.browserBytesEstimate,
+    },
+    last_activity: {
+      kind: 'idle',
+      started_at: null,
+      finished_at: null,
+      added: 0,
+      removed: 0,
+      errors: [],
+    },
+  };
+  return payload;
 }
