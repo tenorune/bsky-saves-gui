@@ -5,14 +5,16 @@
 
 import type { LastSession } from './last-session';
 import type { PairingState } from './pairing-token';
+import type { Readable } from 'svelte/store';
 import { get } from 'svelte/store';
 import { config } from './config';
 import { pairingToken } from './pairing-token';
 import { lastSession as lastSessionStore } from './last-session';
-import { libraryRefreshState } from './library-refresh';
+import { libraryRefreshState, type LibraryRefreshState } from './library-refresh';
 import { inventoryState } from './inventory-loader';
 import {
   imageHydration, articleHydration, threadProgress, fetchProgress,
+  type HydrationProgress, type HydrationStatus,
 } from './hydration-state';
 import { persistenceMode } from './persistence-mode';
 import { capabilitySnapshot } from './capability-snapshot';
@@ -43,12 +45,87 @@ export function isActive(inputs: ActivationInputs): boolean {
 }
 
 // Internal "current activity" tracker. Updated by libraryRefreshState
-// transitions and hydration store activity. Lives at module scope so
-// it survives across pushes.
+// transitions and hydration store activity (wired in initStatusPusher
+// via watchLibraryRefreshActivity / watchHydrationActivity). Lives at
+// module scope so it survives across pushes.
+//
+// TODO: `added` / `removed` from the reconcile diff would require
+// library-refresh.ts to expose the last diff in LibraryRefreshState
+// (currently it's a local in reconcileInventory). Deferred — the panel
+// renders zeros gracefully and the field is informational, not
+// load-bearing.
 let currentActivity: LastActivity = {
   kind: 'idle', started_at: null, finished_at: null,
   added: 0, removed: 0, errors: [],
 };
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+// Map a hydrator's `{url, reason}` failure to the `{kind, message, count}`
+// shape the status payload expects. Each failure becomes one entry; the
+// panel can collapse duplicates if it wants.
+function mapHydrationFailures(
+  failures: HydrationProgress['failures'],
+): LastActivity['errors'] {
+  return failures.map((f) => ({
+    kind: 'hydration_error',
+    message: f.reason,
+    count: 1,
+  }));
+}
+
+function watchHydrationActivity(
+  label: 'images' | 'articles' | 'threads',
+  store: Readable<HydrationProgress>,
+): () => void {
+  let prevStatus: HydrationStatus | null = null;
+  return store.subscribe((state) => {
+    if (prevStatus === 'idle' && state.status === 'running') {
+      currentActivity = {
+        kind: `hydrate_${label}` as LastActivity['kind'],
+        started_at: nowIso(),
+        finished_at: null,
+        added: 0,
+        removed: 0,
+        errors: [],
+      };
+    } else if (prevStatus === 'running' && state.status === 'done') {
+      currentActivity = {
+        ...currentActivity,
+        finished_at: nowIso(),
+        errors: mapHydrationFailures(state.failures),
+      };
+    }
+    prevStatus = state.status;
+  });
+}
+
+function watchLibraryRefreshActivity(): () => void {
+  let prevStatus: LibraryRefreshState['status'] | null = null;
+  return libraryRefreshState.subscribe((state) => {
+    if (prevStatus === 'idle' && state.status === 'running') {
+      currentActivity = {
+        kind: 'fetch',
+        started_at: nowIso(),
+        finished_at: null,
+        added: 0,
+        removed: 0,
+        errors: [],
+      };
+    } else if (prevStatus === 'running' && state.status === 'idle') {
+      currentActivity = { ...currentActivity, finished_at: nowIso() };
+    } else if (prevStatus === 'running' && state.status === 'error') {
+      currentActivity = {
+        ...currentActivity,
+        finished_at: nowIso(),
+        errors: [{ kind: 'refresh_error', message: state.error, count: 1 }],
+      };
+    }
+    prevStatus = state.status;
+  });
+}
 
 let browserBytesCache: { bytes: number | null; refreshedAt: number } = { bytes: null, refreshedAt: 0 };
 
@@ -272,6 +349,23 @@ export function initStatusPusher(): void {
     schedulePush(isActive(activation));
   }));
 
+  // last_activity wiring — separate subscriptions so the activity record
+  // updates BEFORE the onChange subscription above triggers the debounced
+  // push. Subscribe order matters: Svelte invokes subscribers in
+  // registration order, so registering the activity watchers after the
+  // onChange handler would push a stale `currentActivity` on the rising
+  // edge. Wait — actually, both subscriptions read the SAME store update;
+  // schedulePush runs synchronously and only enqueues a microtask
+  // (immediate path) or sets a timer (trailing). By the time pushOnce
+  // actually serializes the payload, all subscribers for the current
+  // store change have already run. Subscribe order is therefore not
+  // load-bearing for correctness here, but kept close to the other
+  // subscribers for readability.
+  subscriptionDisposers.push(watchLibraryRefreshActivity());
+  subscriptionDisposers.push(watchHydrationActivity('images', imageHydration));
+  subscriptionDisposers.push(watchHydrationActivity('articles', articleHydration));
+  subscriptionDisposers.push(watchHydrationActivity('threads', threadProgress));
+
   // Persist-mode beforeunload final push. `keepalive: true` lets the
   // request outlive the page; `sendBeacon` would be more reliable but
   // doesn't support custom auth headers. See spec §7.
@@ -324,6 +418,10 @@ export function _resetStatusPusherForTests(): void {
   activation = { helperDetected: false, pairingState: 'unpaired', lastSession: null };
   currentActivity = { kind: 'idle', started_at: null, finished_at: null, added: 0, removed: 0, errors: [] };
   browserBytesCache = { bytes: null, refreshedAt: 0 };
+}
+
+export function _getCurrentActivityForTests(): LastActivity {
+  return currentActivity;
 }
 
 export interface PusherDeps {

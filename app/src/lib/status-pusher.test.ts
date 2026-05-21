@@ -407,3 +407,116 @@ describe('401 handling (pairing-cause)', () => {
     expect(get(pairingToken).state).toBe('paired');
   });
 });
+
+import { _getCurrentActivityForTests } from './status-pusher';
+import { imageHydration, articleHydration, threadProgress } from './hydration-state';
+
+describe('last_activity wiring', () => {
+  const fetchSpy = vi.fn();
+  const IDLE_HYDRATION = {
+    status: 'idle' as const, total: 0, fetched: 0, skipped: 0, failed: 0, failures: [],
+  };
+
+  beforeEach(() => {
+    fetchSpy.mockReset();
+    fetchSpy.mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchSpy);
+    _resetStatusPusherForTests();
+    // Reset hydration stores to idle so prevStatus baselines are clean
+    // when initStatusPusher subscribes below.
+    imageHydration.set(IDLE_HYDRATION);
+    articleHydration.set(IDLE_HYDRATION);
+    threadProgress.set(IDLE_HYDRATION);
+    setLastSession({ pds: 'https://bsky.social', accessJwt: 'a', refreshJwt: 'r', did: 'did:plc:alice', handle: 'alice.bsky.social' });
+    setPairingToken('AAAAAAAAAAAAAAAAAAAAAA');
+  });
+  afterEach(() => {
+    _disposeStatusPusherForTests();
+    vi.unstubAllGlobals();
+    clearLastSession();
+    clearPairingToken();
+    imageHydration.set(IDLE_HYDRATION);
+    articleHydration.set(IDLE_HYDRATION);
+    threadProgress.set(IDLE_HYDRATION);
+  });
+
+  it('sets kind: hydrate_images on imageHydration idle → running transition', () => {
+    initStatusPusher();
+    imageHydration.set({ ...IDLE_HYDRATION, status: 'running', total: 10 });
+    const activity = _getCurrentActivityForTests();
+    expect(activity.kind).toBe('hydrate_images');
+    expect(activity.started_at).not.toBeNull();
+    expect(activity.finished_at).toBeNull();
+    expect(activity.errors).toEqual([]);
+  });
+
+  it('sets kind: hydrate_articles on articleHydration idle → running transition', () => {
+    initStatusPusher();
+    articleHydration.set({ ...IDLE_HYDRATION, status: 'running', total: 5 });
+    const activity = _getCurrentActivityForTests();
+    expect(activity.kind).toBe('hydrate_articles');
+    expect(activity.started_at).not.toBeNull();
+    expect(activity.finished_at).toBeNull();
+  });
+
+  it('sets kind: hydrate_threads on threadProgress idle → running transition', () => {
+    initStatusPusher();
+    threadProgress.set({ ...IDLE_HYDRATION, status: 'running', total: 3 });
+    const activity = _getCurrentActivityForTests();
+    expect(activity.kind).toBe('hydrate_threads');
+    expect(activity.started_at).not.toBeNull();
+    expect(activity.finished_at).toBeNull();
+  });
+
+  it('stamps finished_at on running → done with no failures', () => {
+    initStatusPusher();
+    imageHydration.set({ ...IDLE_HYDRATION, status: 'running', total: 10 });
+    imageHydration.set({
+      status: 'done', total: 10, fetched: 10, skipped: 0, failed: 0, failures: [],
+    });
+    const activity = _getCurrentActivityForTests();
+    expect(activity.kind).toBe('hydrate_images');
+    expect(activity.finished_at).not.toBeNull();
+    expect(activity.errors).toEqual([]);
+  });
+
+  it('populates errors from hydrator failures on running → done', () => {
+    initStatusPusher();
+    articleHydration.set({ ...IDLE_HYDRATION, status: 'running', total: 2 });
+    articleHydration.set({
+      status: 'done', total: 2, fetched: 1, skipped: 0, failed: 1,
+      failures: [{ url: 'https://example.com/a', reason: 'fetch failed: 502' }],
+    });
+    const activity = _getCurrentActivityForTests();
+    expect(activity.finished_at).not.toBeNull();
+    expect(activity.errors).toEqual([
+      { kind: 'hydration_error', message: 'fetch failed: 502', count: 1 },
+    ]);
+  });
+
+  it('does not update activity when status changes between non-idle/non-done states', () => {
+    initStatusPusher();
+    imageHydration.set({ ...IDLE_HYDRATION, status: 'running', total: 10 });
+    const startedAt = _getCurrentActivityForTests().started_at;
+    // running → paused → running should not retrigger started_at.
+    imageHydration.set({ ...IDLE_HYDRATION, status: 'paused', total: 10 });
+    imageHydration.set({ ...IDLE_HYDRATION, status: 'running', total: 10 });
+    const after = _getCurrentActivityForTests();
+    expect(after.started_at).toBe(startedAt);
+  });
+
+  it('starts a fresh activity record (clears prior errors) on a new idle → running transition', () => {
+    initStatusPusher();
+    articleHydration.set({ ...IDLE_HYDRATION, status: 'running', total: 1 });
+    articleHydration.set({
+      status: 'done', total: 1, fetched: 0, skipped: 0, failed: 1,
+      failures: [{ url: 'https://a', reason: 'boom' }],
+    });
+    expect(_getCurrentActivityForTests().errors.length).toBe(1);
+    articleHydration.set(IDLE_HYDRATION);
+    articleHydration.set({ ...IDLE_HYDRATION, status: 'running', total: 2 });
+    const activity = _getCurrentActivityForTests();
+    expect(activity.errors).toEqual([]);
+    expect(activity.finished_at).toBeNull();
+  });
+});
