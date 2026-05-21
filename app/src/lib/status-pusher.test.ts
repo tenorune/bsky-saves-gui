@@ -1,15 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { get } from 'svelte/store';
 import {
   _resetStatusPusherForTests,
   isActive,
   pushSnapshotForTests,
   type ActivationInputs,
 } from './status-pusher';
-import { schedulePushForTests, _flushDebouncerForTests, DEBOUNCE_MS } from './status-pusher';
+import { schedulePushForTests, DEBOUNCE_MS } from './status-pusher';
 import { initStatusPusher, _disposeStatusPusherForTests, _setActivationForTests } from './status-pusher';
 import { HEARTBEAT_MS, _setPersistenceModeForTests } from './status-pusher';
 import { setLastSession, clearLastSession } from './last-session';
-import { setPairingToken, clearPairingToken } from './pairing-token';
+import { setPairingToken, clearPairingToken, pairingToken } from './pairing-token';
 
 const PAIRED: ActivationInputs = {
   helperDetected: true,
@@ -133,9 +134,6 @@ describe('debouncer (throttle-with-trailing)', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1); // only the immediate
   });
 });
-
-// Reference the unused import to avoid lint errors (it's exported for future use).
-void _flushDebouncerForTests;
 
 describe('initStatusPusher subscription wiring', () => {
   const fetchSpy = vi.fn();
@@ -355,5 +353,57 @@ describe('deleteStatus', () => {
     setPairingToken('AAAAAAAAAAAAAAAAAAAAAA');
     fetchSpy.mockRejectedValueOnce(new TypeError('Failed to fetch'));
     await expect(deleteStatus()).resolves.toBeUndefined();
+  });
+});
+
+describe('401 handling (pairing-cause)', () => {
+  const fetchSpy = vi.fn();
+  beforeEach(() => {
+    fetchSpy.mockReset();
+    vi.stubGlobal('fetch', fetchSpy);
+    _resetStatusPusherForTests();
+    setLastSession({ pds: 'https://bsky.social', accessJwt: 'a', refreshJwt: 'r', did: 'did:plc:alice', handle: 'alice.bsky.social' });
+    setPairingToken('AAAAAAAAAAAAAAAAAAAAAA');
+  });
+  afterEach(() => {
+    _disposeStatusPusherForTests();
+    vi.unstubAllGlobals();
+    clearLastSession();
+    clearPairingToken();
+  });
+
+  it('marks pairing stale on 401 with WWW-Authenticate: Bearer', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response(null, {
+        status: 401,
+        headers: { 'WWW-Authenticate': 'Bearer realm="bsky-saves"' },
+      }),
+    );
+    await pushSnapshotForTests({
+      activation: {
+        helperDetected: true,
+        pairingState: 'paired',
+        lastSession: { pds: 'https://bsky.social', accessJwt: 'a', refreshJwt: 'r', did: 'did:plc:alice', handle: 'alice.bsky.social' },
+      },
+      pairingToken: 'AAAAAAAAAAAAAAAAAAAAAA',
+      helperOrigin: 'http://localhost:47826',
+      payloadInputs: undefined!,
+    });
+    expect(get(pairingToken).state).toBe('stale');
+  });
+
+  it('does NOT mark pairing stale on 401 without WWW-Authenticate header', async () => {
+    fetchSpy.mockResolvedValueOnce(new Response(null, { status: 401 }));
+    await pushSnapshotForTests({
+      activation: {
+        helperDetected: true,
+        pairingState: 'paired',
+        lastSession: { pds: 'https://bsky.social', accessJwt: 'a', refreshJwt: 'r', did: 'did:plc:alice', handle: 'alice.bsky.social' },
+      },
+      pairingToken: 'AAAAAAAAAAAAAAAAAAAAAA',
+      helperOrigin: 'http://localhost:47826',
+      payloadInputs: undefined!,
+    });
+    expect(get(pairingToken).state).toBe('paired');
   });
 });

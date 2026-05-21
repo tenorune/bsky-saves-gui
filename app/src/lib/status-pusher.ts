@@ -17,6 +17,7 @@ import {
 import { persistenceMode } from './persistence-mode';
 import { capabilitySnapshot } from './capability-snapshot';
 import { buildStatusPayload, type StatusSnapshotInputs, type LastActivity } from './status-payload';
+import { handleAuthed401 } from './helper-client';
 
 export interface ActivationInputs {
   readonly helperDetected: boolean;
@@ -78,8 +79,7 @@ function schedulePush(activeNow: boolean): void {
   if (!activeNow) return;
   const now = Date.now();
   if (now - lastPushAt >= DEBOUNCE_MS && trailingTimer === null) {
-    // Immediate (rising edge).
-    lastPushAt = now;
+    // Immediate (rising edge). `lastPushAt` is updated inside pushOnce().
     void pushOnce();
     return;
   }
@@ -91,7 +91,7 @@ function schedulePush(activeNow: boolean): void {
       trailingTimer = null;
       if (trailingPending) {
         trailingPending = false;
-        lastPushAt = Date.now();
+        // `lastPushAt` is updated inside pushOnce().
         void pushOnce();
       }
     }, remaining);
@@ -104,7 +104,7 @@ export function schedulePushForTests(): void {
   schedulePush(true);
 }
 
-export function _flushDebouncerForTests(): void {
+function flushDebouncer(): void {
   if (trailingTimer !== null) { clearTimeout(trailingTimer); trailingTimer = null; }
   trailingPending = false;
   lastPushAt = 0;
@@ -127,16 +127,23 @@ export async function deleteStatus(): Promise<void> {
   const { state, token } = get(pairingToken);
   if (token === null || state === 'unpaired') return;
   try {
-    await fetch(`${config.helperOrigin}/status`, {
+    const res = await fetch(`${config.helperOrigin}/status`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
     });
+    handleAuthed401(res, true);
   } catch {
     /* best-effort; local wipe proceeds */
   }
 }
 
 export async function pushOnce(options: PushOnceOptions = {}): Promise<void> {
+  // Centralize the throttle bookkeeping so every push path (schedulePush
+  // immediate, schedulePush trailing, rising-edge in reevaluateActivation,
+  // and the heartbeat setInterval) updates it. Otherwise a heartbeat at
+  // t=0 followed by a store-change at t=0.1s would re-fire immediately
+  // because `lastPushAt` was stale from before the heartbeat.
+  lastPushAt = Date.now();
   const inputs: StatusSnapshotInputs = {
     inventoryState: get(inventoryState),
     libraryRefreshState: get(libraryRefreshState),
@@ -155,7 +162,7 @@ export async function pushOnce(options: PushOnceOptions = {}): Promise<void> {
   const { token } = get(pairingToken);
   if (token === null) return;
   try {
-    await fetch(`${config.helperOrigin}/status`, {
+    const res = await fetch(`${config.helperOrigin}/status`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -163,6 +170,7 @@ export async function pushOnce(options: PushOnceOptions = {}): Promise<void> {
       },
       body: JSON.stringify(payload),
     });
+    handleAuthed401(res, true);
   } catch {
     console.debug('[status-push] failed (network)');
   }
@@ -271,7 +279,7 @@ export function initStatusPusher(): void {
       const { token } = get(pairingToken);
       if (token === null) return;
       try {
-        void fetch(`${config.helperOrigin}/status`, {
+        fetch(`${config.helperOrigin}/status`, {
           method: 'POST',
           headers: {
             'content-type': 'application/json',
@@ -279,7 +287,9 @@ export function initStatusPusher(): void {
           },
           body: JSON.stringify(payload),
           keepalive: true,
-        });
+        })
+          .then((res) => handleAuthed401(res, true))
+          .catch(() => {});
       } catch { /* page is unloading; nothing to recover from */ }
     };
     window.addEventListener('beforeunload', beforeUnloadHandler);
@@ -301,10 +311,10 @@ export function _setActivationForTests(next: ActivationInputs): void {
 }
 
 // Test surfaces — exposed only to bypass the activation snapshot logic.
-// Real code path uses pushOnce() gated by isActive() in scheduleAndPush().
+// Real code path uses pushOnce() gated by isActive() in schedulePush().
 
 export function _resetStatusPusherForTests(): void {
-  _flushDebouncerForTests();
+  flushDebouncer();
   currentActivity = { kind: 'idle', started_at: null, finished_at: null, added: 0, removed: 0, errors: [] };
   browserBytesCache = { bytes: null, refreshedAt: 0 };
 }
@@ -333,7 +343,7 @@ export async function pushSnapshotForTests(deps: PusherDeps): Promise<void> {
   });
   if (payload === null) return;
   try {
-    await fetch(`${deps.helperOrigin}/status`, {
+    const res = await fetch(`${deps.helperOrigin}/status`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -341,6 +351,7 @@ export async function pushSnapshotForTests(deps: PusherDeps): Promise<void> {
       },
       body: JSON.stringify(payload),
     });
+    handleAuthed401(res, true);
   } catch {
     /* swallow */
   }
