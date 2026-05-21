@@ -114,6 +114,30 @@ interface PushOnceOptions {
   readonly priority?: 'final';
 }
 
+interface GatherInputsOptions {
+  readonly priority?: 'final';
+}
+
+// Build the StatusSnapshotInputs from current store reads. Always uses
+// the cached browser-bytes value; callers that want a fresh estimate
+// (pushOnce) call refreshBrowserBytesIfStale() first. beforeunload skips
+// that because async work isn't reliable while the page is unloading.
+function gatherInputs(options: GatherInputsOptions = {}): StatusSnapshotInputs {
+  return {
+    inventoryState: get(inventoryState),
+    libraryRefreshState: get(libraryRefreshState),
+    fetchProgress: get(fetchProgress),
+    imageHydration: get(imageHydration),
+    articleHydration: get(articleHydration),
+    threadProgress: get(threadProgress),
+    persistenceMode: get(persistenceMode),
+    lastSession: get(lastSessionStore),
+    browserBytesEstimate: browserBytesCache.bytes,
+    lastActivity: currentActivity,
+    ...(options.priority ? { priority: options.priority } : {}),
+  };
+}
+
 /**
  * Tell the helper to drop the persisted status snapshot. Called by
  * Settings.svelte's "Clear all data" handler BEFORE `clearPairingToken()`
@@ -137,26 +161,15 @@ export async function deleteStatus(): Promise<void> {
   }
 }
 
-export async function pushOnce(options: PushOnceOptions = {}): Promise<void> {
+async function pushOnce(options: PushOnceOptions = {}): Promise<void> {
   // Centralize the throttle bookkeeping so every push path (schedulePush
   // immediate, schedulePush trailing, rising-edge in reevaluateActivation,
   // and the heartbeat setInterval) updates it. Otherwise a heartbeat at
   // t=0 followed by a store-change at t=0.1s would re-fire immediately
   // because `lastPushAt` was stale from before the heartbeat.
   lastPushAt = Date.now();
-  const inputs: StatusSnapshotInputs = {
-    inventoryState: get(inventoryState),
-    libraryRefreshState: get(libraryRefreshState),
-    fetchProgress: get(fetchProgress),
-    imageHydration: get(imageHydration),
-    articleHydration: get(articleHydration),
-    threadProgress: get(threadProgress),
-    persistenceMode: get(persistenceMode),
-    lastSession: get(lastSessionStore),
-    browserBytesEstimate: await refreshBrowserBytesIfStale(),
-    lastActivity: currentActivity,
-    ...(options.priority ? { priority: options.priority } : {}),
-  };
+  await refreshBrowserBytesIfStale();
+  const inputs = gatherInputs(options);
   const payload = buildStatusPayload(inputs);
   if (payload === null) return;
   const { token } = get(pairingToken);
@@ -189,6 +202,10 @@ let subscriptionDisposers: Array<() => void> = [];
 export const HEARTBEAT_MS = 15_000;
 
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+// Cached so the heartbeat gate (refreshHeartbeat) can read it
+// synchronously without re-subscribing on every call. Kept in sync
+// via the persistenceMode subscription in initStatusPusher and
+// overridable in tests via _setPersistenceModeForTests.
 let persistenceModeNow: 'persist' | 'session-only' = 'persist';
 
 function refreshHeartbeat(): void {
@@ -261,19 +278,7 @@ export function initStatusPusher(): void {
   if (typeof window !== 'undefined') {
     const beforeUnloadHandler = (): void => {
       if (!isActive(activation) || persistenceModeNow !== 'persist') return;
-      const inputs: StatusSnapshotInputs = {
-        inventoryState: get(inventoryState),
-        libraryRefreshState: get(libraryRefreshState),
-        fetchProgress: get(fetchProgress),
-        imageHydration: get(imageHydration),
-        articleHydration: get(articleHydration),
-        threadProgress: get(threadProgress),
-        persistenceMode: get(persistenceMode),
-        lastSession: get(lastSessionStore),
-        browserBytesEstimate: browserBytesCache.bytes,
-        lastActivity: currentActivity,
-        priority: 'final',
-      };
+      const inputs = gatherInputs({ priority: 'final' });
       const payload = buildStatusPayload(inputs);
       if (payload === null) return;
       const { token } = get(pairingToken);
@@ -315,6 +320,8 @@ export function _setActivationForTests(next: ActivationInputs): void {
 
 export function _resetStatusPusherForTests(): void {
   flushDebouncer();
+  wasActive = false;
+  activation = { helperDetected: false, pairingState: 'unpaired', lastSession: null };
   currentActivity = { kind: 'idle', started_at: null, finished_at: null, added: 0, removed: 0, errors: [] };
   browserBytesCache = { bytes: null, refreshedAt: 0 };
 }
