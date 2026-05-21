@@ -15,6 +15,7 @@ import {
   imageHydration, articleHydration, threadProgress, fetchProgress,
 } from './hydration-state';
 import { persistenceMode } from './persistence-mode';
+import { capabilitySnapshot } from './capability-snapshot';
 import { buildStatusPayload, type StatusSnapshotInputs, type LastActivity } from './status-payload';
 
 export interface ActivationInputs {
@@ -141,6 +142,73 @@ export async function pushOnce(options: PushOnceOptions = {}): Promise<void> {
   } catch {
     console.debug('[status-push] failed (network)');
   }
+}
+
+// Module-level activation state — updated by store subscriptions in the real
+// codepath, or by `_setActivationForTests` in tests.
+let activation: ActivationInputs = {
+  helperDetected: false, pairingState: 'unpaired', helperOptOut: false, lastSession: null,
+};
+let wasActive = false;
+let subscriptionDisposers: Array<() => void> = [];
+
+function reevaluateActivation(): void {
+  const nowActive = isActive(activation);
+  if (nowActive && !wasActive) {
+    // Dormant → Active. Fire the immediate fresh-state push.
+    void pushOnce();
+  }
+  // Active → Dormant doesn't need an action here — the debouncer simply
+  // stops scheduling because schedulePush() checks isActive(activation).
+  wasActive = nowActive;
+}
+
+export function initStatusPusher(): void {
+  // Avoid double-subscription on repeat calls (defensive — main.ts calls once).
+  if (subscriptionDisposers.length > 0) return;
+
+  // Build the activation snapshot from the upstream stores; rebuild on any change.
+  const updateActivation = (): void => {
+    const snap = get(capabilitySnapshot);
+    const state = get(pairingToken);
+    const session = get(lastSessionStore);
+    activation = {
+      helperDetected: snap.helper.detected,
+      pairingState: state.state,
+      // helperOptOut is reflected in capabilitySnapshot.helper.detected
+      // (see capability-snapshot.ts). Keep the field for now; Task 13
+      // collapses this layer.
+      helperOptOut: false,
+      lastSession: session,
+    };
+    reevaluateActivation();
+  };
+
+  subscriptionDisposers.push(capabilitySnapshot.subscribe(() => updateActivation()));
+  subscriptionDisposers.push(pairingToken.subscribe(() => updateActivation()));
+  subscriptionDisposers.push(lastSessionStore.subscribe(() => updateActivation()));
+
+  // Subscribe to "interesting" stores; any change triggers a debounced push.
+  const onChange = (): void => schedulePush(isActive(activation));
+  subscriptionDisposers.push(inventoryState.subscribe(onChange));
+  subscriptionDisposers.push(libraryRefreshState.subscribe(onChange));
+  subscriptionDisposers.push(fetchProgress.subscribe(onChange));
+  subscriptionDisposers.push(imageHydration.subscribe(onChange));
+  subscriptionDisposers.push(articleHydration.subscribe(onChange));
+  subscriptionDisposers.push(threadProgress.subscribe(onChange));
+  subscriptionDisposers.push(persistenceMode.subscribe(onChange));
+}
+
+export function _disposeStatusPusherForTests(): void {
+  for (const dispose of subscriptionDisposers) dispose();
+  subscriptionDisposers = [];
+  activation = { helperDetected: false, pairingState: 'unpaired', helperOptOut: false, lastSession: null };
+  wasActive = false;
+}
+
+export function _setActivationForTests(next: ActivationInputs): void {
+  activation = next;
+  reevaluateActivation();
 }
 
 // Test surfaces — exposed only to bypass the activation snapshot logic.

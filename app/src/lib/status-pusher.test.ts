@@ -6,6 +6,7 @@ import {
   type ActivationInputs,
 } from './status-pusher';
 import { schedulePushForTests, _flushDebouncerForTests, DEBOUNCE_MS } from './status-pusher';
+import { initStatusPusher, _disposeStatusPusherForTests, _setActivationForTests } from './status-pusher';
 import { setLastSession, clearLastSession } from './last-session';
 import { setPairingToken, clearPairingToken } from './pairing-token';
 
@@ -139,3 +140,63 @@ describe('debouncer (throttle-with-trailing)', () => {
 
 // Reference the unused import to avoid lint errors (it's exported for future use).
 void _flushDebouncerForTests;
+
+describe('initStatusPusher subscription wiring', () => {
+  const fetchSpy = vi.fn();
+  beforeEach(() => {
+    vi.useFakeTimers();
+    fetchSpy.mockReset();
+    fetchSpy.mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchSpy);
+    _resetStatusPusherForTests();
+    setLastSession({ pds: 'https://bsky.social', accessJwt: 'a', refreshJwt: 'r', did: 'did:plc:alice', handle: 'alice.bsky.social' });
+    setPairingToken('AAAAAAAAAAAAAAAAAAAAAA');
+  });
+  afterEach(() => {
+    _disposeStatusPusherForTests();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    clearLastSession();
+    clearPairingToken();
+  });
+
+  const flushMicrotasks = async (): Promise<void> => {
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+  };
+
+  it('does not throw when called', () => {
+    expect(() => initStatusPusher()).not.toThrow();
+  });
+
+  it('fires the immediate fresh-state push when activation flips to true', async () => {
+    initStatusPusher();
+    _setActivationForTests({
+      helperDetected: true,
+      pairingState: 'paired',
+      helperOptOut: false,
+      lastSession: { pds: 'https://bsky.social', accessJwt: 'a', refreshJwt: 'r', did: 'did:plc:alice', handle: 'alice.bsky.social' },
+    });
+    await flushMicrotasks();
+    expect(fetchSpy).toHaveBeenCalledTimes(1); // one immediate push on becoming active
+  });
+
+  it('does not push again when activation re-evaluates while already active (no rising edge)', async () => {
+    initStatusPusher();
+    _setActivationForTests({
+      helperDetected: true,
+      pairingState: 'paired',
+      helperOptOut: false,
+      lastSession: { pds: 'https://bsky.social', accessJwt: 'a', refreshJwt: 'r', did: 'did:plc:alice', handle: 'alice.bsky.social' },
+    });
+    await flushMicrotasks();
+    fetchSpy.mockClear();
+    _setActivationForTests({
+      helperDetected: true,
+      pairingState: 'paired',
+      helperOptOut: false,
+      lastSession: { pds: 'https://bsky.social', accessJwt: 'a', refreshJwt: 'r', did: 'did:plc:alice', handle: 'alice.bsky.social' },
+    });
+    await flushMicrotasks();
+    expect(fetchSpy).not.toHaveBeenCalled(); // no extra push without rising edge
+  });
+});
