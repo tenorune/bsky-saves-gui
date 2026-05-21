@@ -13,12 +13,11 @@ import { setPairingToken, clearPairingToken } from './pairing-token';
 const PAIRED: ActivationInputs = {
   helperDetected: true,
   pairingState: 'paired',
-  helperOptOut: false,
   lastSession: { pds: 'https://bsky.social', accessJwt: 'a', refreshJwt: 'r', did: 'did:plc:alice', handle: 'alice.bsky.social' },
 };
 
 describe('isActive', () => {
-  it('returns true when all four conditions hold', () => {
+  it('returns true when all three conditions hold', () => {
     expect(isActive(PAIRED)).toBe(true);
   });
 
@@ -32,10 +31,6 @@ describe('isActive', () => {
 
   it('returns false when pairing state is stale (avoid 401 spam loop)', () => {
     expect(isActive({ ...PAIRED, pairingState: 'stale' })).toBe(false);
-  });
-
-  it('returns false when user opted out of the helper', () => {
-    expect(isActive({ ...PAIRED, helperOptOut: true })).toBe(false);
   });
 
   it('returns false when not signed in', () => {
@@ -57,7 +52,7 @@ describe('pushSnapshot (no debounce)', () => {
 
   it('POSTs to /status with bearer auth when active', async () => {
     await pushSnapshotForTests({
-      activation: { helperDetected: true, pairingState: 'paired', helperOptOut: false,
+      activation: { helperDetected: true, pairingState: 'paired',
         lastSession: { pds: 'https://bsky.social', accessJwt: 'a', refreshJwt: 'r', did: 'did:plc:alice', handle: 'alice.bsky.social' } },
       pairingToken: 'token-abc',
       helperOrigin: 'http://localhost:47826',
@@ -77,7 +72,7 @@ describe('pushSnapshot (no debounce)', () => {
 
   it('does NOT call fetch when activation conditions fail', async () => {
     await pushSnapshotForTests({
-      activation: { helperDetected: false, pairingState: 'paired', helperOptOut: false, lastSession: null },
+      activation: { helperDetected: false, pairingState: 'paired', lastSession: null },
       pairingToken: 'token-abc',
       helperOrigin: 'http://localhost:47826',
       payloadInputs: undefined!,
@@ -173,7 +168,6 @@ describe('initStatusPusher subscription wiring', () => {
     _setActivationForTests({
       helperDetected: true,
       pairingState: 'paired',
-      helperOptOut: false,
       lastSession: { pds: 'https://bsky.social', accessJwt: 'a', refreshJwt: 'r', did: 'did:plc:alice', handle: 'alice.bsky.social' },
     });
     await flushMicrotasks();
@@ -185,7 +179,6 @@ describe('initStatusPusher subscription wiring', () => {
     _setActivationForTests({
       helperDetected: true,
       pairingState: 'paired',
-      helperOptOut: false,
       lastSession: { pds: 'https://bsky.social', accessJwt: 'a', refreshJwt: 'r', did: 'did:plc:alice', handle: 'alice.bsky.social' },
     });
     await flushMicrotasks();
@@ -193,7 +186,6 @@ describe('initStatusPusher subscription wiring', () => {
     _setActivationForTests({
       helperDetected: true,
       pairingState: 'paired',
-      helperOptOut: false,
       lastSession: { pds: 'https://bsky.social', accessJwt: 'a', refreshJwt: 'r', did: 'did:plc:alice', handle: 'alice.bsky.social' },
     });
     await flushMicrotasks();

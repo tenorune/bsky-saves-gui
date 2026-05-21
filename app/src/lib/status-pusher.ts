@@ -21,20 +21,22 @@ import { buildStatusPayload, type StatusSnapshotInputs, type LastActivity } from
 export interface ActivationInputs {
   readonly helperDetected: boolean;
   readonly pairingState: PairingState;
-  readonly helperOptOut: boolean;
   readonly lastSession: LastSession | null;
 }
 
 /**
- * Pusher activation gate. All four conditions must hold for pushes
+ * Pusher activation gate. All three conditions must hold for pushes
  * to fire. A `stale` pairing state is intentionally not active —
  * pushing would 401 repeatedly until the user re-pairs.
+ *
+ * Helper opt-out is reflected upstream via
+ * `capabilitySnapshot.helper.detected` (see capability-snapshot.ts):
+ * when the user opts out, `detected` is false, which fails the gate.
  */
 export function isActive(inputs: ActivationInputs): boolean {
   return (
     inputs.helperDetected &&
     inputs.pairingState === 'paired' &&
-    !inputs.helperOptOut &&
     inputs.lastSession !== null
   );
 }
@@ -147,7 +149,7 @@ export async function pushOnce(options: PushOnceOptions = {}): Promise<void> {
 // Module-level activation state — updated by store subscriptions in the real
 // codepath, or by `_setActivationForTests` in tests.
 let activation: ActivationInputs = {
-  helperDetected: false, pairingState: 'unpaired', helperOptOut: false, lastSession: null,
+  helperDetected: false, pairingState: 'unpaired', lastSession: null,
 };
 let wasActive = false;
 let subscriptionDisposers: Array<() => void> = [];
@@ -175,10 +177,6 @@ export function initStatusPusher(): void {
     activation = {
       helperDetected: snap.helper.detected,
       pairingState: state.state,
-      // helperOptOut is reflected in capabilitySnapshot.helper.detected
-      // (see capability-snapshot.ts). Keep the field for now; Task 13
-      // collapses this layer.
-      helperOptOut: false,
       lastSession: session,
     };
     reevaluateActivation();
@@ -202,7 +200,7 @@ export function initStatusPusher(): void {
 export function _disposeStatusPusherForTests(): void {
   for (const dispose of subscriptionDisposers) dispose();
   subscriptionDisposers = [];
-  activation = { helperDetected: false, pairingState: 'unpaired', helperOptOut: false, lastSession: null };
+  activation = { helperDetected: false, pairingState: 'unpaired', lastSession: null };
   wasActive = false;
 }
 
