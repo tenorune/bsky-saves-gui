@@ -42,6 +42,11 @@
     "wrangler": "^3.101.0"
   },
   "packageManager": "pnpm@9.12.3",
+  "pnpm": {
+    "overrides": {
+      "vite": "^6.4.2"
+    }
+  },
   "dependencies": {
     "dompurify": "^3.4.2",
     "idb-keyval": "^6.2.2",
