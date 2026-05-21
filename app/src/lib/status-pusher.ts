@@ -114,6 +114,28 @@ interface PushOnceOptions {
   readonly priority?: 'final';
 }
 
+/**
+ * Tell the helper to drop the persisted status snapshot. Called by
+ * Settings.svelte's "Clear all data" handler BEFORE `clearPairingToken()`
+ * so the bearer token is still available for auth.
+ *
+ * Resolves silently on any failure — local cleanup is the source of
+ * truth, and the user's "wipe everything" intent should proceed even
+ * if the helper-side delete can't complete.
+ */
+export async function deleteStatus(): Promise<void> {
+  const { state, token } = get(pairingToken);
+  if (token === null || state === 'unpaired') return;
+  try {
+    await fetch(`${config.helperOrigin}/status`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch {
+    /* best-effort; local wipe proceeds */
+  }
+}
+
 export async function pushOnce(options: PushOnceOptions = {}): Promise<void> {
   const inputs: StatusSnapshotInputs = {
     inventoryState: get(inventoryState),

@@ -320,3 +320,40 @@ describe('beforeunload (persist mode final push)', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
+
+import { deleteStatus } from './status-pusher';
+
+describe('deleteStatus', () => {
+  const fetchSpy = vi.fn();
+  beforeEach(() => {
+    fetchSpy.mockReset();
+    fetchSpy.mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchSpy);
+  });
+  afterEach(() => {
+    clearPairingToken();
+    vi.unstubAllGlobals();
+  });
+
+  it('sends DELETE /status with bearer auth when paired', async () => {
+    setPairingToken('AAAAAAAAAAAAAAAAAAAAAA');
+    await deleteStatus();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(url).toMatch(/\/status$/);
+    expect(init.method).toBe('DELETE');
+    expect(init.headers.Authorization).toMatch(/^Bearer /);
+  });
+
+  it('is a no-op when unpaired (token absent)', async () => {
+    clearPairingToken();
+    await deleteStatus();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('resolves silently when the DELETE network call fails', async () => {
+    setPairingToken('AAAAAAAAAAAAAAAAAAAAAA');
+    fetchSpy.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    await expect(deleteStatus()).resolves.toBeUndefined();
+  });
+});
