@@ -109,6 +109,7 @@ export function buildStatusPayload(inputs: StatusSnapshotInputs): StatusPayload 
     schema_version: 1,
     updated_at: new Date().toISOString(),
     current_state: deriveCurrentState(inputs.libraryRefreshState, inputs.fetchProgress),
+    ...(inputs.priority ? { priority: inputs.priority } : {}),
     library: {
       handle: inputs.lastSession.handle,
       did: inputs.lastSession.did,

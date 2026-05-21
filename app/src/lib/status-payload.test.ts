@@ -166,4 +166,14 @@ describe('buildStatusPayload', () => {
       expect(payload!.current_state).toBe('error');
     });
   });
+
+  it('omits the priority field when inputs.priority is absent', () => {
+    const payload = buildStatusPayload(BASE_INPUTS);
+    expect('priority' in payload!).toBe(false);
+  });
+
+  it('sets priority: "final" when inputs.priority is "final"', () => {
+    const payload = buildStatusPayload({ ...BASE_INPUTS, priority: 'final' });
+    expect(payload!.priority).toBe('final');
+  });
 });
