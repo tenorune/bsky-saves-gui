@@ -5,6 +5,9 @@ import {
   pushSnapshotForTests,
   type ActivationInputs,
 } from './status-pusher';
+import { schedulePushForTests, _flushDebouncerForTests, DEBOUNCE_MS } from './status-pusher';
+import { setLastSession, clearLastSession } from './last-session';
+import { setPairingToken, clearPairingToken } from './pairing-token';
 
 const PAIRED: ActivationInputs = {
   helperDetected: true,
@@ -81,3 +84,58 @@ describe('pushSnapshot (no debounce)', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
+
+describe('debouncer (throttle-with-trailing)', () => {
+  const fetchSpy = vi.fn();
+  beforeEach(() => {
+    vi.useFakeTimers();
+    fetchSpy.mockReset();
+    fetchSpy.mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchSpy);
+    _resetStatusPusherForTests();
+    // pushOnce() reads from real stores; populate just enough to let
+    // buildStatusPayload return non-null and the bearer token guard pass.
+    setLastSession({ pds: 'https://bsky.social', accessJwt: 'a', refreshJwt: 'r', did: 'did:plc:alice', handle: 'alice.bsky.social' });
+    setPairingToken('AAAAAAAAAAAAAAAAAAAAAA');
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    clearLastSession();
+    clearPairingToken();
+  });
+
+  // Drain Promise microtasks queued by pushOnce() without advancing
+  // the fake clock (which would also fire the trailing setTimeout).
+  const flushMicrotasks = async (): Promise<void> => {
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+  };
+
+  it('fires immediately on the first scheduled push in a quiet period', async () => {
+    schedulePushForTests();
+    await flushMicrotasks();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('coalesces a burst of schedules within DEBOUNCE_MS into one trailing push', async () => {
+    schedulePushForTests();   // immediate
+    schedulePushForTests();   // queued (during cooldown)
+    schedulePushForTests();   // queued (still within cooldown)
+    await flushMicrotasks();
+    // First fires immediately, then nothing until the cooldown advances.
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
+    // Trailing push fires once at the end of the cooldown window.
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not fire a trailing push if no schedules arrived during the cooldown', async () => {
+    schedulePushForTests();   // immediate
+    await flushMicrotasks();
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
+    expect(fetchSpy).toHaveBeenCalledTimes(1); // only the immediate
+  });
+});
+
+// Reference the unused import to avoid lint errors (it's exported for future use).
+void _flushDebouncerForTests;

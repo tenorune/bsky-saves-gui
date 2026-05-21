@@ -62,6 +62,51 @@ async function refreshBrowserBytesIfStale(): Promise<number | null> {
   return null;
 }
 
+// Locked by R6 (installer-status-panel-resolved.md). 500ms is the
+// floor the contract guarantees; we may tighten to 250ms later
+// without a contract change.
+export const DEBOUNCE_MS = 500;
+
+let lastPushAt = 0;
+let trailingTimer: ReturnType<typeof setTimeout> | null = null;
+let trailingPending = false;
+
+function schedulePush(activeNow: boolean): void {
+  if (!activeNow) return;
+  const now = Date.now();
+  if (now - lastPushAt >= DEBOUNCE_MS && trailingTimer === null) {
+    // Immediate (rising edge).
+    lastPushAt = now;
+    void pushOnce();
+    return;
+  }
+  // Within cooldown — schedule a single trailing push at the end of the window.
+  trailingPending = true;
+  if (trailingTimer === null) {
+    const remaining = Math.max(0, DEBOUNCE_MS - (now - lastPushAt));
+    trailingTimer = setTimeout(() => {
+      trailingTimer = null;
+      if (trailingPending) {
+        trailingPending = false;
+        lastPushAt = Date.now();
+        void pushOnce();
+      }
+    }, remaining);
+  }
+}
+
+// Test surface — bypasses the activation check so debounce behavior
+// can be asserted independently of activation logic.
+export function schedulePushForTests(): void {
+  schedulePush(true);
+}
+
+export function _flushDebouncerForTests(): void {
+  if (trailingTimer !== null) { clearTimeout(trailingTimer); trailingTimer = null; }
+  trailingPending = false;
+  lastPushAt = 0;
+}
+
 interface PushOnceOptions {
   readonly priority?: 'final';
 }
@@ -102,6 +147,7 @@ export async function pushOnce(options: PushOnceOptions = {}): Promise<void> {
 // Real code path uses pushOnce() gated by isActive() in scheduleAndPush().
 
 export function _resetStatusPusherForTests(): void {
+  _flushDebouncerForTests();
   currentActivity = { kind: 'idle', started_at: null, finished_at: null, added: 0, removed: 0, errors: [] };
   browserBytesCache = { bytes: null, refreshedAt: 0 };
 }
