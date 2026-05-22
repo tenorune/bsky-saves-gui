@@ -165,6 +165,56 @@ describe('buildStatusPayload', () => {
       });
       expect(payload!.current_state).toBe('error');
     });
+
+    // Issue #85 / coordination-doc Q10: library-refresh.ts kicks off
+    // image and article hydration AFTER setting libraryRefreshState back
+    // to idle. Before the fix, current_state would drop to 'idle' the
+    // moment refresh ended, even though hydration ran for minutes after.
+    it('is "hydrating" when imageHydration is running and refresh is idle', () => {
+      const payload = buildStatusPayload({
+        ...BASE_INPUTS,
+        libraryRefreshState: { status: 'idle' },
+        imageHydration: { ...IDLE_HYDRATION, status: 'running', total: 50 },
+      });
+      expect(payload!.current_state).toBe('hydrating');
+    });
+
+    it('is "hydrating" when articleHydration is running and refresh is idle', () => {
+      const payload = buildStatusPayload({
+        ...BASE_INPUTS,
+        libraryRefreshState: { status: 'idle' },
+        articleHydration: { ...IDLE_HYDRATION, status: 'running', total: 20 },
+      });
+      expect(payload!.current_state).toBe('hydrating');
+    });
+
+    it('is "hydrating" when threadProgress is running and refresh is idle', () => {
+      const payload = buildStatusPayload({
+        ...BASE_INPUTS,
+        libraryRefreshState: { status: 'idle' },
+        threadProgress: { ...IDLE_HYDRATION, status: 'running', total: 10 },
+      });
+      expect(payload!.current_state).toBe('hydrating');
+    });
+
+    it('prefers "error" over running hydration when refresh has errored', () => {
+      const payload = buildStatusPayload({
+        ...BASE_INPUTS,
+        libraryRefreshState: { status: 'error', error: 'boom' },
+        imageHydration: { ...IDLE_HYDRATION, status: 'running', total: 5 },
+      });
+      expect(payload!.current_state).toBe('error');
+    });
+
+    it('prefers "refreshing" over running hydration when refresh is running and fetch is in flight', () => {
+      const payload = buildStatusPayload({
+        ...BASE_INPUTS,
+        libraryRefreshState: { status: 'running' },
+        fetchProgress: { ...IDLE_HYDRATION, status: 'running', total: 100, fetched: 30 },
+        imageHydration: { ...IDLE_HYDRATION, status: 'running', total: 50 },
+      });
+      expect(payload!.current_state).toBe('refreshing');
+    });
   });
 
   it('omits the priority field when inputs.priority is absent', () => {

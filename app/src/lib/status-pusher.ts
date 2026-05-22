@@ -20,6 +20,7 @@ import { persistenceMode } from './persistence-mode';
 import { capabilitySnapshot } from './capability-snapshot';
 import { buildStatusPayload, type StatusSnapshotInputs, type LastActivity } from './status-payload';
 import { handleAuthed401 } from './helper-client';
+import { loadLastActivity, saveLastActivity } from './last-activity-persist';
 
 export interface ActivationInputs {
   readonly helperDetected: boolean;
@@ -91,12 +92,14 @@ function watchHydrationActivity(
         removed: 0,
         errors: [],
       };
+      void saveLastActivity(currentActivity);
     } else if (prevStatus === 'running' && state.status === 'done') {
       currentActivity = {
         ...currentActivity,
         finished_at: nowIso(),
         errors: mapHydrationFailures(state.failures),
       };
+      void saveLastActivity(currentActivity);
     }
     prevStatus = state.status;
   });
@@ -114,14 +117,17 @@ function watchLibraryRefreshActivity(): () => void {
         removed: 0,
         errors: [],
       };
+      void saveLastActivity(currentActivity);
     } else if (prevStatus === 'running' && state.status === 'idle') {
       currentActivity = { ...currentActivity, finished_at: nowIso() };
+      void saveLastActivity(currentActivity);
     } else if (prevStatus === 'running' && state.status === 'error') {
       currentActivity = {
         ...currentActivity,
         finished_at: nowIso(),
         errors: [{ kind: 'refresh_error', message: state.error, count: 1 }],
       };
+      void saveLastActivity(currentActivity);
     }
     prevStatus = state.status;
   });
@@ -318,6 +324,20 @@ export function initStatusPusher(): void {
   // Avoid double-subscription on repeat calls (defensive — main.ts calls once).
   if (subscriptionDisposers.length > 0) return;
 
+  // Restore the persisted last_activity from idb so the activation-rising-edge
+  // "fresh-state" push (fired below by the activation subscriptions) doesn't
+  // clobber the helper's on-disk snapshot with the in-memory `{ kind: 'idle' }`
+  // default after a tab close + reopen. Fire-and-forget — if it resolves after
+  // the immediate push, we still apply the restored value for subsequent
+  // pushes. We only restore when `currentActivity` is still in its initial
+  // state, so a real activity transition that fires before this resolves wins.
+  void loadLastActivity().then((restored) => {
+    if (restored === null) return;
+    if (currentActivity.kind === 'idle' && currentActivity.started_at === null) {
+      currentActivity = restored;
+    }
+  });
+
   // Build the activation snapshot from the upstream stores; rebuild on any change.
   const updateActivation = (): void => {
     const snap = get(capabilitySnapshot);
@@ -418,6 +438,9 @@ export function _resetStatusPusherForTests(): void {
   activation = { helperDetected: false, pairingState: 'unpaired', lastSession: null };
   currentActivity = { kind: 'idle', started_at: null, finished_at: null, added: 0, removed: 0, errors: [] };
   browserBytesCache = { bytes: null, refreshedAt: 0 };
+  // Tests that exercise persistence import clearLastActivity directly;
+  // we intentionally don't wipe idb here to avoid masking failures in
+  // tests that rely on a clean idb being set up explicitly.
 }
 
 export function _getCurrentActivityForTests(): LastActivity {

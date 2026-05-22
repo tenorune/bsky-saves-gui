@@ -90,10 +90,26 @@ function hydrationEntry(h: HydrationProgress): { completed: number; total: numbe
 function deriveCurrentState(
   refresh: LibraryRefreshState,
   fetch: HydrationProgress,
+  imageH: HydrationProgress,
+  articleH: HydrationProgress,
+  threadH: HydrationProgress,
 ): 'idle' | 'refreshing' | 'hydrating' | 'error' {
   if (refresh.status === 'error') return 'error';
   if (refresh.status === 'running') {
     return fetch.status === 'done' ? 'hydrating' : 'refreshing';
+  }
+  // library-refresh.ts kicks off image / article hydration *after*
+  // setting libraryRefreshState back to idle (the hydrators are
+  // fire-and-forget; see startLibraryRefresh). Without these checks,
+  // current_state drops to 'idle' the moment refresh ends even though
+  // image/article/thread hydration may still be running for minutes.
+  // See issue #85 (Bug 1) and coordination-doc Q10.
+  if (
+    imageH.status === 'running' ||
+    articleH.status === 'running' ||
+    threadH.status === 'running'
+  ) {
+    return 'hydrating';
   }
   return 'idle';
 }
@@ -108,7 +124,13 @@ export function buildStatusPayload(inputs: StatusSnapshotInputs): StatusPayload 
   const payload: StatusPayload = {
     schema_version: 1,
     updated_at: new Date().toISOString(),
-    current_state: deriveCurrentState(inputs.libraryRefreshState, inputs.fetchProgress),
+    current_state: deriveCurrentState(
+      inputs.libraryRefreshState,
+      inputs.fetchProgress,
+      inputs.imageHydration,
+      inputs.articleHydration,
+      inputs.threadProgress,
+    ),
     ...(inputs.priority ? { priority: inputs.priority } : {}),
     library: {
       handle: inputs.lastSession.handle,
