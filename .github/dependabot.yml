@@ -35,6 +35,18 @@ updates:
       - dependency-name: "undici"
         versions: ["5.x"]
 
+      # vite 6.x. @sveltejs/vite-plugin-svelte@3.1.2 (the latest 3.x,
+      # which is the last plugin line that supports Svelte 4) peer-deps
+      # on vite ^5. Pairing the v3 plugin with vite 6 silently drops
+      # component onMount() calls during bundling — the page mounts but
+      # routing/setup never wires, with no console error. The S5 (static)
+      # Playwright suite catches it but unit tests don't, so we caught
+      # this in v0.6.5-rc.1 after the merge. Reaching vite 6 needs a
+      # parallel Svelte 4 → 5 migration. Until then, hold the line at
+      # vite 5.x.
+      - dependency-name: "vite"
+        versions: ["6.x"]
+
   # cf-worker template — separate package.json + lockfile under
   # templates/cf-worker/. Smaller dep tree; track separately so its
   # updates don't compete with root PRs in the queue.
