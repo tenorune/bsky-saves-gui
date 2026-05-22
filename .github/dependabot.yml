@@ -47,6 +47,17 @@ updates:
       - dependency-name: "vite"
         versions: ["6.x"]
 
+      # vitest 3.x and 4.x. vitest 4 imports vite's `./module-runner`
+      # subpath which only exists in vite 6 (see PR #389 CI failure:
+      # ERR_PACKAGE_PATH_NOT_EXPORTED). Even though the peer-dep range
+      # appears permissive, the runtime contract requires vite 6.
+      # vitest 3.x predates module-runner but its release notes flag
+      # vite 6 features (jit pool, hot-reload) that don't graceful-
+      # degrade. Same upgrade gate as vite — both move together when
+      # we cross Svelte 4 → 5.
+      - dependency-name: "vitest"
+        versions: ["3.x", "4.x"]
+
   # cf-worker template — separate package.json + lockfile under
   # templates/cf-worker/. Smaller dep tree; track separately so its
   # updates don't compete with root PRs in the queue.
