@@ -80,7 +80,7 @@ jobs:
 
       - name: Checkout this repo (coordination branch)
         if: env.COORD_TOKEN != ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ steps.clean.outputs.source_ref }}
           path: source-repo
@@ -129,7 +129,7 @@ jobs:
 
       - name: Checkout coordination repo
         if: env.COORD_TOKEN != ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: tenorune/bsky-saves-coordination
           token: ${{ env.COORD_TOKEN }}

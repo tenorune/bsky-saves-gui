@@ -51,7 +51,7 @@ jobs:
     env:
       BSKY_SAVES_DISPATCH_TOKEN: ${{ secrets.BSKY_SAVES_DISPATCH_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           # Full history so the "tag is on main" check below can resolve
           # ancestry past the default shallow boundary. Slows tag-time
