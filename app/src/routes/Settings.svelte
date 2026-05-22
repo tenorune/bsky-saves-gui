@@ -44,6 +44,7 @@
   import { clearPanelCollapse } from '$lib/panel-collapse-pref';
   import { clearPairingToken } from '$lib/pairing-token';
   import { deleteStatus } from '$lib/status-pusher';
+  import { clearLastActivity } from '$lib/last-activity-persist';
   import {
     retainMode,
     loadRetainMode,
@@ -327,6 +328,11 @@
     // so the bearer is still available for auth; resolves silently on
     // any failure since local wipe is the source of truth.
     await deleteStatus().catch(() => { /* best-effort */ });
+    // Local persisted `last_activity` record (idb). Without this, a
+    // subsequent "Clear all data" → sign-in → first activity sequence
+    // would still see the prior activity record restored from idb at
+    // initStatusPusher boot, defeating the wipe. See issue #85.
+    await clearLastActivity();
     // Pairing token is per-device local state, not user-account data,
     // but Clear data is a "wipe everything in this browser" affordance
     // by the user's contract — leaving the token would surprise them.

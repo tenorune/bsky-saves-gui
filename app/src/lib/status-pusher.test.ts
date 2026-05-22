@@ -1,5 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { get } from 'svelte/store';
+
+// Mock the persistence module so the in-memory wiring tests don't touch
+// real fake-indexeddb. Each watcher's fire-and-forget saveLastActivity
+// becomes a spy we can assert against; loadLastActivity defaults to
+// resolving null (the "no prior session" case) so tests in describes
+// that don't explicitly configure it still get a Promise back. Tests
+// that care about the restore path set mockResolvedValueOnce themselves.
+const persistMock = vi.hoisted(() => ({
+  loadLastActivity: vi.fn().mockResolvedValue(null),
+  saveLastActivity: vi.fn().mockResolvedValue(undefined),
+  clearLastActivity: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock('./last-activity-persist', () => persistMock);
 import {
   _resetStatusPusherForTests,
   isActive,
@@ -520,3 +533,105 @@ describe('last_activity wiring', () => {
     expect(activity.finished_at).toBeNull();
   });
 });
+
+// Issue #85 / coordination-doc Q10: persist last_activity across GUI
+// restarts so the activation-rising-edge "fresh-state" push at boot
+// doesn't clobber the helper's on-disk snapshot with `{ kind: 'idle' }`.
+// The persistence module itself is exercised in last-activity-persist.test.ts;
+// here we only assert that status-pusher CALLS into it correctly.
+import type { LastActivity } from './status-payload';
+
+describe('last_activity persistence wiring', () => {
+  const IDLE_HYDRATION = {
+    status: 'idle' as const, total: 0, fetched: 0, skipped: 0, failed: 0, failures: [],
+  };
+
+  beforeEach(() => {
+    persistMock.loadLastActivity.mockReset();
+    persistMock.saveLastActivity.mockReset();
+    persistMock.clearLastActivity.mockReset();
+    persistMock.loadLastActivity.mockResolvedValue(null);
+    persistMock.saveLastActivity.mockResolvedValue(undefined);
+    persistMock.clearLastActivity.mockResolvedValue(undefined);
+    _resetStatusPusherForTests();
+    imageHydration.set(IDLE_HYDRATION);
+    articleHydration.set(IDLE_HYDRATION);
+    threadProgress.set(IDLE_HYDRATION);
+  });
+  afterEach(() => {
+    _disposeStatusPusherForTests();
+    imageHydration.set(IDLE_HYDRATION);
+    articleHydration.set(IDLE_HYDRATION);
+    threadProgress.set(IDLE_HYDRATION);
+  });
+
+  it('calls saveLastActivity on hydration idle → running transition', () => {
+    initStatusPusher();
+    persistMock.saveLastActivity.mockClear();
+    imageHydration.set({ ...IDLE_HYDRATION, status: 'running', total: 10 });
+    expect(persistMock.saveLastActivity).toHaveBeenCalledTimes(1);
+    const arg = persistMock.saveLastActivity.mock.calls[0][0] as LastActivity;
+    expect(arg.kind).toBe('hydrate_images');
+    expect(arg.started_at).not.toBeNull();
+    expect(arg.finished_at).toBeNull();
+  });
+
+  it('calls saveLastActivity on hydration running → done transition', () => {
+    initStatusPusher();
+    imageHydration.set({ ...IDLE_HYDRATION, status: 'running', total: 10 });
+    persistMock.saveLastActivity.mockClear();
+    imageHydration.set({
+      status: 'done', total: 10, fetched: 10, skipped: 0, failed: 0, failures: [],
+    });
+    expect(persistMock.saveLastActivity).toHaveBeenCalledTimes(1);
+    const arg = persistMock.saveLastActivity.mock.calls[0][0] as LastActivity;
+    expect(arg.kind).toBe('hydrate_images');
+    expect(arg.finished_at).not.toBeNull();
+  });
+
+  it('restores persisted activity into currentActivity on initStatusPusher', async () => {
+    const persisted: LastActivity = {
+      kind: 'hydrate_articles',
+      started_at: '2026-05-22T00:00:00.000Z',
+      finished_at: '2026-05-22T00:01:00.000Z',
+      added: 3,
+      removed: 0,
+      errors: [],
+    };
+    persistMock.loadLastActivity.mockResolvedValueOnce(persisted);
+    initStatusPusher();
+    // Wait for the fire-and-forget loadLastActivity to resolve.
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    expect(_getCurrentActivityForTests()).toEqual(persisted);
+  });
+
+  it('does NOT clobber a real activity that fires before loadLastActivity resolves', async () => {
+    const persisted: LastActivity = {
+      kind: 'hydrate_articles',
+      started_at: '2026-05-22T00:00:00.000Z',
+      finished_at: null,
+      added: 0,
+      removed: 0,
+      errors: [],
+    };
+    persistMock.loadLastActivity.mockResolvedValueOnce(persisted);
+    initStatusPusher();
+    // Real activity fires synchronously before the persisted load resolves.
+    imageHydration.set({ ...IDLE_HYDRATION, status: 'running', total: 10 });
+    // Now let loadLastActivity resolve.
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    // The real transition wins — currentActivity must reflect the in-flight
+    // image hydration, not the stale persisted articles record.
+    expect(_getCurrentActivityForTests().kind).toBe('hydrate_images');
+  });
+
+  it('does not touch currentActivity when persistence reports no prior record', async () => {
+    persistMock.loadLastActivity.mockResolvedValueOnce(null);
+    initStatusPusher();
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    // Stays at the in-memory default.
+    expect(_getCurrentActivityForTests().kind).toBe('idle');
+    expect(_getCurrentActivityForTests().started_at).toBeNull();
+  });
+});
+
