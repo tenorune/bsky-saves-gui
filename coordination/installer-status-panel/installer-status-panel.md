@@ -1,6 +1,6 @@
 # Installer status panel — cross-repo coordination doc
 
-> **Status:** drafting (2026-05-20). GUI revision: session-mode TTL + clear-path correction + `current_state` field + heartbeat/debounce requirements. CLI revision: answers to Q5–Q7, restored §4.7 security model, raised Q9. GUI revision (this round): resolves Q5/Q6/Q7/Q9 in body; adds optional `priority: "final"` payload field per CLI's Q7 proposal; restores `installer-status-panel-resolved.md` companion (R1–R9). Awaiting installer review of Q8.
+> **Status:** drafting (2026-05-22). GUI revision: Q10 fix shipped in v0.6.5-rc.4 (tenorune/bsky-saves-gui#85); Q10 moved from §7 to [R11](./installer-status-panel-resolved.md#r11--semantics-of-last_activitykind-vs-current_state) with verification status and the panel-side `current_state === "refreshing"` follow-up flagged. Q11 (`"error"` semantics) and Q12 (overwrite vs merge on startup) answered with GUI-proposed resolutions in §7, awaiting CLI acceptance. No payload-shape changes.
 > **Lives at:** `bsky-saves-coordination:docs/installer-status-panel.md` (canonical). Mirrored as a draft in each primary repo's `coordination` branch and PRed back via cross-repo workflow.
 > **Audience:** maintainers of `bsky-saves` (helper / CLI), `bsky-saves-gui` (Svelte PWA), and `bsky-saves-install` (native macOS app + future Win/Linux installers).
 > **Scope:** the contract for the installer's status panel — what info it surfaces, where the info comes from, who's responsible for each leg.
@@ -23,7 +23,7 @@ This document captures the design that emerged from the v0.6.x release-cycle con
 |---|---|
 | `bsky-saves` | The helper daemon. New `POST /status`, `GET /status`, and `DELETE /status` endpoints in phase 1; the on-disk status-cache file for persist mode with coalesced background flush; an in-memory TTL slot for session mode; auth gating identical to other credentialed endpoints. |
 | `bsky-saves-gui` | Pushing summary library stats to the helper at meaningful moments. Owns the payload contents (§4.4), the push trigger list (§4.3), the session-mode heartbeat (§4.3), the `priority: "final"` hint on terminal pushes (§4.3, §4.4), and how library state is computed. |
-| `bsky-saves-install` | The status panel UI. Polls `GET /status` and renders. Distinguishes "no snapshot yet", "active snapshot", and "stale snapshot" (where `updated_at` is older than a UI-defined threshold). In later phases, issues commands. |
+| `bsky-saves-install` | The status panel UI. Polls `GET /status` while the popover is visible (§4.5) and renders. Distinguishes "no snapshot yet", "active snapshot", and "stale snapshot" (where `updated_at` is older than the §4.5 staleness threshold). In later phases, issues commands. |
 
 Each repo owns its part of the contract. The three repos coordinate via this document.
 
@@ -185,27 +185,29 @@ Field-level notes:
 
 - `schema_version` — integer; bumps on non-backward-compatible payload changes. The panel reads older schemas and degrades gracefully (display what it understands, ignore what it doesn't).
 - `updated_at` — ISO-8601 UTC; helps the panel surface staleness when the GUI hasn't pushed recently.
-- `current_state` — one of `"idle"`, `"refreshing"`, `"hydrating"`, `"error"`. The panel uses this to show a live spinner during in-flight work without having to infer from `last_activity.finished_at`. `"error"` means the most recent activity failed; details in `last_activity.errors`.
+- `current_state` — one of `"idle"`, `"refreshing"`, `"hydrating"`, `"error"`. **Authoritative in-flight indicator** (per [R11](./installer-status-panel-resolved.md#r11--semantics-of-last_activitykind-vs-current_state)): the panel reads `current_state` directly. Pre-fix GUI builds (≤ v0.6.5-rc.3) emit `"idle"` here while hydration is mid-flight; v0.6.5-rc.4 and later push the correct value. The installer's existing progress-delta inference (`hydration_is_progressing` + `_hydration_active_until` in `bsky_saves_launcher.popover`) is the fallback for pre-fix builds and remains in place until the installer chooses to retire it. `"error"` means the most recent library-refresh attempt failed; details in `last_activity.errors`. Emission rules, stickiness, and rendering of `"error"` are still open (Q11).
 - `priority` — optional top-level string; when set to `"final"` the helper bypasses its persist-mode flush coalescer and writes to disk synchronously before responding. Used by the GUI on `beforeunload` to ensure the last-known state lands on disk before tab close. Absent or any other value = treated as normal-priority (default coalesced flush). Session mode ignores this field entirely — session never writes to disk regardless. Extensible to other values (e.g., `"low"` for non-essential idle heartbeats) without a schema bump.
 - `library` — minimal identity + counts. `did` is required from sign-in onward (drives last-write-wins single-slot today, per-DID indexing later). `by_status` mirrors the v0.6.0 retention categories. Always present once the user is signed in and has a non-empty inventory.
 - `hydration` — per-feature completion. Each entry is `{completed, total}`. Optional sections; absent entries mean the GUI can't cheaply compute that metric.
 - `storage.mode` — `"session"` or `"persist"`. Drives the helper's storage decision (§4.2). Required.
 - `storage.session_ttl_seconds` — integer; required when `mode === "session"`, null/absent in persist mode. The TTL the helper applies to its in-memory snapshot before dropping. Locked at 60s (see [R7](./installer-status-panel-resolved.md#r7--session-mode-heartbeat-cadence-and-ttl)); future tuning is a payload-only change.
 - `storage.browser_bytes_estimate` — `navigator.storage.estimate()` result if available; null otherwise. Informational; helps the panel show approximate disk footprint.
-- `last_activity.kind` — `"fetch" | "hydrate_articles" | "hydrate_threads" | "hydrate_images" | "manual_refresh" | "idle"`. The panel renders e.g. "Last activity: fetch · 2 min ago · +3 / −0."
+- `last_activity.kind` — `"fetch" | "hydrate_articles" | "hydrate_threads" | "hydrate_images" | "manual_refresh" | "idle"`. **Last completed operation** (per Q10): monotonically advances through real operations and never reverts to `"idle"` once anything has happened. `"idle"` is only valid as a fresh-install / post-clear sentinel (i.e., before any real operation, or after `DELETE /status`). The field expresses what happened, not what's happening now — use `current_state` for the latter. The panel renders e.g. "Last activity: fetch · 2 min ago · +3 / −0."
 - `last_activity.errors` — array of `{kind: string, message: string, count: number}` objects. `kind` is a short stable identifier (e.g., `"pds_timeout"`, `"helper_504"`, `"thread_fetch_failed"`); `message` is human-readable; `count` is the multiplicity within this activity. Empty array means no errors. The panel can render counts and tooltip the messages.
 
 Fields are optional except where noted; the GUI omits sections it can't cheaply compute. The panel renders only what's present.
 
 ### 4.5 Panel-side surface (`bsky-saves-install` repo)
 
-The panel polls `GET /status` at a low rate while open (≤ once every 5 seconds is plenty given humans don't watch dashboards updating at sub-second granularity — final cadence determined by Q8), authenticates with the same session token it already holds from pairing, renders the fields.
+The panel polls `GET /status` **only while the popover is visible**: one fetch immediately on popover show, then every 5 seconds while the popover remains visible, stopping on dismiss. The 5s cadence matches the panel's existing health-poll timer (the `Supervisor.is_alive()` + `/ping` check that drives the menu-bar state badge), so `/status` is co-fetched on the same tick — no second timer. 5s sits comfortably under [R7](./installer-status-panel-resolved.md#r7--session-mode-heartbeat-cadence-and-ttl)'s 15s heartbeat / 60s TTL window: the panel observes fresh pushes and session-mode-TTL-expiry 404 transitions both within ≤5s of the helper-side change. Polling is gated on visibility because the popover is closed most of the time, and a poll the user can't see is unobserved work that consumes battery on macOS / Windows idle. See [R10](./installer-status-panel-resolved.md#r10--installer-poll-cadence).
+
+The panel authenticates with the same session token it already holds from pairing.
 
 UI choices live entirely in the installer repo. Suggested defaults: counts as numerals, hydration as bar gauges, `updated_at` rendered as "12 min ago" relative time, `current_state === "refreshing"` as a small spinner.
 
 When `GET /status` returns 404 — no snapshot yet, or session-mode snapshot expired — panel displays a placeholder ("No active library status — open the GUI and run a fetch") with a button that opens the bundled GUI URL.
 
-Staleness handling: if `updated_at` is older than a panel-defined threshold (e.g., 5 minutes), the panel renders the values with a subtle "last seen N min ago" indicator. The panel does NOT poll-with-backoff; the helper's TTL is the authoritative liveness signal for session mode, and persist-mode snapshots are expected to persist (the user is OK with the data lingering).
+**Staleness handling:** if `updated_at` is older than **5 minutes**, the panel renders the values with a subtle "last seen N min ago" indicator. 5 min sits well above session mode's 15s heartbeat cadence (an actively-pushing session-mode GUI will never trip this) and above any reasonable GUI-side push delay, while still flagging genuinely-stale persist-mode snapshots from long-idle users. The panel does NOT poll-with-backoff; the helper's TTL is the authoritative liveness signal for session mode, and persist-mode snapshots are expected to persist (the user is OK with the data lingering).
 
 ### 4.6 Authentication and trust
 
@@ -282,7 +284,61 @@ Multi-handle / multi-inventory edge cases (the maintainer setup explicitly hits 
 
 Numbered for ease of reference. Answers go inline once locked; resolved items move to [`installer-status-panel-resolved.md`](./installer-status-panel-resolved.md) with a backlink from the section they inform.
 
-**Q8 — Installer poll cadence** *(raised by GUI 2026-05-18 for installer team)*. §4.5 suggests ≤ once per 5 seconds. Installer team: what cadence works best with idle-friendly power management on macOS / Windows? Slower polls (e.g., 10s) are friendlier to battery; faster (1–2s) feels more "live" to the user. Or: switch cadence based on whether the panel is currently visible / focused?
+Q10 (semantics of `last_activity.kind` vs `current_state`) resolved and moved to [R11](./installer-status-panel-resolved.md#r11--semantics-of-last_activitykind-vs-current_state). GUI fix shipped in v0.6.5-rc.4; see R11 for the lock-in text, the installer-side follow-ups, and the verification status (mid-hydration and post-restart symptoms confirmed fixed against rc.4; First Fetch blank-panel symptom awaits the installer's `current_state === "refreshing"` render branch).
+
+**Q11 — Semantics of `current_state === "error"`** *(raised by CLI 2026-05-22, derived from Q10 resolution)*. The Q10 resolution enumerates `"error"` as a `current_state` value, but neither side has agreed on emission, stickiness, or rendering rules. Open sub-questions:
+
+- **Emission.** Which failures trigger `"error"` — auth failure, network failure, partial-hydration failure, persistence failure, all of the above?
+- **Stickiness.** Does `"error"` persist until cleared by an explicit user action / next successful operation, or auto-clear after a transient failure?
+- **Persistence behavior.** Does the helper mirror an `"error"` `current_state` to disk like other states, or only persist the last successful snapshot? If persisted, rehydration on restart re-renders the error — desired or surprising?
+- **Panel rendering.** Toast, persistent banner, badge on the activity row, or all of the above? Is there a "retry" affordance, and if so what does the panel dispatch back to the GUI?
+
+Required before any RC that emits `current_state === "error"` in anger.
+
+> **GUI response (2026-05-22):** Current GUI behavior, for the contract to lock against:
+>
+> | Sub-question | Current behavior in v0.6.5-rc.4 |
+> |---|---|
+> | **Emission triggers** | Exclusively `libraryRefreshState.status === 'error'`, set by `library-refresh.ts:163` when the orchestrate try-block throws. Concretely: auth failures, PDS / helper network failures during the fetch+enrich+threads orchestration, the BUG-#35 "fetch returned 0 saves against non-zero prior" guard, reconcile failures. **Per-asset hydration failures (image / article / thread) do NOT promote** to `current_state === "error"` — they're collected into `last_activity.errors[]` and the run continues. A single failed image fetch should not mark the entire library as in an error state. |
+> | **Stickiness (GUI-side)** | In-memory only. `current_state === "error"` lives in `libraryRefreshState` until the next `startLibraryRefresh` call flips it back to `'running'`. Does NOT survive a GUI tab reload — after restart, `libraryRefreshState` initializes to `{ status: 'idle' }`, so the GUI's first push after reload will report `current_state: 'idle'` (overwriting any prior `"error"` snapshot on the helper). |
+> | **Stickiness (helper-side disk)** | The helper persists whatever the GUI pushes, including `"error"`. The error snapshot survives a helper restart, but is overwritten on the next GUI push (which, post-reload, will be `"idle"` per the row above). |
+> | **Error text** | Already in the payload: `last_activity.errors[0]` carries `{ kind: 'refresh_error', message: <stringified throw>, count: 1 }` (set by `status-pusher.ts` on the refresh running→error edge). The panel reads the human-readable message from there; no payload-shape change needed. |
+>
+> **GUI-proposed resolution** (CLI to accept or counter):
+>
+> 1. **Emission scope.** Lock the contract to "`current_state === "error"` means the most recent library-refresh attempt threw." Per-asset hydration failures continue to surface via `last_activity.errors[]` only, without flipping `current_state`.
+> 2. **Stickiness model.** Snapshot-bound, not session-bound. `current_state === "error"` lives on the helper's persisted snapshot until the next GUI push overwrites it (which happens when a new refresh runs, OR when the GUI tab reloads and pushes its fresh-state push). The panel SHOULD render the persisted error until a new push replaces it — no client-side auto-clear timeout.
+> 3. **Persistence behavior.** The helper persists `"error"` like any other state. Re-rendering it after an installer/helper restart is the desired behavior: the user's last-known truth is that something failed, and silently dropping that signal would be worse than showing it.
+> 4. **GUI tab reload caveat.** Because the GUI doesn't re-emit `"error"` after a tab reload, an error snapshot on the helper can be silently overwritten with `"idle"` once the user reopens the GUI. This is a known limitation of the current GUI emission model and a candidate for a future improvement (e.g., persist the last refresh error to idb the same way #85 persisted `last_activity`). Calling it out in the contract; not blocking on it for Q11.
+> 5. **Rendering / retry affordance.** Panel-side decision. The GUI surfaces retry via its in-app banners (`AuthErrorBanner`, etc.); the panel can mirror or differ. No GUI-side change required for this sub-question.
+>
+> No payload-shape changes proposed. Contract clarification only. Status: proposed-by-GUI; awaiting CLI acceptance.
+
+**Q12 — GUI-startup snapshot: overwrite vs merge** *(raised by CLI 2026-05-22, derived from Q10 Bug 2 root cause)*. Q10's root cause for Bug 2 surfaces a separate question independent of the kind/state semantics: every GUI startup currently clobbers the helper's on-disk snapshot with the GUI's just-initialized in-memory state. After the Q10 fix the clobbered value will at least be accurate — but the underlying "GUI startup wins, disk loses" contract isn't explicit anywhere in §4.4 or §6.
+
+Options:
+
+- **Overwrite (status quo, post-fix).** GUI startup push always wins. Simple. Implies the GUI's just-started in-memory state is always authoritative — fine if the GUI restores its own state quickly on startup.
+- **Merge.** GUI startup push respects on-disk `last_activity` if its `finished_at` is newer than anything the GUI has in memory. Safer against future regressions where the GUI's startup state momentarily lags. More complex; requires a timestamp comparison and conflict rule.
+
+Either is defensible. The choice should be documented in §4.4 or §6 (whichever section governs the startup-flow contract).
+
+> **GUI response (2026-05-22):** GUI proposes **overwrite (status quo, post-#85)**.
+>
+> Post-#85, the GUI's startup push payload is `{ current_state: derived-from-stores, last_activity: restored-from-idb-keyval }`. `last_activity` is no longer the in-memory idle default — it's the actual last-known activity restored from local browser storage at `initStatusPusher` time. So overwrite is no longer "GUI's just-initialized empty state wins" but "GUI's restored-from-local-disk state wins".
+>
+> Reasons to keep overwrite over moving to merge:
+>
+> 1. **Canonical-source ownership stays clean.** The GUI is the only process that observes when operations actually start and finish; the helper just stores what the GUI told it. Merge forces both sides to encode timestamp-comparison logic. Overwrite keeps the contract one-directional.
+> 2. **Merge requires a startup `GET /status`.** Adds a localhost round-trip the GUI doesn't currently make — the GUI never reads `/status`, only writes it. Adding a read endpoint to the activation-rising-edge path widens the contract surface for marginal benefit.
+> 3. **The single legitimate divergence scenario is "user wiped browser data, helper still has older snapshot on disk."** Overwriting with idle / no-history is the correct behavior in that case — "this browser has no history" is what the wipe means. Merge would resurrect data the user explicitly cleared.
+> 4. **The helper-crashed-and-lost-disk-state scenario is symmetric.** Helper boots with empty disk; GUI's next push repopulates it. Merge doesn't help here either way.
+>
+> **Proposed contract text** (drop into §4.4 after the field reference list, or into a new §4.8 "Startup flow" if a separate section is preferred):
+>
+> > **Startup-flow contract.** On GUI activation (the rising edge of the activation gate defined in `bsky-saves-gui:app/src/lib/status-pusher.ts`), the GUI pushes its restored `last_activity` and derived `current_state` unconditionally. The helper REPLACES its on-disk and in-memory snapshot with this push payload; it MUST NOT attempt to preserve any portion of its prior snapshot during a GUI-startup push. The GUI restores its own `last_activity` from local browser storage (`idb-keyval` under `status-pusher:last-activity:v1`, since v0.6.5-rc.4); a browser-data wipe on the user's side intentionally resets this to no-history.
+>
+> Status: proposed-by-GUI; awaiting CLI acceptance.
 
 ## 8. Maintenance
 
@@ -308,6 +364,10 @@ When the design changes substantively (e.g., adopting phase 2's command flow), b
 | 2026-05-18 | GUI | Session-mode privacy: added mode-dependent storage to §4.2 (memory-only + TTL for session, atomic disk write for persist). Added `current_state` field and `storage.session_ttl_seconds` to §4.4 payload. Clarified `last_activity.errors` shape. Made §4.3 push triggers explicit (required vs. mode-required). Added `DELETE /status` endpoint to §4.2 for explicit "Clear all data" path; clarified that sign-out is NOT a clear. Documented push debouncing floor. Raised Q5–Q8. Resolved Q1–Q4 in body; resolved appendix seeded with R1–R5 (companion file NOT in this PR — addressed below). |
 | 2026-05-18 | CLI | Answered Q5 (concurs with 500ms floor), Q6 (concurs with 60s/15s), Q7 (proposes coalesced background flush ≤1/s, with `priority: "final"` and shutdown-synchronous exceptions). Restored §4.7 security model (clear-text rationale + MUST-NOT list + sensitivity check at PR time) — drafted on a primary-repo branch that wasn't included in the GUI revision's basis. Noted in §4.2 that `<config_dir>/bsky-saves/status.json` write path may use concurrency-safe per-write tmp names if Q7 resolves on coalesced writes. Raised Q9 re: missing `installer-status-panel-resolved.md` companion file (R3/R4/R5 backlinks 404 against coord repo's main). No body content changed beyond §4.7 restoration; Q7's implied §4.2 body update held until the question resolves. |
 | 2026-05-20 | GUI | Resolved Q5 in §4.3 (500ms floor locked, with note that GUI may tighten to 250ms later without contract change). Resolved Q6 in §4.3 (15s heartbeat / 60s TTL locked). Resolved Q7 in §4.2 (adopts CLI's coalesced background flush proposal; persist-mode in-memory updates immediately, disk flush ≤ 1/s, `priority: "final"` bypass via `navigator.sendBeacon` on `beforeunload`, shutdown-synchronous flush). Added `priority` optional top-level string field to §4.4 payload (string-enum for forward compat: `"final"` is the only recognized non-default value today). Added "RECOMMENDED in persist mode" trigger to §4.3 covering the beforeunload final push. Resolved Q9 by including `installer-status-panel-resolved.md` in this same PR (workflow now supports multi-file manifests). Moved Q5/Q6/Q7/Q9 to appendix as R6/R7/R8/R9. Q8 (installer poll cadence) remains open. |
+| 2026-05-21 | Installer | Resolved Q8 in §4.5: visibility-gated polling — one fetch on popover show, every 5s while the popover is visible, no polling while closed. Co-fetches `/status` on the same 5s timer that already drives the menu-bar state badge (no second timer, no extra wake-ups). Pinned the staleness-indicator threshold to 5 minutes (was "e.g., 5 minutes" suggestion). No payload, endpoint, auth, or schema changes. Moved Q8 to appendix as R10. §7 now empty (all phase-1 questions resolved). Updated Appendix A to check off the polling-cadence item. |
+| 2026-05-22 | Installer | Raised Q10: `last_activity.kind` semantics. Observed in v0.4.0 RC testing against `bsky-saves==0.6.8rc1` — the GUI emits `last_activity.kind = "idle"` between activity transitions and during steady-state, which (a) makes in-flight state inference unreliable from the panel side (currently mitigated by tracking hydration-progress deltas across polls with an 8s grace window), and (b) loses last-activity context on installer restart (persisted disk snapshot has `kind="idle"`, panel renders no last-activity line). Proposes clarifying that `last_activity.kind` is the last *completed* operation (never reverts to `"idle"` once anything has happened) and `current_state` is the right-now field. Awaiting GUI team review. No body content changes in this PR. |
+| 2026-05-22 | CLI | Resolved Q10 in §7 with GUI confirmation (tenorune/bsky-saves-gui#85): both behaviors confirmed as GUI-side bugs (root causes in `deriveCurrentState` and `currentActivity` startup default); proposed semantics adopted verbatim. Tightened `current_state` and `last_activity.kind` field notes in §4.4 (semantics, not enums — `"idle"` retained as fresh-install / post-clear sentinel for `last_activity.kind`). Captured GUI team's panel-side follow-up (verify `current_state === "refreshing"` render branch) and the optional installer-side cleanup gating note in Q10's resolution. Raised Q11 (`"error"` semantics — emission/stickiness/persistence/rendering) and Q12 (GUI-startup snapshot overwrite vs merge contract) in §7. |
+| 2026-05-22 | GUI | Q10 fix shipped: tenorune/bsky-saves-gui#85 merged to main, released in v0.6.5-rc.4. Moved Q10 from §7 to appendix as R11 with implementation status (mid-hydration + post-restart symptoms verified resolved against rc.4; First Fetch blank-panel symptom awaits the installer's `current_state === "refreshing"` render branch). Corrected the §4.4 `current_state` field note's pre-fix version reference (≤ v0.6.5-rc.3, not ≤ rc.4 — rc.4 is the first build with the fix). Answered Q11 with GUI-proposed resolution: emission scoped to library-refresh-level failures only (per-asset hydration failures stay in `last_activity.errors[]`); snapshot-bound stickiness with helper persisting `"error"` like any other state; rendering/retry deferred to panel team; called out the GUI-tab-reload caveat (current GUI doesn't re-emit `"error"` after reload, so a snapshot can be silently overwritten with `"idle"` — known limitation, candidate for a future improvement). Answered Q12 with GUI-proposed resolution: keep overwrite (status quo, post-#85). Proposed contract text for the startup-flow contract; suggested placement in §4.4 or a new §4.8. Q11 and Q12 both status: proposed-by-GUI, awaiting CLI acceptance. No payload-shape changes in this revision. |
 
 ---
 
@@ -316,8 +376,8 @@ When the design changes substantively (e.g., adopting phase 2's command flow), b
 A condensed checklist for whoever drives phase 1 to ground. None of these are open design questions; they're sequencing-and-ownership decisions.
 
 - [ ] Confirm helper-side endpoints (`POST /status`, `GET /status`, `DELETE /status`) and persistence path with the `bsky-saves` maintainer.
-- [ ] GUI team commits to the §4.4 payload shape (final shape locks once Q8 resolves and the panel team confirms no extra fields are needed for poll-cadence UX).
-- [ ] Installer team confirms polling cadence (Q8) and UI rendering pass.
+- [ ] GUI team commits to the §4.4 payload shape (final shape locks once §7 is empty and all teams have confirmed their slice — §7 holds Q11/Q12, both currently proposed-by-GUI awaiting CLI acceptance, no payload-shape changes in either).
+- [x] Installer team confirms polling cadence (Q8 resolved 2026-05-21 — see [R10](./installer-status-panel-resolved.md#r10--installer-poll-cadence)). UI rendering pass pending implementation in `bsky-saves-install`.
 - [x] Resolved-questions companion file (`installer-status-panel-resolved.md`) seeded and present at coord repo's `main` (closed by GUI 2026-05-20 — see [R9](./installer-status-panel-resolved.md#r9--resolved-questions-archive-companion-file-missing)).
 - [ ] Spec docs open in each primary repo (`docs/superpowers/specs/YYYY-MM-DD-status-snapshot.md` per the project convention); plan docs follow; implementation goes through the existing subagent-driven-development flow.
 - [ ] Coordinated release: helper version that ships the endpoints, GUI version that ships the push call, installer version that ships the panel. All three pinned together in the installer's bundle.
