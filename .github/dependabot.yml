@@ -48,7 +48,7 @@ updates:
         versions: ["6.x"]
 
       # vitest 3.x and 4.x. vitest 4 imports vite's `./module-runner`
-      # subpath which only exists in vite 6 (see PR #389 CI failure:
+      # subpath which only exists in vite 6 (see PR #73 CI failure:
       # ERR_PACKAGE_PATH_NOT_EXPORTED). Even though the peer-dep range
       # appears permissive, the runtime contract requires vite 6.
       # vitest 3.x predates module-runner but its release notes flag
@@ -57,6 +57,24 @@ updates:
       # we cross Svelte 4 → 5.
       - dependency-name: "vitest"
         versions: ["3.x", "4.x"]
+
+      # wrangler 4.x. The cf-worker template still uses miniflare 3's
+      # unstable_dev API; wrangler 4 ships miniflare 4 which renamed
+      # and resignatured this API. Bumping requires rewriting the
+      # template's integration test harness — same reasoning that
+      # keeps undici 5.x in this ignore list above. Re-evaluate when
+      # we're ready to migrate the template to the new API.
+      - dependency-name: "wrangler"
+        versions: ["4.x"]
+
+      # @types/node — pin to the runtime line. `.node-version` is 20
+      # (Node 20 LTS through April 2026; we'll bump together with the
+      # CI matrix when we move). Newer @types/node exposes APIs the
+      # actual runtime doesn't have, which TypeScript would accept
+      # and that would fail at build/run time. Floor matches the
+      # major in package.json: ^20.
+      - dependency-name: "@types/node"
+        versions: [">=21"]
 
   # cf-worker template — separate package.json + lockfile under
   # templates/cf-worker/. Smaller dep tree; track separately so its
