@@ -1,5 +1,5 @@
 {
-  "title": "GUI revision: Q13 root cause + v0.6.5 fix (library.total_saves: 0 cold-start placeholder); panel-side UX consequences flagged",
+  "title": "GUI revision: Q13 root cause + contract-conformant v0.6.5 fix (omit library during cold-start); ask CLI helper to align with §4.4 prose",
   "files": [
     {
       "source": "coordination/installer-status-panel/installer-status-panel.md",
