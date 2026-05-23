@@ -43,17 +43,55 @@ describe('buildStatusPayload', () => {
       inventoryState: { status: 'ready', inventory: inv },
     });
     expect(payload).not.toBeNull();
-    expect(payload!.library.handle).toBe('alice.bsky.social');
-    expect(payload!.library.did).toBe('did:plc:alice');
-    expect(payload!.library.total_saves).toBe(3);
+    expect(payload!.library!.handle).toBe('alice.bsky.social');
+    expect(payload!.library!.did).toBe('did:plc:alice');
+    expect(payload!.library!.total_saves).toBe(3);
   });
 
-  it('library.total_saves is null when inventoryState is not ready', () => {
+  // Coord-doc Q13: helper rejects `library.total_saves: null` with 400,
+  // and §4.4 explicitly says the library block is "always present once
+  // signed in AND has a non-empty inventory" — i.e. it's permitted to
+  // be absent before that. Build accordingly so the panel falls into
+  // its "Fetching library…" placeholder branch instead of misrendering
+  // a fake "0 saves".
+  it('omits the library block entirely when inventoryState is loading', () => {
     const payload = buildStatusPayload({
       ...BASE_INPUTS,
       inventoryState: { status: 'loading' },
     });
-    expect(payload!.library.total_saves).toBeNull();
+    expect(payload).not.toBeNull();
+    expect(payload!.library).toBeUndefined();
+  });
+
+  it('omits the library block entirely when inventoryState is empty', () => {
+    const payload = buildStatusPayload({
+      ...BASE_INPUTS,
+      inventoryState: { status: 'empty' },
+    });
+    expect(payload!.library).toBeUndefined();
+  });
+
+  it('omits the library block entirely when inventoryState has errored', () => {
+    const payload = buildStatusPayload({
+      ...BASE_INPUTS,
+      inventoryState: { status: 'error', message: 'parse failed' },
+    });
+    expect(payload!.library).toBeUndefined();
+  });
+
+  it('includes the library block with total_saves: 0 when inventory is ready and empty', () => {
+    // Legitimately-empty user (signed in, fetch completed, zero saves) —
+    // contrast with cold-start where inventory is loading/empty and the
+    // library block is omitted. Once `ready`, we have a real count even
+    // if that count is zero.
+    const payload = buildStatusPayload({
+      ...BASE_INPUTS,
+      inventoryState: { status: 'ready', inventory: { saves: [] } as never },
+    });
+    expect(payload!.library).not.toBeUndefined();
+    expect(payload!.library!.total_saves).toBe(0);
+    expect(payload!.library!.handle).toBe('alice.bsky.social');
+    expect(payload!.library!.did).toBe('did:plc:alice');
   });
 
   it('counts by_status by retain-mode predicates', () => {
@@ -70,7 +108,7 @@ describe('buildStatusPayload', () => {
       ...BASE_INPUTS,
       inventoryState: { status: 'ready', inventory: inv },
     });
-    expect(payload!.library.by_status).toEqual({
+    expect(payload!.library!.by_status).toEqual({
       synced: 1,
       lost: 2,
       unsaved: 1,

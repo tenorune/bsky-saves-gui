@@ -36,10 +36,19 @@ export interface StatusPayload {
   readonly updated_at: string;
   readonly current_state: 'idle' | 'refreshing' | 'hydrating' | 'error';
   readonly priority?: 'final';
-  readonly library: {
+  // Omitted entirely during cold-start (before inventoryState becomes
+  // 'ready'). The §4.4 contract permits this: "Always present once the
+  // user is signed in AND has a non-empty inventory." Absence signals
+  // "library not identified yet" to the panel, which renders the
+  // "Fetching library…" placeholder instead of an inline "0 saves"
+  // count that would misrepresent an in-flight cold-start as a real
+  // empty library. The helper rejects payloads carrying a partial
+  // library block with `total_saves: null`, so omitting is also the
+  // shape-conformant choice. See coord-doc Q13.
+  readonly library?: {
     readonly handle: string;
     readonly did: string;
-    readonly total_saves: number | null;
+    readonly total_saves: number;
     readonly by_status: { readonly synced: number; readonly lost: number; readonly unsaved: number };
   };
   readonly hydration: {
@@ -117,9 +126,21 @@ function deriveCurrentState(
 export function buildStatusPayload(inputs: StatusSnapshotInputs): StatusPayload | null {
   if (inputs.lastSession === null) return null;
 
-  const totalSaves = inputs.inventoryState.status === 'ready'
-    ? inputs.inventoryState.inventory.saves.length
-    : null;
+  // Library block: only emitted once the inventory has been loaded
+  // (status === 'ready'). Before that — i.e. during cold-start First
+  // Fetch, before any saved inventory exists on disk — the block is
+  // omitted entirely. See StatusPayload.library and coord-doc Q13.
+  const librarySession = inputs.lastSession;
+  const libraryBlock = inputs.inventoryState.status === 'ready'
+    ? {
+        library: {
+          handle: librarySession.handle,
+          did: librarySession.did,
+          total_saves: inputs.inventoryState.inventory.saves.length,
+          by_status: countByStatus(inputs.inventoryState.inventory.saves),
+        },
+      }
+    : {};
 
   const payload: StatusPayload = {
     schema_version: 1,
@@ -132,14 +153,7 @@ export function buildStatusPayload(inputs: StatusSnapshotInputs): StatusPayload 
       inputs.threadProgress,
     ),
     ...(inputs.priority ? { priority: inputs.priority } : {}),
-    library: {
-      handle: inputs.lastSession.handle,
-      did: inputs.lastSession.did,
-      total_saves: totalSaves,
-      by_status: inputs.inventoryState.status === 'ready'
-        ? countByStatus(inputs.inventoryState.inventory.saves)
-        : { synced: 0, lost: 0, unsaved: 0 },
-    },
+    ...libraryBlock,
     hydration: {
       ...(hydrationEntry(inputs.imageHydration) ? { images: hydrationEntry(inputs.imageHydration)! } : {}),
       ...(hydrationEntry(inputs.articleHydration) ? { articles: hydrationEntry(inputs.articleHydration)! } : {}),
