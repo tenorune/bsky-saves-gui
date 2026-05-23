@@ -36,16 +36,16 @@ export interface StatusPayload {
   readonly updated_at: string;
   readonly current_state: 'idle' | 'refreshing' | 'hydrating' | 'error';
   readonly priority?: 'final';
-  // Present whenever lastSession is set (i.e. for every payload the
-  // GUI emits, since buildStatusPayload returns null otherwise). The
-  // helper rejects payloads without a library block ("missing field:
-  // library") regardless of inventory state, so we always emit one;
-  // during cold-start, `total_saves` is `0` and `by_status` is all
-  // zeros until the inventory loads. The contract prose at §4.4 says
-  // the block is "always present once signed in AND has a non-empty
-  // inventory" — the helper interprets this as required-from-signin-
-  // onward in practice. See coord-doc Q13.
-  readonly library: {
+  // Omitted entirely during cold-start (before inventoryState becomes
+  // 'ready'). The §4.4 contract permits this: "Always present once the
+  // user is signed in AND has a non-empty inventory." Absence signals
+  // "library not identified yet" to the panel, which renders the
+  // "Fetching library…" placeholder instead of an inline "0 saves"
+  // count that would misrepresent an in-flight cold-start as a real
+  // empty library. The helper rejects payloads carrying a partial
+  // library block with `total_saves: null`, so omitting is also the
+  // shape-conformant choice. See coord-doc Q13.
+  readonly library?: {
     readonly handle: string;
     readonly did: string;
     readonly total_saves: number;
@@ -126,25 +126,21 @@ function deriveCurrentState(
 export function buildStatusPayload(inputs: StatusSnapshotInputs): StatusPayload | null {
   if (inputs.lastSession === null) return null;
 
-  // Library block is always emitted (helper requires the field). During
-  // cold-start — inventoryState !== 'ready' — `total_saves` is 0 and
-  // `by_status` is all-zero; the panel reads `current_state` for the
-  // in-flight signal. Once the inventory loads, the block carries the
-  // real counts. See coord-doc Q13.
-  const inv = inputs.inventoryState;
-  const library = inv.status === 'ready'
+  // Library block: only emitted once the inventory has been loaded
+  // (status === 'ready'). Before that — i.e. during cold-start First
+  // Fetch, before any saved inventory exists on disk — the block is
+  // omitted entirely. See StatusPayload.library and coord-doc Q13.
+  const librarySession = inputs.lastSession;
+  const libraryBlock = inputs.inventoryState.status === 'ready'
     ? {
-        handle: inputs.lastSession.handle,
-        did: inputs.lastSession.did,
-        total_saves: inv.inventory.saves.length,
-        by_status: countByStatus(inv.inventory.saves),
+        library: {
+          handle: librarySession.handle,
+          did: librarySession.did,
+          total_saves: inputs.inventoryState.inventory.saves.length,
+          by_status: countByStatus(inputs.inventoryState.inventory.saves),
+        },
       }
-    : {
-        handle: inputs.lastSession.handle,
-        did: inputs.lastSession.did,
-        total_saves: 0,
-        by_status: { synced: 0, lost: 0, unsaved: 0 },
-      };
+    : {};
 
   const payload: StatusPayload = {
     schema_version: 1,
@@ -157,7 +153,7 @@ export function buildStatusPayload(inputs: StatusSnapshotInputs): StatusPayload 
       inputs.threadProgress,
     ),
     ...(inputs.priority ? { priority: inputs.priority } : {}),
-    library,
+    ...libraryBlock,
     hydration: {
       ...(hydrationEntry(inputs.imageHydration) ? { images: hydrationEntry(inputs.imageHydration)! } : {}),
       ...(hydrationEntry(inputs.articleHydration) ? { articles: hydrationEntry(inputs.articleHydration)! } : {}),
