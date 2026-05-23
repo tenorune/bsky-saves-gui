@@ -1,5 +1,5 @@
 {
-  "title": "GUI revision: ship Q10 fix (#85 / v0.6.5-rc.4); answer Q11 + Q12 with proposed resolutions",
+  "title": "GUI revision: Q13 root cause + v0.6.5 fix (library.total_saves: 0 cold-start placeholder); panel-side UX consequences flagged",
   "files": [
     {
       "source": "coordination/installer-status-panel/installer-status-panel.md",
