@@ -51,6 +51,6 @@
     "dompurify": "^3.4.5",
     "idb-keyval": "^6.2.4",
     "jszip": "^3.10.1",
-    "marked": "^18.0.4"
+    "marked": "^18.0.5"
   }
 }
