@@ -8,7 +8,7 @@
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
-    "linkedom": "^0.18.5"
+    "linkedom": "^0.18.13"
   },
   "devDependencies": {
     "esbuild": "^0.28.0",
